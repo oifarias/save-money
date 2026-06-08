@@ -6,7 +6,7 @@ Sistema web de controle de gastos pessoais com dashboard inteligente, lançament
 
 - **Framework**: Next.js 16 (App Router) + TypeScript
 - **Estilo**: Tailwind CSS v4 + CSS Variables para tema (light/dark)
-- **Banco de dados**: SQLite (local, via Prisma + `@prisma/adapter-better-sqlite3`)
+- **Banco de dados**: PostgreSQL (via Prisma + `@prisma/adapter-pg`) — funciona com qualquer provedor (Vercel Postgres, Supabase, Neon, Docker local etc.)
 - **ORM**: Prisma 7
 - **Autenticação**: Auth.js (NextAuth v5) com Credentials Provider + bcrypt
 - **Gráficos**: Recharts
@@ -17,6 +17,7 @@ Sistema web de controle de gastos pessoais com dashboard inteligente, lançament
 
 - Node.js 20+ (recomendado 22+)
 - npm
+- Um banco PostgreSQL acessível (local via Docker, ou em nuvem: Vercel Postgres, Supabase, Neon...)
 
 ## Como rodar o projeto
 
@@ -26,37 +27,41 @@ Sistema web de controle de gastos pessoais com dashboard inteligente, lançament
    npm install
    ```
 
-2. Configure as variáveis de ambiente. Copie o `.env` de exemplo (ou crie um na raiz do projeto) com:
+2. Suba um PostgreSQL local (mais simples via Docker) ou crie um banco em algum provedor gerenciado:
+
+   ```bash
+   docker run --name save-money-db -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=save_money -p 5432:5432 -d postgres:17
+   ```
+
+3. Configure as variáveis de ambiente. Copie o `.env` de exemplo (ou crie um na raiz do projeto) com:
 
    ```env
-   DATABASE_URL="file:./prisma/dev.db"
+   DATABASE_URL="postgresql://postgres:postgres@localhost:5432/save_money?schema=public"
    NEXTAUTH_SECRET="uma-string-secreta-aleatoria"
    NEXTAUTH_URL="http://localhost:3000"
    ```
 
-   > Em produção, gere um `NEXTAUTH_SECRET` forte, por exemplo com `openssl rand -base64 32`.
+   > Em produção, gere um `NEXTAUTH_SECRET` forte, por exemplo com `openssl rand -base64 32`. Ajuste `DATABASE_URL` para a connection string do seu provedor (Vercel Postgres, Supabase, Neon etc.).
 
-3. Crie o banco de dados local e aplique as migrações do Prisma:
+4. Aplique as migrações do Prisma (na primeira vez, isso cria as tabelas e o histórico de migrações em `prisma/migrations/`):
 
    ```bash
    npx prisma migrate dev
    ```
 
-   Isso cria o arquivo `prisma/dev.db` (SQLite) já com todas as tabelas do schema.
-
-4. Gere o Prisma Client (normalmente já é feito pelo passo anterior, mas pode ser repetido a qualquer momento):
+5. Gere o Prisma Client (normalmente já é feito pelo passo anterior, mas pode ser repetido a qualquer momento):
 
    ```bash
    npx prisma generate
    ```
 
-5. Inicie o servidor de desenvolvimento:
+6. Inicie o servidor de desenvolvimento:
 
    ```bash
    npm run dev
    ```
 
-6. Acesse [http://localhost:3000](http://localhost:3000). Você será redirecionado para a tela de login — clique em "Criar conta" para se cadastrar. Ao se registrar, o sistema cria automaticamente uma carteira padrão e os grupos (categorias) padrão do produto.
+7. Acesse [http://localhost:3000](http://localhost:3000). Você será redirecionado para a tela de login — clique em "Criar conta" para se cadastrar. Ao se registrar, o sistema cria automaticamente uma carteira padrão e os grupos (categorias) padrão do produto.
 
 ## Scripts disponíveis
 
@@ -73,12 +78,23 @@ Sistema web de controle de gastos pessoais com dashboard inteligente, lançament
 
 O schema completo está em [`prisma/schema.prisma`](./prisma/schema.prisma) e cobre usuários, contas, transações, categorias, tags, orçamentos, metas, assinaturas e notificações (estes três últimos preparados para a V2).
 
-Por padrão o projeto usa **SQLite local** (zero configuração). Para migrar para PostgreSQL (ex.: Supabase), basta:
+O projeto usa **PostgreSQL** via Prisma com o driver adapter `@prisma/adapter-pg` (ver [`src/lib/prisma.ts`](./src/lib/prisma.ts)), o que funciona com qualquer provedor compatível — Vercel Postgres, Supabase, Neon, RDS, um container Docker local etc. Basta apontar `DATABASE_URL` para a connection string correta.
 
-1. Trocar o `provider` do datasource em `prisma/schema.prisma` de `sqlite` para `postgresql`;
-2. Trocar o adapter em `src/lib/prisma.ts` (de `@prisma/adapter-better-sqlite3` para `@prisma/adapter-pg`, por exemplo);
-3. Atualizar `DATABASE_URL` no `.env` com a connection string do novo banco;
-4. Rodar `npx prisma migrate dev` novamente para recriar as migrações no novo provider.
+## Deploy na Vercel
+
+1. Crie um banco **Vercel Postgres** (aba *Storage* do projeto na Vercel, ou via `vercel postgres create`) e conecte-o ao projeto — a Vercel injeta `DATABASE_URL` automaticamente nas variáveis de ambiente.
+2. Configure as demais variáveis de ambiente do projeto na Vercel (*Settings → Environment Variables*):
+   - `NEXTAUTH_SECRET` — gere um valor forte com `openssl rand -base64 32` (use um valor diferente do de desenvolvimento);
+   - `NEXTAUTH_URL` — a URL pública do deploy, ex. `https://seu-projeto.vercel.app`.
+3. Rode as migrações contra o banco de produção (uma vez, a partir da sua máquina, com `DATABASE_URL` apontando para o banco da Vercel):
+
+   ```bash
+   npx prisma migrate deploy
+   ```
+
+4. Faça o deploy normalmente (`git push` para o branch conectado, ou `vercel --prod`). O script `postinstall` do projeto roda `prisma generate` automaticamente após o `npm install`, então o Prisma Client é gerado a cada build — não é necessário nenhum passo extra.
+
+> **Nota**: o adapter `@prisma/adapter-better-sqlite3` usado anteriormente não funciona em ambientes serverless (filesystem efêmero + módulo nativo). Por isso o projeto migrou para PostgreSQL antes do primeiro deploy.
 
 ## Estrutura do projeto
 
