@@ -110,10 +110,10 @@ prisma/
 - Lançamento manual de transações (com hashtags, recorrência, despesas fixas)
 - Gestão de grupos (categorias) com cores e ícones personalizados
 - Importação de lançamentos via Excel (.xlsx/.xls) com mapeamento de colunas, pré-visualização, validação de linhas e arquivo modelo para download
+- Comparativo mês a mês por grupo, com seleção de períodos, filtro por tipo, variação percentual, gráfico de barras agrupadas e exportação em Excel
 - Layout responsivo (sidebar, drawer, bottom navigation) com tema light/dark
 
 🚧 Em desenvolvimento (próximas entregas da V1):
-- Comparativo mês a mês
-- Seção dedicada de Insights e Recomendações
+- Seção dedicada de Insights e Recomendações (módulo próprio, além dos insights já presentes no dashboard)
 
 A V2 (metas, orçamentos, assinaturas, alertas, IA financeira, multi-moeda etc.) está descrita na [especificação do produto](./save-money-product-spec.md).
