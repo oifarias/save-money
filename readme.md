@@ -111,9 +111,9 @@ prisma/
 - Gestão de grupos (categorias) com cores e ícones personalizados
 - Importação de lançamentos via Excel (.xlsx/.xls) com mapeamento de colunas, pré-visualização, validação de linhas e arquivo modelo para download
 - Comparativo mês a mês por grupo, com seleção de períodos, filtro por tipo, variação percentual, gráfico de barras agrupadas e exportação em Excel
+- Seção dedicada de Insights e Recomendações: ranking de crescimento de gastos (3 meses), comparação de médias mensais por grupo, sugestões de metas de redução, ranking de hashtags e alerta de despesas fixas
 - Layout responsivo (sidebar, drawer, bottom navigation) com tema light/dark
 
-🚧 Em desenvolvimento (próximas entregas da V1):
-- Seção dedicada de Insights e Recomendações (módulo próprio, além dos insights já presentes no dashboard)
+A V1.0 está completa conforme o roadmap da especificação (Autenticação, Dashboard, Importação, Lançamento Manual, Grupos/Hashtags, Comparativo e Insights).
 
 A V2 (metas, orçamentos, assinaturas, alertas, IA financeira, multi-moeda etc.) está descrita na [especificação do produto](./save-money-product-spec.md).
