@@ -104,15 +104,15 @@ prisma/
 
 ## Status do desenvolvimento
 
-✅ Implementado (V1 — MVP):
+✅ Implementado (V1 — MVP + Beta):
 - Autenticação completa (cadastro, login, recuperação de senha, proteção de rotas)
 - Dashboard com cards de resumo, gráficos (donut e evolução mensal) e insights automáticos
 - Lançamento manual de transações (com hashtags, recorrência, despesas fixas)
 - Gestão de grupos (categorias) com cores e ícones personalizados
+- Importação de lançamentos via Excel (.xlsx/.xls) com mapeamento de colunas, pré-visualização, validação de linhas e arquivo modelo para download
 - Layout responsivo (sidebar, drawer, bottom navigation) com tema light/dark
 
 🚧 Em desenvolvimento (próximas entregas da V1):
-- Importação via Excel
 - Comparativo mês a mês
 - Seção dedicada de Insights e Recomendações
 

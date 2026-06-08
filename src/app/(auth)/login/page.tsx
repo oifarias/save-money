@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useEffect } from "react";
+import { Suspense, useActionState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import toast from "react-hot-toast";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,14 @@ import { loginAction, type ActionResult } from "@/app/(auth)/actions";
 const initialState: ActionResult = { success: false };
 
 export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [state, formAction, isPending] = useActionState(loginAction, initialState);
