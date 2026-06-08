@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
-import { Playfair_Display, Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
+import { Sora, Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
 import { Toaster } from "react-hot-toast";
 import { ThemeProvider } from "@/components/theme/theme-provider";
 import "./globals.css";
 
-const display = Playfair_Display({
+const display = Sora({
   variable: "--font-display",
   subsets: ["latin"],
+  weight: ["600", "700"],
 });
 
 const sans = Plus_Jakarta_Sans({
