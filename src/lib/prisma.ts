@@ -5,6 +5,10 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
+if (!process.env.DATABASE_URL) {
+  console.error("[prisma] DATABASE_URL não está definida — as queries vão falhar");
+}
+
 const adapter = new PrismaPg({
   connectionString: process.env.DATABASE_URL,
 });

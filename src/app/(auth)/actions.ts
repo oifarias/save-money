@@ -27,37 +27,42 @@ export async function registerAction(_prev: ActionResult, formData: FormData): P
 
   const { name, email, password } = parsed.data;
 
-  const existing = await prisma.user.findUnique({ where: { email } });
-  if (existing) {
-    return {
-      success: false,
-      fieldErrors: { email: "Este e-mail já está cadastrado" },
-    };
+  try {
+    const existing = await prisma.user.findUnique({ where: { email } });
+    if (existing) {
+      return {
+        success: false,
+        fieldErrors: { email: "Este e-mail já está cadastrado" },
+      };
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
+
+    await prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: { name, email, passwordHash },
+      });
+
+      await tx.account.create({
+        data: { userId: user.id, name: "Carteira principal", type: "wallet", balance: 0 },
+      });
+
+      await tx.category.createMany({
+        data: DEFAULT_CATEGORIES.map((category) => ({
+          userId: user.id,
+          name: category.name,
+          color: category.color,
+          icon: category.icon,
+          isDefault: true,
+        })),
+      });
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error("[registerAction] erro ao criar conta:", error);
+    return { success: false, message: "Erro interno ao criar conta. Tente novamente." };
   }
-
-  const passwordHash = await bcrypt.hash(password, 12);
-
-  await prisma.$transaction(async (tx) => {
-    const user = await tx.user.create({
-      data: { name, email, passwordHash },
-    });
-
-    await tx.account.create({
-      data: { userId: user.id, name: "Carteira principal", type: "wallet", balance: 0 },
-    });
-
-    await tx.category.createMany({
-      data: DEFAULT_CATEGORIES.map((category) => ({
-        userId: user.id,
-        name: category.name,
-        color: category.color,
-        icon: category.icon,
-        isDefault: true,
-      })),
-    });
-  });
-
-  return { success: true };
 }
 
 export async function loginAction(_prev: ActionResult, formData: FormData): Promise<ActionResult> {
@@ -80,8 +85,10 @@ export async function loginAction(_prev: ActionResult, formData: FormData): Prom
     });
   } catch (error) {
     if (error instanceof AuthError) {
+      console.error("[loginAction] falha de autenticação:", error.type, error.message);
       return { success: false, message: "E-mail ou senha incorretos" };
     }
+    console.error("[loginAction] erro inesperado:", error);
     throw error;
   }
 

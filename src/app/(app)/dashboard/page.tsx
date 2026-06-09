@@ -11,22 +11,31 @@ export default async function DashboardPage() {
   const session = await auth();
   const userId = session!.user.id;
 
-  const [dashboardData, recentTransactions, accounts, categories, tags] = await Promise.all([
-    getDashboardData(userId),
-    prisma.transaction.findMany({
-      where: { userId },
-      orderBy: { date: "desc" },
-      take: 10,
-      include: {
-        account: { select: { id: true, name: true } },
-        category: { select: { id: true, name: true, color: true, icon: true } },
-        tags: { include: { tag: { select: { name: true } } } },
-      },
-    }),
-    prisma.account.findMany({ where: { userId }, orderBy: { createdAt: "asc" } }),
-    prisma.category.findMany({ where: { userId }, orderBy: { name: "asc" } }),
-    prisma.tag.findMany({ where: { userId }, orderBy: { name: "asc" }, select: { name: true } }),
-  ]);
+  console.log("[dashboard] userId:", userId);
+
+  let queryResult;
+  try {
+    queryResult = await Promise.all([
+      getDashboardData(userId),
+      prisma.transaction.findMany({
+        where: { userId },
+        orderBy: { date: "desc" },
+        take: 10,
+        include: {
+          account: { select: { id: true, name: true } },
+          category: { select: { id: true, name: true, color: true, icon: true } },
+          tags: { include: { tag: { select: { name: true } } } },
+        },
+      }),
+      prisma.account.findMany({ where: { userId }, orderBy: { createdAt: "asc" } }),
+      prisma.category.findMany({ where: { userId }, orderBy: { name: "asc" } }),
+      prisma.tag.findMany({ where: { userId }, orderBy: { name: "asc" }, select: { name: true } }),
+    ]);
+  } catch (err) {
+    console.error("[dashboard] erro ao carregar dados do banco:", err);
+    throw err;
+  }
+  const [dashboardData, recentTransactions, accounts, categories, tags] = queryResult;
 
   const feedItems: TransactionListItem[] = recentTransactions.map((transaction) => ({
     id: transaction.id,
