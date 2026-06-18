@@ -1,22 +1,44 @@
 import { z } from "zod";
 
-export const importRowSchema = z.object({
-  date: z.string().trim().min(1, "Data ausente"),
-  description: z.string().trim().min(1, "Descrição ausente").max(140, "Descrição muito longa"),
-  amount: z
-    .string()
-    .trim()
-    .min(1, "Valor ausente")
-    .refine((value) => !Number.isNaN(Number(value)) && Number(value) > 0, {
-      message: "Valor inválido",
-    }),
-  type: z.enum(["EXPENSE", "INCOME"], { message: "Tipo inválido (use despesa ou entrada)" }),
-  category: z.string().trim().max(40, "Categoria muito longa").optional().or(z.literal("")),
-  subcategory: z.string().trim().max(40, "Sub-categoria muito longa").optional().or(z.literal("")),
-  tags: z.string().trim().optional().or(z.literal("")),
-});
+const MAX_TAGS_PER_ROW = 15;
+
+export const importRowSchema = z
+  .object({
+    date: z.string().trim().min(1, "Data ausente"),
+    description: z.string().trim().min(1, "Descrição ausente").max(140, "Descrição muito longa"),
+    amount: z
+      .string()
+      .trim()
+      .min(1, "Valor ausente")
+      .refine((value) => !Number.isNaN(Number(value)) && Number(value) > 0, {
+        message: "Valor inválido",
+      }),
+    type: z.enum(["EXPENSE", "INCOME"], { message: "Tipo inválido (use despesa ou entrada)" }),
+    category: z.string().trim().max(40, "Categoria muito longa").optional().or(z.literal("")),
+    subcategory: z.string().trim().max(40, "Sub-categoria muito longa").optional().or(z.literal("")),
+    tags: z
+      .string()
+      .trim()
+      .max(500, "Tags muito longas")
+      .optional()
+      .or(z.literal(""))
+      .refine(
+        (value) => {
+          if (!value) return true;
+          const count = value.split(",").filter((tag) => tag.trim().length > 0).length;
+          return count <= MAX_TAGS_PER_ROW;
+        },
+        { message: `Máximo de ${MAX_TAGS_PER_ROW} tags por lançamento` }
+      ),
+  })
+  .refine((data) => !(data.subcategory && !data.category), {
+    message: "Sub-categoria requer uma categoria",
+    path: ["subcategory"],
+  });
 
 export type ImportRowInput = z.infer<typeof importRowSchema>;
+
+export const importRowsSchema = z.array(importRowSchema).max(1000, "Limite máximo de 1000 linhas por importação");
 
 export const IMPORT_FIELDS = [
   { key: "date", label: "Data", required: true },

@@ -1,18 +1,30 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { Download, FileSpreadsheet, Upload, CheckCircle2, AlertTriangle, Loader2 } from "lucide-react";
+import {
+  Download,
+  FileSpreadsheet,
+  Upload,
+  CheckCircle2,
+  AlertTriangle,
+  Loader2,
+  ChevronDown,
+  ChevronUp,
+  ClipboardList,
+} from "lucide-react";
 import toast from "react-hot-toast";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { importRowSchema, IMPORT_FIELDS, type ImportFieldKey } from "@/lib/validations/import";
 import {
-  parseSpreadsheetFile,
   normalizeAmount,
   normalizeDate,
   normalizeType,
+  summarizeMappedRows,
   type ParsedSheet,
+  type ExistingCategoryRef,
 } from "@/lib/import-helpers";
+import { formatCurrency } from "@/lib/format";
 import { importTransactionsAction } from "@/app/(app)/importar/actions";
 
 type Step = "upload" | "map" | "result";
@@ -34,6 +46,26 @@ const REQUIRED_FIELDS = IMPORT_FIELDS.filter((field) => field.required);
 
 function selectClass() {
   return "rounded-xl border border-(--color-border) bg-(--color-surface) px-3.5 py-2.5 text-sm text-(--color-text) outline-none transition-colors focus:border-(--color-primary) focus:ring-2 focus:ring-(--color-primary)/20";
+}
+
+function SummaryStat({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone?: "success" | "danger";
+}) {
+  const toneClass =
+    tone === "success" ? "text-(--color-success)" : tone === "danger" ? "text-(--color-danger)" : "text-(--color-text)";
+
+  return (
+    <div className="flex flex-col gap-1 rounded-xl border border-(--color-border) bg-(--color-bg) px-3.5 py-3">
+      <span className="text-xs text-(--color-text-muted)">{label}</span>
+      <span className={`font-numeric text-base font-semibold ${toneClass}`}>{value}</span>
+    </div>
+  );
 }
 
 function buildMappedRows(sheet: ParsedSheet, mapping: Record<ImportFieldKey, string>): MappedRow[] {
@@ -82,7 +114,11 @@ function buildMappedRows(sheet: ParsedSheet, mapping: Record<ImportFieldKey, str
   });
 }
 
-export function ImportWizard() {
+type ImportWizardProps = {
+  existingCategories: ExistingCategoryRef[];
+};
+
+export function ImportWizard({ existingCategories }: ImportWizardProps) {
   const [step, setStep] = useState<Step>("upload");
   const [fileName, setFileName] = useState("");
   const [sheet, setSheet] = useState<ParsedSheet | null>(null);
@@ -98,6 +134,7 @@ export function ImportWizard() {
   const [isParsing, setIsParsing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [result, setResult] = useState<{ imported: number; skipped: number } | null>(null);
+  const [isMappingExpanded, setIsMappingExpanded] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const mappedRows = useMemo(() => {
@@ -109,18 +146,37 @@ export function ImportWizard() {
   const invalidRows = mappedRows.filter((row) => row.error);
   const isMappingComplete = REQUIRED_FIELDS.every((field) => mapping[field.key] !== NONE);
 
+  const summary = useMemo(
+    () => summarizeMappedRows(mappedRows, existingCategories),
+    [mappedRows, existingCategories]
+  );
+
   async function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
 
     setIsParsing(true);
     try {
-      const buffer = await file.arrayBuffer();
-      const parsed = parseSpreadsheetFile(buffer);
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await fetch("/api/import/parse", { method: "POST", body: formData });
+      const json = await response.json();
+
+      if (!response.ok || !json.success) {
+        toast.error(json.message ?? "Não foi possível ler esse arquivo. Verifique se é um .xlsx ou .xls válido");
+        return;
+      }
+
+      const parsed: ParsedSheet = json.data;
 
       if (parsed.headers.length === 0 || parsed.rows.length === 0) {
         toast.error("Não encontramos dados nessa planilha");
         return;
+      }
+
+      if (json.truncated) {
+        toast.error(`A planilha tem mais de 1000 linhas. Apenas as primeiras 1000 serão importadas.`);
       }
 
       const guessedMapping: Record<ImportFieldKey, string> = {
@@ -146,9 +202,12 @@ export function ImportWizard() {
         if (match) guessedMapping[field.key] = match;
       }
 
+      const allFieldsGuessed = IMPORT_FIELDS.every((field) => guessedMapping[field.key] !== NONE);
+
       setSheet(parsed);
       setMapping(guessedMapping);
       setFileName(file.name);
+      setIsMappingExpanded(!allFieldsGuessed);
       setStep("map");
     } catch {
       toast.error("Não foi possível ler esse arquivo. Verifique se é um .xlsx ou .xls válido");
@@ -197,6 +256,7 @@ export function ImportWizard() {
     setFileName("");
     setMapping({ date: NONE, description: NONE, amount: NONE, type: NONE, category: NONE, subcategory: NONE, tags: NONE });
     setResult(null);
+    setIsMappingExpanded(false);
   }
 
   return (
@@ -250,37 +310,90 @@ export function ImportWizard() {
                 <h2 className="font-display text-base font-semibold text-(--color-text)">Mapeamento de colunas</h2>
                 <p className="mt-0.5 text-xs text-(--color-text-muted)">
                   {fileName} · {sheet.rows.length} linha(s) encontrada(s)
+                  {!isMappingExpanded && isMappingComplete && " · detectado automaticamente"}
                 </p>
               </div>
-              <Button type="button" variant="ghost" onClick={handleReset}>
-                Trocar arquivo
-              </Button>
+              <div className="flex items-center gap-2">
+                {isMappingComplete && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => setIsMappingExpanded((current) => !current)}
+                  >
+                    {isMappingExpanded ? (
+                      <>
+                        <ChevronUp size={16} aria-hidden="true" />
+                        Recolher
+                      </>
+                    ) : (
+                      <>
+                        <ChevronDown size={16} aria-hidden="true" />
+                        Revisar colunas
+                      </>
+                    )}
+                  </Button>
+                )}
+                <Button type="button" variant="ghost" onClick={handleReset}>
+                  Trocar arquivo
+                </Button>
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {IMPORT_FIELDS.map((field) => (
-                <div key={field.key} className="flex flex-col gap-1.5">
-                  <label className="text-sm font-medium text-(--color-text)" htmlFor={`map-${field.key}`}>
-                    {field.label}
-                    {!field.required && <span className="text-(--color-text-muted)"> (opcional)</span>}
-                  </label>
-                  <select
-                    id={`map-${field.key}`}
-                    className={selectClass()}
-                    value={mapping[field.key]}
-                    onChange={(event) => setMapping((current) => ({ ...current, [field.key]: event.target.value }))}
-                  >
-                    <option value={NONE}>{field.required ? "Selecione a coluna…" : "Não importar"}</option>
-                    {sheet.headers.map((header) => (
-                      <option key={header} value={header}>
-                        {header}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ))}
-            </div>
+            {(isMappingExpanded || !isMappingComplete) && (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                {IMPORT_FIELDS.map((field) => (
+                  <div key={field.key} className="flex flex-col gap-1.5">
+                    <label className="text-sm font-medium text-(--color-text)" htmlFor={`map-${field.key}`}>
+                      {field.label}
+                      {!field.required && <span className="text-(--color-text-muted)"> (opcional)</span>}
+                    </label>
+                    <select
+                      id={`map-${field.key}`}
+                      className={selectClass()}
+                      value={mapping[field.key]}
+                      onChange={(event) => setMapping((current) => ({ ...current, [field.key]: event.target.value }))}
+                    >
+                      <option value={NONE}>{field.required ? "Selecione a coluna…" : "Não importar"}</option>
+                      {sheet.headers.map((header) => (
+                        <option key={header} value={header}>
+                          {header}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ))}
+              </div>
+            )}
           </Card>
+
+          {isMappingComplete && (
+            <Card className="flex flex-col gap-4">
+              <div className="flex items-center gap-2">
+                <ClipboardList size={18} className="text-(--color-primary)" aria-hidden="true" />
+                <h2 className="font-display text-base font-semibold text-(--color-text)">Resumo da importação</h2>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+                <SummaryStat label="Linhas" value={String(summary.totalRows)} />
+                <SummaryStat label="Válidas" value={String(summary.validCount)} tone="success" />
+                <SummaryStat label="Com erro" value={String(summary.invalidCount)} tone={summary.invalidCount > 0 ? "danger" : undefined} />
+                <SummaryStat label="Entradas" value={formatCurrency(summary.totalIncome)} tone="success" />
+                <SummaryStat label="Despesas" value={formatCurrency(summary.totalExpense)} tone="danger" />
+                <SummaryStat
+                  label="Saldo"
+                  value={formatCurrency(summary.balance)}
+                  tone={summary.balance >= 0 ? "success" : "danger"}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                <SummaryStat label="Categorias novas" value={String(summary.newCategoriesCount)} />
+                <SummaryStat label="Categorias existentes" value={String(summary.existingCategoriesCount)} />
+                <SummaryStat label="Sub-categorias novas" value={String(summary.newSubcategoriesCount)} />
+                <SummaryStat label="Tags" value={String(summary.tagsCount)} />
+              </div>
+            </Card>
+          )}
 
           {isMappingComplete && (
             <Card className="flex flex-col gap-4">
@@ -303,57 +416,72 @@ export function ImportWizard() {
                 </Button>
               </div>
 
-              <div className="overflow-x-auto rounded-xl border border-(--color-border)">
-                <table className="w-full text-left text-sm">
-                  <thead>
-                    <tr className="border-b border-(--color-border) bg-(--color-bg) text-xs uppercase tracking-wide text-(--color-text-muted)">
-                      <th className="px-3 py-2">Status</th>
-                      <th className="px-3 py-2">Data</th>
-                      <th className="px-3 py-2">Transação</th>
-                      <th className="px-3 py-2">Valor</th>
-                      <th className="px-3 py-2">Tipo</th>
-                      <th className="px-3 py-2">Categoria</th>
-                      <th className="px-3 py-2">Sub-categoria</th>
-                      <th className="px-3 py-2">Tags</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {mappedRows.slice(0, 50).map((row) => (
-                      <tr key={row.index} className="border-b border-(--color-border) last:border-0">
-                        <td className="px-3 py-2">
-                          {row.error ? (
-                            <span
-                              className="inline-flex items-center gap-1.5 text-xs text-(--color-danger)"
-                              title={row.error}
-                            >
-                              <AlertTriangle size={14} aria-hidden="true" />
-                              {row.error}
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1.5 text-xs text-(--color-success)">
-                              <CheckCircle2 size={14} aria-hidden="true" />
-                              OK
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-3 py-2 font-numeric text-(--color-text)">{row.date || "—"}</td>
-                        <td className="px-3 py-2 text-(--color-text)">{row.description || "—"}</td>
-                        <td className="px-3 py-2 font-numeric text-(--color-text)">{row.amount || "—"}</td>
-                        <td className="px-3 py-2 text-(--color-text)">
-                          {row.type === "EXPENSE" ? "Despesa" : row.type === "INCOME" ? "Entrada" : "—"}
-                        </td>
-                        <td className="px-3 py-2 text-(--color-text)">{row.category || "—"}</td>
-                        <td className="px-3 py-2 text-(--color-text)">{row.subcategory || "—"}</td>
-                        <td className="px-3 py-2 text-(--color-text)">{row.tags || "—"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              {mappedRows.length > 50 && (
-                <p className="text-center text-xs text-(--color-text-muted)">
-                  Mostrando 50 de {mappedRows.length} linhas. Todas serão processadas ao importar.
-                </p>
+              {validRows.length === 0 ? (
+                <div className="flex flex-col items-center justify-center gap-3 py-10 text-center">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-(--color-danger)/10 text-(--color-danger)">
+                    <AlertTriangle size={22} aria-hidden="true" />
+                  </div>
+                  <div>
+                    <h3 className="font-display text-sm font-semibold text-(--color-text)">Nenhuma linha válida encontrada</h3>
+                    <p className="mt-1 text-sm text-(--color-text-muted)">
+                      Revise o mapeamento de colunas ou corrija a planilha antes de importar
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="overflow-x-auto rounded-xl border border-(--color-border)">
+                    <table className="w-full text-left text-sm">
+                      <thead>
+                        <tr className="border-b border-(--color-border) bg-(--color-bg) text-xs uppercase tracking-wide text-(--color-text-muted)">
+                          <th scope="col" className="px-3 py-2">Status</th>
+                          <th scope="col" className="px-3 py-2">Data</th>
+                          <th scope="col" className="px-3 py-2">Transação</th>
+                          <th scope="col" className="px-3 py-2">Valor</th>
+                          <th scope="col" className="px-3 py-2">Tipo</th>
+                          <th scope="col" className="px-3 py-2">Categoria</th>
+                          <th scope="col" className="px-3 py-2">Sub-categoria</th>
+                          <th scope="col" className="px-3 py-2">Tags</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {mappedRows.slice(0, 50).map((row) => (
+                          <tr key={row.index} className="border-b border-(--color-border) last:border-0">
+                            <td className="px-3 py-2">
+                              {row.error ? (
+                                <span className="inline-flex items-center gap-1.5 text-xs text-(--color-danger)">
+                                  <AlertTriangle size={14} aria-hidden="true" />
+                                  {row.error}
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1.5 text-xs text-(--color-success)">
+                                  <CheckCircle2 size={14} aria-hidden="true" />
+                                  OK
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2 font-numeric text-(--color-text)">{row.date || "—"}</td>
+                            <td className="px-3 py-2 text-(--color-text)">{row.description || "—"}</td>
+                            <td className="px-3 py-2 font-numeric text-(--color-text)">
+                              {row.amount ? formatCurrency(Number(row.amount)) : "—"}
+                            </td>
+                            <td className="px-3 py-2 text-(--color-text)">
+                              {row.type === "EXPENSE" ? "Despesa" : row.type === "INCOME" ? "Entrada" : "—"}
+                            </td>
+                            <td className="px-3 py-2 text-(--color-text)">{row.category || "—"}</td>
+                            <td className="px-3 py-2 text-(--color-text)">{row.subcategory || "—"}</td>
+                            <td className="px-3 py-2 text-(--color-text)">{row.tags || "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {mappedRows.length > 50 && (
+                    <p className="text-center text-xs text-(--color-text-muted)">
+                      Mostrando 50 de {mappedRows.length} linhas. Todas serão processadas ao importar.
+                    </p>
+                  )}
+                </>
               )}
             </Card>
           )}

@@ -98,3 +98,101 @@ export function normalizeTags(raw: string): string[] {
     .filter((value) => value.length > 0);
   return Array.from(new Set(names));
 }
+
+export type SummarizableRow = {
+  amount: string;
+  type: string;
+  category: string;
+  subcategory: string;
+  tags: string;
+  error?: string;
+};
+
+/** Categoria existente do usuário, usada apenas para distinguir "nova" de "já existe" no resumo. */
+export type ExistingCategoryRef = {
+  name: string;
+  parentName: string | null;
+};
+
+export type ImportSummary = {
+  totalRows: number;
+  validCount: number;
+  invalidCount: number;
+  totalIncome: number;
+  totalExpense: number;
+  balance: number;
+  newCategoriesCount: number;
+  existingCategoriesCount: number;
+  newSubcategoriesCount: number;
+  existingSubcategoriesCount: number;
+  tagsCount: number;
+};
+
+/** Agrega as linhas já mapeadas/validadas da prévia de importação em métricas de resumo. */
+export function summarizeMappedRows(
+  rows: SummarizableRow[],
+  existingCategories: ExistingCategoryRef[] = []
+): ImportSummary {
+  const existingRootNames = new Set(
+    existingCategories.filter((category) => !category.parentName).map((category) => category.name.trim().toLowerCase())
+  );
+  const existingSubNames = new Set(
+    existingCategories
+      .filter((category) => category.parentName)
+      .map((category) => `${category.parentName!.trim().toLowerCase()}::${category.name.trim().toLowerCase()}`)
+  );
+
+  let totalIncome = 0;
+  let totalExpense = 0;
+  let validCount = 0;
+
+  const categoryNames = new Set<string>();
+  const subcategoryKeys = new Set<string>();
+  const tagNames = new Set<string>();
+
+  for (const row of rows) {
+    if (!row.error) {
+      validCount += 1;
+      const amount = Number(row.amount);
+      if (!Number.isNaN(amount)) {
+        if (row.type === "INCOME") totalIncome += amount;
+        if (row.type === "EXPENSE") totalExpense += amount;
+      }
+    }
+
+    const category = row.category.trim();
+    const subcategory = row.subcategory.trim();
+
+    if (category) categoryNames.add(category);
+    if (subcategory && category) subcategoryKeys.add(`${category.toLowerCase()}::${subcategory.toLowerCase()}`);
+    for (const tag of normalizeTags(row.tags)) tagNames.add(tag);
+  }
+
+  let newCategoriesCount = 0;
+  let existingCategoriesCount = 0;
+  for (const name of categoryNames) {
+    if (existingRootNames.has(name.toLowerCase())) existingCategoriesCount += 1;
+    else newCategoriesCount += 1;
+  }
+
+  let newSubcategoriesCount = 0;
+  let existingSubcategoriesCount = 0;
+  for (const key of subcategoryKeys) {
+    if (existingSubNames.has(key)) existingSubcategoriesCount += 1;
+    else newSubcategoriesCount += 1;
+  }
+
+  return {
+    totalRows: rows.length,
+    validCount,
+    invalidCount: rows.length - validCount,
+    totalIncome,
+    totalExpense,
+    balance: totalIncome - totalExpense,
+    newCategoriesCount,
+    existingCategoriesCount,
+    newSubcategoriesCount,
+    existingSubcategoriesCount,
+    tagsCount: tagNames.size,
+  };
+}

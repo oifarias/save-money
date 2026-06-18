@@ -8,7 +8,7 @@ export function cleanTagName(raw: string): string {
 
 /** Substitui as tags de um lançamento, criando as que ainda não existem para o usuário. */
 export async function syncTransactionTags(db: Db, userId: string, transactionId: string, tagNames: string[]) {
-  await db.transactionTag.deleteMany({ where: { transactionId } });
+  await db.transactionTag.deleteMany({ where: { transactionId, transaction: { userId } } });
 
   for (const rawName of tagNames) {
     const name = cleanTagName(rawName);
