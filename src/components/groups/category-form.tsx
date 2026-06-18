@@ -22,12 +22,16 @@ const SWATCHES = [
 ];
 
 type CategoryFormProps = {
-  category?: { id: string; name: string; color: string; icon: string };
+  category?: { id: string; name: string; color: string; icon: string; parentId?: string | null };
+  rootCategories?: { id: string; name: string }[];
+  /** Quando true, a categoria pai já é fixa (criação de sub-grupo a partir de um grupo específico) e não é exibida como seletor. */
+  lockParent?: boolean;
   onDone: () => void;
 };
 
-export function CategoryForm({ category, onDone }: CategoryFormProps) {
-  const action = category ? updateCategoryAction : createCategoryAction;
+export function CategoryForm({ category, rootCategories = [], lockParent = false, onDone }: CategoryFormProps) {
+  const isEditing = Boolean(category?.id);
+  const action = isEditing ? updateCategoryAction : createCategoryAction;
   const [state, formAction, isPending] = useActionState(action, initialState);
 
   useEffect(() => {
@@ -39,9 +43,11 @@ export function CategoryForm({ category, onDone }: CategoryFormProps) {
     }
   }, [state, onDone]);
 
+  const availableParents = rootCategories.filter((parent) => parent.id !== category?.id);
+
   return (
     <form action={formAction} className="flex flex-col gap-4">
-      {category && <input type="hidden" name="id" value={category.id} />}
+      {isEditing && <input type="hidden" name="id" value={category!.id} />}
 
       <Input
         label="Nome do grupo"
@@ -52,9 +58,35 @@ export function CategoryForm({ category, onDone }: CategoryFormProps) {
         required
       />
 
-      <ColorPicker defaultValue={category?.color ?? SWATCHES[0]} error={state.fieldErrors?.color} />
+      {lockParent ? (
+        <input type="hidden" name="parentId" value={category?.parentId ?? ""} />
+      ) : (
+        availableParents.length > 0 && (
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="parentId" className="text-sm font-medium text-(--color-text)">
+              Categoria pai (opcional)
+            </label>
+            <select
+              id="parentId"
+              name="parentId"
+              defaultValue={category?.parentId ?? ""}
+              className="rounded-xl border border-(--color-border) bg-(--color-surface) px-3.5 py-2.5 text-sm text-(--color-text) outline-none transition-colors focus:border-(--color-primary) focus:ring-2 focus:ring-(--color-primary)/20"
+            >
+              <option value="">Nenhuma — é um grupo principal</option>
+              {availableParents.map((parent) => (
+                <option key={parent.id} value={parent.id}>
+                  {parent.name}
+                </option>
+              ))}
+            </select>
+            {state.fieldErrors?.parentId && <p className="text-xs text-(--color-danger)">{state.fieldErrors.parentId}</p>}
+          </div>
+        )
+      )}
 
-      <IconPicker defaultValue={category?.icon ?? CATEGORY_ICON_NAMES[0]} error={state.fieldErrors?.icon} />
+      <ColorPicker defaultValue={category?.color || SWATCHES[0]} error={state.fieldErrors?.color} />
+
+      <IconPicker defaultValue={category?.icon || CATEGORY_ICON_NAMES[0]} error={state.fieldErrors?.icon} />
 
       <div className="mt-1 flex justify-end gap-2">
         <Button type="button" variant="ghost" onClick={onDone}>

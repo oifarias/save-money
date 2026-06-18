@@ -20,25 +20,26 @@ export type CategoryWithCount = {
   transactionCount: number;
 };
 
-export function CategoryManager({ categories }: { categories: CategoryWithCount[] }) {
-  const [formOpen, setFormOpen] = useState(false);
-  const [editing, setEditing] = useState<CategoryWithCount | null>(null);
+export type CategoryWithChildren = CategoryWithCount & { children: CategoryWithCount[] };
+
+type FormMode =
+  | { kind: "create" }
+  | { kind: "create-sub"; parentId: string }
+  | { kind: "edit"; category: CategoryWithCount; parentId: string | null };
+
+export function CategoryManager({
+  categories,
+  rootCategories,
+}: {
+  categories: CategoryWithChildren[];
+  rootCategories: { id: string; name: string }[];
+}) {
+  const [formMode, setFormMode] = useState<FormMode | null>(null);
   const [deleting, setDeleting] = useState<CategoryWithCount | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  function openCreate() {
-    setEditing(null);
-    setFormOpen(true);
-  }
-
-  function openEdit(category: CategoryWithCount) {
-    setEditing(category);
-    setFormOpen(true);
-  }
-
   function closeForm() {
-    setFormOpen(false);
-    setEditing(null);
+    setFormMode(null);
   }
 
   function confirmDelete() {
@@ -54,6 +55,9 @@ export function CategoryManager({ categories }: { categories: CategoryWithCount[
     });
   }
 
+  const formTitle =
+    formMode?.kind === "edit" ? "Editar grupo" : formMode?.kind === "create-sub" ? "Novo sub-grupo" : "Novo grupo";
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
@@ -63,7 +67,7 @@ export function CategoryManager({ categories }: { categories: CategoryWithCount[
             Organize seus lançamentos por categoria com cores e ícones personalizados
           </p>
         </div>
-        <Button onClick={openCreate}>
+        <Button onClick={() => setFormMode({ kind: "create" })}>
           <Plus className="h-4 w-4" aria-hidden="true" />
           Novo grupo
         </Button>
@@ -75,7 +79,7 @@ export function CategoryManager({ categories }: { categories: CategoryWithCount[
           <p className="max-w-sm text-sm text-(--color-text-muted)">
             Crie grupos para organizar seus gastos e entradas — por exemplo, Alimentação, Transporte ou Lazer.
           </p>
-          <Button onClick={openCreate} className="mt-2">
+          <Button onClick={() => setFormMode({ kind: "create" })} className="mt-2">
             <Plus className="h-4 w-4" aria-hidden="true" />
             Criar primeiro grupo
           </Button>
@@ -85,52 +89,107 @@ export function CategoryManager({ categories }: { categories: CategoryWithCount[
           {categories.map((category) => {
             const Icon = getCategoryIcon(category.icon);
             return (
-              <Card key={category.id} className="flex items-start justify-between gap-3">
-                <div className="flex items-start gap-3">
-                  <span
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
-                    style={{ backgroundColor: `${category.color}1F`, color: category.color }}
-                  >
-                    <Icon className="h-5 w-5" aria-hidden="true" />
-                  </span>
-                  <div>
-                    <p className="font-medium text-(--color-text)">{category.name}</p>
-                    <p className="text-xs text-(--color-text-muted)">
-                      {category.transactionCount === 0
-                        ? "Nenhum lançamento"
-                        : `${category.transactionCount} lançamento${category.transactionCount > 1 ? "s" : ""}`}
-                      {category.isDefault && " · padrão"}
-                    </p>
+              <Card key={category.id} className="flex flex-col gap-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    <span
+                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+                      style={{ backgroundColor: `${category.color}1F`, color: category.color }}
+                    >
+                      <Icon className="h-5 w-5" aria-hidden="true" />
+                    </span>
+                    <div>
+                      <p className="font-medium text-(--color-text)">{category.name}</p>
+                      <p className="text-xs text-(--color-text-muted)">
+                        {category.transactionCount === 0
+                          ? "Nenhum lançamento"
+                          : `${category.transactionCount} lançamento${category.transactionCount > 1 ? "s" : ""}`}
+                        {category.isDefault && " · padrão"}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setFormMode({ kind: "edit", category, parentId: null })}
+                      aria-label={`Editar grupo ${category.name}`}
+                      className="flex h-8 w-8 items-center justify-center rounded-lg text-(--color-text-muted) transition-colors hover:bg-(--color-bg) hover:text-(--color-primary)"
+                    >
+                      <Pencil className="h-4 w-4" aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDeleting(category)}
+                      disabled={category.transactionCount > 0}
+                      aria-label={`Excluir grupo ${category.name}`}
+                      title={category.transactionCount > 0 ? "Só é possível excluir grupos vazios" : undefined}
+                      className="flex h-8 w-8 items-center justify-center rounded-lg text-(--color-text-muted) transition-colors hover:bg-(--color-bg) hover:text-(--color-danger) disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <Trash2 className="h-4 w-4" aria-hidden="true" />
+                    </button>
                   </div>
                 </div>
-                <div className="flex shrink-0 gap-1">
-                  <button
-                    type="button"
-                    onClick={() => openEdit(category)}
-                    aria-label={`Editar grupo ${category.name}`}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg text-(--color-text-muted) transition-colors hover:bg-(--color-bg) hover:text-(--color-primary)"
-                  >
-                    <Pencil className="h-4 w-4" aria-hidden="true" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDeleting(category)}
-                    disabled={category.transactionCount > 0}
-                    aria-label={`Excluir grupo ${category.name}`}
-                    title={category.transactionCount > 0 ? "Só é possível excluir grupos vazios" : undefined}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg text-(--color-text-muted) transition-colors hover:bg-(--color-bg) hover:text-(--color-danger) disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    <Trash2 className="h-4 w-4" aria-hidden="true" />
-                  </button>
-                </div>
+
+                {category.children.length > 0 && (
+                  <ul className="flex flex-col gap-1.5 border-t border-(--color-border) pt-3">
+                    {category.children.map((child) => (
+                      <li key={child.id} className="flex items-center justify-between gap-2 pl-3 text-sm">
+                        <span className="text-(--color-text-muted)">— {child.name}</span>
+                        <div className="flex shrink-0 gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setFormMode({ kind: "edit", category: child, parentId: category.id })}
+                            aria-label={`Editar sub-grupo ${child.name}`}
+                            className="flex h-7 w-7 items-center justify-center rounded-lg text-(--color-text-muted) transition-colors hover:bg-(--color-bg) hover:text-(--color-primary)"
+                          >
+                            <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeleting(child)}
+                            disabled={child.transactionCount > 0}
+                            aria-label={`Excluir sub-grupo ${child.name}`}
+                            title={child.transactionCount > 0 ? "Só é possível excluir grupos vazios" : undefined}
+                            className="flex h-7 w-7 items-center justify-center rounded-lg text-(--color-text-muted) transition-colors hover:bg-(--color-bg) hover:text-(--color-danger) disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setFormMode({ kind: "create-sub", parentId: category.id })}
+                  className="flex items-center gap-1 self-start text-xs font-medium text-(--color-primary) hover:underline"
+                >
+                  <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                  Novo sub-grupo
+                </button>
               </Card>
             );
           })}
         </div>
       )}
 
-      <Modal open={formOpen} title={editing ? "Editar grupo" : "Novo grupo"} onClose={closeForm}>
-        <CategoryForm category={editing ?? undefined} onDone={closeForm} />
+      <Modal open={Boolean(formMode)} title={formTitle} onClose={closeForm}>
+        {formMode?.kind === "edit" ? (
+          <CategoryForm
+            category={{ ...formMode.category, parentId: formMode.parentId }}
+            rootCategories={rootCategories}
+            onDone={closeForm}
+          />
+        ) : formMode?.kind === "create-sub" ? (
+          <CategoryForm
+            category={{ id: "", name: "", color: "", icon: "", parentId: formMode.parentId }}
+            lockParent
+            onDone={closeForm}
+          />
+        ) : formMode?.kind === "create" ? (
+          <CategoryForm onDone={closeForm} />
+        ) : null}
       </Modal>
 
       <ConfirmDialog

@@ -22,20 +22,23 @@ export default async function DashboardPage() {
         orderBy: { date: "desc" },
         take: 10,
         include: {
-          account: { select: { id: true, name: true } },
           category: { select: { id: true, name: true, color: true, icon: true } },
+          subcategory: { select: { id: true, name: true, color: true, icon: true } },
           tags: { include: { tag: { select: { name: true } } } },
         },
       }),
-      prisma.account.findMany({ where: { userId }, orderBy: { createdAt: "asc" } }),
-      prisma.category.findMany({ where: { userId }, orderBy: { name: "asc" } }),
+      prisma.category.findMany({
+        where: { userId, parentId: null },
+        orderBy: { name: "asc" },
+        include: { children: { orderBy: { name: "asc" }, select: { id: true, name: true } } },
+      }),
       prisma.tag.findMany({ where: { userId }, orderBy: { name: "asc" }, select: { name: true } }),
     ]);
   } catch (err) {
     console.error("[dashboard] erro ao carregar dados do banco:", err);
     throw err;
   }
-  const [dashboardData, recentTransactions, accounts, categories, tags] = queryResult;
+  const [dashboardData, recentTransactions, categories, tags] = queryResult;
 
   const feedItems: TransactionListItem[] = recentTransactions.map((transaction) => ({
     id: transaction.id,
@@ -45,8 +48,8 @@ export default async function DashboardPage() {
     amount: transaction.amount,
     isFixed: transaction.isFixed,
     recurrence: transaction.recurrence,
-    account: transaction.account,
     category: transaction.category,
+    subcategory: transaction.subcategory,
     tags: transaction.tags.map((t) => t.tag.name),
   }));
 
@@ -75,8 +78,11 @@ export default async function DashboardPage() {
 
       <TransactionList
         transactions={feedItems}
-        accounts={accounts.map((account) => ({ id: account.id, name: account.name }))}
-        categories={categories.map((category) => ({ id: category.id, name: category.name }))}
+        categories={categories.map((category) => ({
+          id: category.id,
+          name: category.name,
+          children: category.children,
+        }))}
         tagSuggestions={tags.map((tag) => tag.name)}
         title="Lançamentos recentes"
         description="Os 10 lançamentos mais recentes da sua conta"

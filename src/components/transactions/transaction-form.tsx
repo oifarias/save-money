@@ -18,8 +18,7 @@ import {
 
 const initialState: ActionResult = { success: false };
 
-export type TransactionFormCategory = { id: string; name: string };
-export type TransactionFormAccount = { id: string; name: string };
+export type TransactionFormCategory = { id: string; name: string; children: { id: string; name: string }[] };
 
 export type TransactionFormValues = {
   id: string;
@@ -27,15 +26,14 @@ export type TransactionFormValues = {
   date: string;
   description: string;
   amount: string;
-  accountId: string;
   categoryId: string;
+  subcategoryId: string;
   isFixed: boolean;
   recurrence: "NONE" | "WEEKLY" | "MONTHLY";
   tags: string[];
 };
 
 type TransactionFormProps = {
-  accounts: TransactionFormAccount[];
   categories: TransactionFormCategory[];
   tagSuggestions: string[];
   transaction?: TransactionFormValues;
@@ -46,12 +44,16 @@ function todayISODate() {
   return new Date().toISOString().slice(0, 10);
 }
 
-export function TransactionForm({ accounts, categories, tagSuggestions, transaction, onDone }: TransactionFormProps) {
+export function TransactionForm({ categories, tagSuggestions, transaction, onDone }: TransactionFormProps) {
   const router = useRouter();
   const action = transaction ? updateTransactionAction : createTransactionAction;
   const [state, formAction, isPending] = useActionState(action, initialState);
   const [type, setType] = useState<"EXPENSE" | "INCOME">(transaction?.type ?? "EXPENSE");
   const [categoryModalOpen, setCategoryModalOpen] = useState(false);
+  const [categoryId, setCategoryId] = useState(transaction?.categoryId ?? "");
+
+  const selectedCategory = categories.find((category) => category.id === categoryId);
+  const subcategoryOptions = selectedCategory?.children ?? [];
 
   useEffect(() => {
     if (state.success) {
@@ -139,27 +141,6 @@ export function TransactionForm({ accounts, categories, tagSuggestions, transact
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="flex flex-col gap-1.5">
-            <label htmlFor="accountId" className="text-sm font-medium text-(--color-text)">
-              Conta
-            </label>
-            <select
-              id="accountId"
-              name="accountId"
-              defaultValue={transaction?.accountId ?? accounts[0]?.id}
-              className="rounded-xl border border-(--color-border) bg-(--color-surface) px-3.5 py-2.5 text-sm text-(--color-text) outline-none transition-colors focus:border-(--color-primary) focus:ring-2 focus:ring-(--color-primary)/20"
-            >
-              {accounts.map((account) => (
-                <option key={account.id} value={account.id}>
-                  {account.name}
-                </option>
-              ))}
-            </select>
-            {state.fieldErrors?.accountId && (
-              <p className="text-xs text-(--color-danger)">{state.fieldErrors.accountId}</p>
-            )}
-          </div>
-
-          <div className="flex flex-col gap-1.5">
             <div className="flex items-center justify-between">
               <label htmlFor="categoryId" className="text-sm font-medium text-(--color-text)">
                 Grupo
@@ -176,13 +157,35 @@ export function TransactionForm({ accounts, categories, tagSuggestions, transact
             <select
               id="categoryId"
               name="categoryId"
-              defaultValue={transaction?.categoryId ?? ""}
+              value={categoryId}
+              onChange={(event) => setCategoryId(event.target.value)}
               className="rounded-xl border border-(--color-border) bg-(--color-surface) px-3.5 py-2.5 text-sm text-(--color-text) outline-none transition-colors focus:border-(--color-primary) focus:ring-2 focus:ring-(--color-primary)/20"
             >
               <option value="">Sem grupo</option>
               {categories.map((category) => (
                 <option key={category.id} value={category.id}>
                   {category.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="subcategoryId" className="text-sm font-medium text-(--color-text)">
+              Sub-grupo
+            </label>
+            <select
+              key={categoryId}
+              id="subcategoryId"
+              name="subcategoryId"
+              defaultValue={categoryId === transaction?.categoryId ? transaction?.subcategoryId ?? "" : ""}
+              disabled={subcategoryOptions.length === 0}
+              className="rounded-xl border border-(--color-border) bg-(--color-surface) px-3.5 py-2.5 text-sm text-(--color-text) outline-none transition-colors focus:border-(--color-primary) focus:ring-2 focus:ring-(--color-primary)/20 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <option value="">Sem sub-grupo</option>
+              {subcategoryOptions.map((subcategory) => (
+                <option key={subcategory.id} value={subcategory.id}>
+                  {subcategory.name}
                 </option>
               ))}
             </select>

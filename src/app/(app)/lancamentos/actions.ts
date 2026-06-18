@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getDefaultAccountId } from "@/lib/accounts";
+import { syncTransactionTags } from "@/lib/tags";
 import { transactionSchema } from "@/lib/validations/transaction";
 import type { Recurrence, TransactionType } from "@/generated/prisma/client";
 
@@ -39,31 +41,37 @@ function parseFormData(formData: FormData) {
     date: String(formData.get("date") ?? ""),
     description: String(formData.get("description") ?? ""),
     amount: String(formData.get("amount") ?? ""),
-    accountId: String(formData.get("accountId") ?? ""),
     categoryId: String(formData.get("categoryId") ?? ""),
+    subcategoryId: String(formData.get("subcategoryId") ?? ""),
     isFixed: formData.get("isFixed") === "on",
     recurrence: String(formData.get("recurrence") ?? "NONE"),
     tags,
   });
 }
 
-async function syncTags(userId: string, transactionId: string, tagNames: string[]) {
-  await prisma.transactionTag.deleteMany({ where: { transactionId } });
-
-  for (const rawName of tagNames) {
-    const name = rawName.trim().replace(/^#/, "");
-    if (!name) continue;
-
-    const tag = await prisma.tag.upsert({
-      where: { userId_name: { userId, name } },
-      update: {},
-      create: { userId, name },
-    });
-
-    await prisma.transactionTag.create({
-      data: { transactionId, tagId: tag.id },
-    });
+async function resolveCategoryAndSubcategory(
+  userId: string,
+  categoryId: string,
+  subcategoryId: string
+): Promise<{ error: Record<string, string> | null }> {
+  if (categoryId) {
+    const category = await prisma.category.findFirst({ where: { id: categoryId, userId, parentId: null } });
+    if (!category) {
+      return { error: { categoryId: "Grupo inválido" } };
+    }
   }
+
+  if (subcategoryId) {
+    if (!categoryId) {
+      return { error: { subcategoryId: "Selecione um grupo antes do sub-grupo" } };
+    }
+    const subcategory = await prisma.category.findFirst({ where: { id: subcategoryId, userId, parentId: categoryId } });
+    if (!subcategory) {
+      return { error: { subcategoryId: "Sub-grupo inválido" } };
+    }
+  }
+
+  return { error: null };
 }
 
 export async function createTransactionAction(_prev: ActionResult, formData: FormData): Promise<ActionResult> {
@@ -74,18 +82,16 @@ export async function createTransactionAction(_prev: ActionResult, formData: For
     return { success: false, fieldErrors: flattenZodErrors(parsed.error) };
   }
 
-  const { type, date, description, amount, accountId, categoryId, isFixed, recurrence, tags } = parsed.data;
+  const { type, date, description, amount, categoryId, subcategoryId, isFixed, recurrence, tags } = parsed.data;
 
-  const account = await prisma.account.findFirst({ where: { id: accountId, userId } });
-  if (!account) {
-    return { success: false, fieldErrors: { accountId: "Conta inválida" } };
+  const accountId = await getDefaultAccountId(userId);
+  if (!accountId) {
+    return { success: false, message: "Nenhuma conta encontrada para o usuário" };
   }
 
-  if (categoryId) {
-    const category = await prisma.category.findFirst({ where: { id: categoryId, userId } });
-    if (!category) {
-      return { success: false, fieldErrors: { categoryId: "Grupo inválido" } };
-    }
+  const { error } = await resolveCategoryAndSubcategory(userId, categoryId ?? "", subcategoryId ?? "");
+  if (error) {
+    return { success: false, fieldErrors: error };
   }
 
   const transaction = await prisma.transaction.create({
@@ -93,6 +99,7 @@ export async function createTransactionAction(_prev: ActionResult, formData: For
       userId,
       accountId,
       categoryId: categoryId || null,
+      subcategoryId: subcategoryId || null,
       type: type as TransactionType,
       amount: Number(amount),
       date: new Date(date),
@@ -102,7 +109,7 @@ export async function createTransactionAction(_prev: ActionResult, formData: For
     },
   });
 
-  await syncTags(userId, transaction.id, tags);
+  await syncTransactionTags(prisma, userId, transaction.id, tags);
 
   revalidatePath("/dashboard");
   revalidatePath("/lancamentos");
@@ -123,25 +130,18 @@ export async function updateTransactionAction(_prev: ActionResult, formData: For
     return { success: false, message: "Lançamento não encontrado" };
   }
 
-  const { type, date, description, amount, accountId, categoryId, isFixed, recurrence, tags } = parsed.data;
+  const { type, date, description, amount, categoryId, subcategoryId, isFixed, recurrence, tags } = parsed.data;
 
-  const account = await prisma.account.findFirst({ where: { id: accountId, userId } });
-  if (!account) {
-    return { success: false, fieldErrors: { accountId: "Conta inválida" } };
-  }
-
-  if (categoryId) {
-    const category = await prisma.category.findFirst({ where: { id: categoryId, userId } });
-    if (!category) {
-      return { success: false, fieldErrors: { categoryId: "Grupo inválido" } };
-    }
+  const { error } = await resolveCategoryAndSubcategory(userId, categoryId ?? "", subcategoryId ?? "");
+  if (error) {
+    return { success: false, fieldErrors: error };
   }
 
   await prisma.transaction.update({
     where: { id },
     data: {
-      accountId,
       categoryId: categoryId || null,
+      subcategoryId: subcategoryId || null,
       type: type as TransactionType,
       amount: Number(amount),
       date: new Date(date),
@@ -151,7 +151,7 @@ export async function updateTransactionAction(_prev: ActionResult, formData: For
     },
   });
 
-  await syncTags(userId, id, tags);
+  await syncTransactionTags(prisma, userId, id, tags);
 
   revalidatePath("/dashboard");
   revalidatePath("/lancamentos");

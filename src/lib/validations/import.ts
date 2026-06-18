@@ -11,15 +11,21 @@ export const importRowSchema = z.object({
       message: "Valor inválido",
     }),
   type: z.enum(["EXPENSE", "INCOME"], { message: "Tipo inválido (use despesa ou entrada)" }),
+  category: z.string().trim().max(40, "Categoria muito longa").optional().or(z.literal("")),
+  subcategory: z.string().trim().max(40, "Sub-categoria muito longa").optional().or(z.literal("")),
+  tags: z.string().trim().optional().or(z.literal("")),
 });
 
 export type ImportRowInput = z.infer<typeof importRowSchema>;
 
 export const IMPORT_FIELDS = [
   { key: "date", label: "Data", required: true },
-  { key: "description", label: "Descrição", required: true },
+  { key: "description", label: "Transação", required: true },
   { key: "amount", label: "Valor", required: true },
   { key: "type", label: "Tipo (despesa/entrada)", required: true },
+  { key: "category", label: "Categoria", required: false },
+  { key: "subcategory", label: "Sub-categoria", required: false },
+  { key: "tags", label: "Tags", required: false },
 ] as const;
 
 export type ImportFieldKey = (typeof IMPORT_FIELDS)[number]["key"];

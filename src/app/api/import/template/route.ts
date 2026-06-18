@@ -8,12 +8,20 @@ export async function GET() {
   }
 
   const worksheet = XLSX.utils.aoa_to_sheet([
-    ["Data", "Descrição", "Valor", "Tipo"],
-    ["10/06/2026", "Supermercado", "350,90", "despesa"],
-    ["05/06/2026", "Salário", "5000,00", "entrada"],
-    ["12/06/2026", "Assinatura streaming", "39,90", "despesa"],
+    ["Data", "Tipo", "Transação", "Categoria", "Sub-categoria", "Valor", "Tags"],
+    ["10/06/2026", "despesa", "Supermercado", "Alimentação", "Mercado", "350,90", "casa,mensal"],
+    ["05/06/2026", "entrada", "Salário", "Renda", "", "5000,00", ""],
+    ["12/06/2026", "despesa", "Assinatura streaming", "Lazer", "Streaming", "39,90", "assinatura"],
   ]);
-  worksheet["!cols"] = [{ wch: 14 }, { wch: 28 }, { wch: 12 }, { wch: 14 }];
+  worksheet["!cols"] = [
+    { wch: 14 },
+    { wch: 12 },
+    { wch: 28 },
+    { wch: 16 },
+    { wch: 16 },
+    { wch: 12 },
+    { wch: 18 },
+  ];
 
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, "Lançamentos");

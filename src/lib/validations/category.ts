@@ -7,6 +7,7 @@ export const categorySchema = z.object({
     .trim()
     .regex(/^#([0-9a-fA-F]{6})$/, "Informe uma cor hexadecimal válida"),
   icon: z.string().trim().min(1, "Selecione um ícone"),
+  parentId: z.string().trim().optional().or(z.literal("")),
 });
 
 export type CategoryInput = z.infer<typeof categorySchema>;

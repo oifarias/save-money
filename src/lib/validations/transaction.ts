@@ -11,8 +11,8 @@ export const transactionSchema = z.object({
     .refine((value) => !Number.isNaN(Number(value)) && Number(value) > 0, {
       message: "Informe um valor maior que zero",
     }),
-  accountId: z.string().trim().min(1, "Selecione uma conta"),
   categoryId: z.string().trim().optional().or(z.literal("")),
+  subcategoryId: z.string().trim().optional().or(z.literal("")),
   isFixed: z.boolean().optional(),
   recurrence: z.enum(["NONE", "WEEKLY", "MONTHLY"]),
   tags: z.array(z.string().trim().min(1).max(30)).max(10, "No máximo 10 hashtags"),

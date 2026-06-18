@@ -15,8 +15,6 @@ import {
 } from "@/lib/import-helpers";
 import { importTransactionsAction } from "@/app/(app)/importar/actions";
 
-type SelectOption = { id: string; name: string };
-
 type Step = "upload" | "map" | "result";
 
 type MappedRow = {
@@ -25,28 +23,35 @@ type MappedRow = {
   description: string;
   amount: string;
   type: string;
+  category: string;
+  subcategory: string;
+  tags: string;
   error?: string;
 };
 
 const NONE = "__none__";
+const REQUIRED_FIELDS = IMPORT_FIELDS.filter((field) => field.required);
 
 function selectClass() {
   return "rounded-xl border border-(--color-border) bg-(--color-surface) px-3.5 py-2.5 text-sm text-(--color-text) outline-none transition-colors focus:border-(--color-primary) focus:ring-2 focus:ring-(--color-primary)/20";
 }
 
 function buildMappedRows(sheet: ParsedSheet, mapping: Record<ImportFieldKey, string>): MappedRow[] {
-  const columnIndex: Record<ImportFieldKey, number> = {
-    date: mapping.date === NONE ? -1 : sheet.headers.indexOf(mapping.date),
-    description: mapping.description === NONE ? -1 : sheet.headers.indexOf(mapping.description),
-    amount: mapping.amount === NONE ? -1 : sheet.headers.indexOf(mapping.amount),
-    type: mapping.type === NONE ? -1 : sheet.headers.indexOf(mapping.type),
-  };
+  const columnIndex = Object.fromEntries(
+    IMPORT_FIELDS.map((field) => [
+      field.key,
+      mapping[field.key] === NONE ? -1 : sheet.headers.indexOf(mapping[field.key]),
+    ])
+  ) as Record<ImportFieldKey, number>;
 
   return sheet.rows.map((row, index) => {
     const rawDate = columnIndex.date >= 0 ? row[columnIndex.date] : "";
     const rawDescription = columnIndex.description >= 0 ? row[columnIndex.description] : "";
     const rawAmount = columnIndex.amount >= 0 ? row[columnIndex.amount] : "";
     const rawType = columnIndex.type >= 0 ? row[columnIndex.type] : "";
+    const rawCategory = columnIndex.category >= 0 ? row[columnIndex.category] : "";
+    const rawSubcategory = columnIndex.subcategory >= 0 ? row[columnIndex.subcategory] : "";
+    const rawTags = columnIndex.tags >= 0 ? row[columnIndex.tags] : "";
 
     const date = normalizeDate(rawDate) ?? "";
     const amount = normalizeAmount(rawAmount) ?? "";
@@ -65,6 +70,9 @@ function buildMappedRows(sheet: ParsedSheet, mapping: Record<ImportFieldKey, str
       description: rawDescription.trim(),
       amount: amountValue,
       type,
+      category: rawCategory.trim(),
+      subcategory: rawSubcategory.trim(),
+      tags: rawTags.trim(),
     };
 
     const parsed = importRowSchema.safeParse(candidate);
@@ -74,13 +82,7 @@ function buildMappedRows(sheet: ParsedSheet, mapping: Record<ImportFieldKey, str
   });
 }
 
-export function ImportWizard({
-  accounts,
-  categories,
-}: {
-  accounts: SelectOption[];
-  categories: SelectOption[];
-}) {
+export function ImportWizard() {
   const [step, setStep] = useState<Step>("upload");
   const [fileName, setFileName] = useState("");
   const [sheet, setSheet] = useState<ParsedSheet | null>(null);
@@ -89,9 +91,10 @@ export function ImportWizard({
     description: NONE,
     amount: NONE,
     type: NONE,
+    category: NONE,
+    subcategory: NONE,
+    tags: NONE,
   });
-  const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
-  const [categoryId, setCategoryId] = useState("");
   const [isParsing, setIsParsing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [result, setResult] = useState<{ imported: number; skipped: number } | null>(null);
@@ -104,7 +107,7 @@ export function ImportWizard({
 
   const validRows = mappedRows.filter((row) => !row.error);
   const invalidRows = mappedRows.filter((row) => row.error);
-  const isMappingComplete = IMPORT_FIELDS.every((field) => mapping[field.key] !== NONE);
+  const isMappingComplete = REQUIRED_FIELDS.every((field) => mapping[field.key] !== NONE);
 
   async function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -120,12 +123,23 @@ export function ImportWizard({
         return;
       }
 
-      const guessedMapping: Record<ImportFieldKey, string> = { date: NONE, description: NONE, amount: NONE, type: NONE };
+      const guessedMapping: Record<ImportFieldKey, string> = {
+        date: NONE,
+        description: NONE,
+        amount: NONE,
+        type: NONE,
+        category: NONE,
+        subcategory: NONE,
+        tags: NONE,
+      };
       const guesses: Record<ImportFieldKey, string[]> = {
         date: ["data", "date", "dia"],
-        description: ["descrição", "descricao", "description", "histórico", "historico"],
+        description: ["transação", "transacao", "descrição", "descricao", "description", "histórico", "historico"],
         amount: ["valor", "amount", "preço", "preco", "total"],
         type: ["tipo", "type", "natureza"],
+        category: ["categoria", "category", "grupo"],
+        subcategory: ["sub-categoria", "subcategoria", "sub categoria", "subcategory", "sub-grupo", "subgrupo"],
+        tags: ["tags", "hashtags", "etiquetas"],
       };
       for (const field of IMPORT_FIELDS) {
         const match = parsed.headers.find((header) => guesses[field.key].includes(header.trim().toLowerCase()));
@@ -153,9 +167,15 @@ export function ImportWizard({
     setIsSubmitting(true);
     try {
       const response = await importTransactionsAction(
-        accountId,
-        categoryId,
-        validRows.map(({ date, description, amount, type }) => ({ date, description, amount, type }))
+        validRows.map(({ date, description, amount, type, category, subcategory, tags }) => ({
+          date,
+          description,
+          amount,
+          type,
+          category,
+          subcategory,
+          tags,
+        }))
       );
 
       if (!response.success) {
@@ -175,7 +195,7 @@ export function ImportWizard({
     setStep("upload");
     setSheet(null);
     setFileName("");
-    setMapping({ date: NONE, description: NONE, amount: NONE, type: NONE });
+    setMapping({ date: NONE, description: NONE, amount: NONE, type: NONE, category: NONE, subcategory: NONE, tags: NONE });
     setResult(null);
   }
 
@@ -185,7 +205,7 @@ export function ImportWizard({
         <div>
           <h2 className="font-display text-base font-semibold text-(--color-text)">Arquivo modelo</h2>
           <p className="mt-0.5 text-sm text-(--color-text-muted)">
-            Baixe a planilha de exemplo com as colunas esperadas: data, descrição, valor e tipo
+            Baixe a planilha de exemplo com as colunas esperadas: Data, Tipo, Transação, Categoria, Sub-categoria, Valor e Tags
           </p>
         </div>
         <a href="/api/import/template" download>
@@ -242,6 +262,7 @@ export function ImportWizard({
                 <div key={field.key} className="flex flex-col gap-1.5">
                   <label className="text-sm font-medium text-(--color-text)" htmlFor={`map-${field.key}`}>
                     {field.label}
+                    {!field.required && <span className="text-(--color-text-muted)"> (opcional)</span>}
                   </label>
                   <select
                     id={`map-${field.key}`}
@@ -249,7 +270,7 @@ export function ImportWizard({
                     value={mapping[field.key]}
                     onChange={(event) => setMapping((current) => ({ ...current, [field.key]: event.target.value }))}
                   >
-                    <option value={NONE}>Selecione a coluna…</option>
+                    <option value={NONE}>{field.required ? "Selecione a coluna…" : "Não importar"}</option>
                     {sheet.headers.map((header) => (
                       <option key={header} value={header}>
                         {header}
@@ -258,44 +279,6 @@ export function ImportWizard({
                   </select>
                 </div>
               ))}
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-(--color-text)" htmlFor="import-account">
-                  Conta de destino
-                </label>
-                <select
-                  id="import-account"
-                  className={selectClass()}
-                  value={accountId}
-                  onChange={(event) => setAccountId(event.target.value)}
-                >
-                  {accounts.map((account) => (
-                    <option key={account.id} value={account.id}>
-                      {account.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-(--color-text)" htmlFor="import-category">
-                  Grupo (aplicado a todos os lançamentos)
-                </label>
-                <select
-                  id="import-category"
-                  className={selectClass()}
-                  value={categoryId}
-                  onChange={(event) => setCategoryId(event.target.value)}
-                >
-                  <option value="">Sem grupo</option>
-                  {categories.map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {category.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
             </div>
           </Card>
 
@@ -326,9 +309,12 @@ export function ImportWizard({
                     <tr className="border-b border-(--color-border) bg-(--color-bg) text-xs uppercase tracking-wide text-(--color-text-muted)">
                       <th className="px-3 py-2">Status</th>
                       <th className="px-3 py-2">Data</th>
-                      <th className="px-3 py-2">Descrição</th>
+                      <th className="px-3 py-2">Transação</th>
                       <th className="px-3 py-2">Valor</th>
                       <th className="px-3 py-2">Tipo</th>
+                      <th className="px-3 py-2">Categoria</th>
+                      <th className="px-3 py-2">Sub-categoria</th>
+                      <th className="px-3 py-2">Tags</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -356,6 +342,9 @@ export function ImportWizard({
                         <td className="px-3 py-2 text-(--color-text)">
                           {row.type === "EXPENSE" ? "Despesa" : row.type === "INCOME" ? "Entrada" : "—"}
                         </td>
+                        <td className="px-3 py-2 text-(--color-text)">{row.category || "—"}</td>
+                        <td className="px-3 py-2 text-(--color-text)">{row.subcategory || "—"}</td>
+                        <td className="px-3 py-2 text-(--color-text)">{row.tags || "—"}</td>
                       </tr>
                     ))}
                   </tbody>

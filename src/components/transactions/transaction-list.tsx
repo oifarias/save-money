@@ -11,7 +11,6 @@ import { Modal } from "@/components/ui/modal";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   TransactionForm,
-  type TransactionFormAccount,
   type TransactionFormCategory,
   type TransactionFormValues,
 } from "@/components/transactions/transaction-form";
@@ -27,14 +26,13 @@ export type TransactionListItem = {
   amount: number;
   isFixed: boolean;
   recurrence: "NONE" | "WEEKLY" | "MONTHLY";
-  account: { id: string; name: string };
   category: { id: string; name: string; color: string; icon: string } | null;
+  subcategory: { id: string; name: string; color: string; icon: string } | null;
   tags: string[];
 };
 
 type TransactionListProps = {
   transactions: TransactionListItem[];
-  accounts: TransactionFormAccount[];
   categories: TransactionFormCategory[];
   tagSuggestions: string[];
   title?: string;
@@ -45,7 +43,6 @@ type TransactionListProps = {
 
 export function TransactionList({
   transactions,
-  accounts,
   categories,
   tagSuggestions,
   title = "Lançamentos",
@@ -93,8 +90,8 @@ export function TransactionList({
         date: toInputDate(editing.date),
         description: editing.description,
         amount: String(editing.amount),
-        accountId: editing.account.id,
         categoryId: editing.category?.id ?? "",
+        subcategoryId: editing.subcategory?.id ?? "",
         isFixed: editing.isFixed,
         recurrence: editing.recurrence,
         tags: editing.tags,
@@ -172,6 +169,7 @@ export function TransactionList({
                       <span className="flex items-center gap-1">
                         {Icon && <Icon className="h-3 w-3" aria-hidden="true" style={{ color: transaction.category.color }} />}
                         {transaction.category.name}
+                        {transaction.subcategory && ` › ${transaction.subcategory.name}`}
                       </span>
                     )}
                     {transaction.tags.map((tag) => (
@@ -217,7 +215,6 @@ export function TransactionList({
 
       <Modal open={formOpen} title={editing ? "Editar lançamento" : "Novo lançamento"} onClose={closeForm}>
         <TransactionForm
-          accounts={accounts}
           categories={categories}
           tagSuggestions={tagSuggestions}
           transaction={editingValues}

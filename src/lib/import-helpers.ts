@@ -1,4 +1,5 @@
 import * as XLSX from "xlsx";
+import { cleanTagName } from "@/lib/tags";
 
 export type ParsedSheet = {
   headers: string[];
@@ -87,4 +88,13 @@ export function normalizeDate(raw: string): string | null {
 
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString().slice(0, 10);
+}
+
+/** Normaliza uma string de tags separadas por vírgula em uma lista limpa, sem vazios ou duplicadas. */
+export function normalizeTags(raw: string): string[] {
+  const names = raw
+    .split(",")
+    .map((value) => cleanTagName(value))
+    .filter((value) => value.length > 0);
+  return Array.from(new Set(names));
 }
