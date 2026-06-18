@@ -293,12 +293,10 @@ export function ImportWizard({ existingCategories }: ImportWizardProps) {
             id="import-file-input"
             onChange={handleFileChange}
           />
-          <label htmlFor="import-file-input">
-            <Button type="button" isLoading={isParsing} className="cursor-pointer">
-              <Upload size={16} aria-hidden="true" />
-              Selecionar arquivo
-            </Button>
-          </label>
+          <Button type="button" isLoading={isParsing} onClick={() => fileInputRef.current?.click()}>
+            <Upload size={16} aria-hidden="true" />
+            Selecionar arquivo
+          </Button>
         </Card>
       )}
 
