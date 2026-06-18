@@ -10,11 +10,16 @@ import {
   Loader2,
   ChevronDown,
   ChevronUp,
+  ChevronLeft,
+  ChevronRight,
   ClipboardList,
+  Trash2,
+  Pencil,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { importRowSchema, IMPORT_FIELDS, type ImportFieldKey } from "@/lib/validations/import";
 import {
   normalizeAmount,
@@ -43,6 +48,10 @@ type MappedRow = {
 
 const NONE = "__none__";
 const REQUIRED_FIELDS = IMPORT_FIELDS.filter((field) => field.required);
+const PAGE_SIZE = 25;
+
+type EditableField = "category" | "subcategory" | "tags";
+type RowFilter = "all" | "valid" | "invalid";
 
 function selectClass() {
   return "rounded-xl border border-(--color-border) bg-(--color-surface) px-3.5 py-2.5 text-sm text-(--color-text) outline-none transition-colors focus:border-(--color-primary) focus:ring-2 focus:ring-(--color-primary)/20";
@@ -52,19 +61,106 @@ function SummaryStat({
   label,
   value,
   tone,
+  active,
+  onClick,
 }: {
   label: string;
   value: string;
   tone?: "success" | "danger";
+  active?: boolean;
+  onClick?: () => void;
 }) {
   const toneClass =
     tone === "success" ? "text-(--color-success)" : tone === "danger" ? "text-(--color-danger)" : "text-(--color-text)";
 
+  const baseClass = "flex flex-col gap-1 rounded-xl border bg-(--color-bg) px-3.5 py-3 text-left transition-colors";
+  const borderClass = active
+    ? "border-(--color-primary) ring-2 ring-(--color-primary)/20"
+    : "border-(--color-border)";
+
+  if (!onClick) {
+    return (
+      <div className={`${baseClass} ${borderClass}`}>
+        <span className="text-xs text-(--color-text-muted)">{label}</span>
+        <span className={`font-numeric text-base font-semibold ${toneClass}`}>{value}</span>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col gap-1 rounded-xl border border-(--color-border) bg-(--color-bg) px-3.5 py-3">
+    <button
+      type="button"
+      onClick={onClick}
+      className={`${baseClass} ${borderClass} cursor-pointer hover:border-(--color-primary)`}
+    >
       <span className="text-xs text-(--color-text-muted)">{label}</span>
       <span className={`font-numeric text-base font-semibold ${toneClass}`}>{value}</span>
-    </div>
+    </button>
+  );
+}
+
+function EditableCellInput({
+  value,
+  onConfirm,
+  onCancel,
+}: {
+  value: string;
+  onConfirm: (value: string) => void;
+  onCancel: () => void;
+}) {
+  const [draft, setDraft] = useState(value);
+
+  return (
+    <Input
+      autoFocus
+      value={draft}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={() => onConfirm(draft)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          onConfirm(draft);
+        }
+        if (event.key === "Escape") {
+          event.preventDefault();
+          onCancel();
+        }
+      }}
+      className="px-2 py-1 text-sm"
+    />
+  );
+}
+
+function EditableCell({
+  value,
+  isEditing,
+  onStartEdit,
+  onConfirm,
+  onCancel,
+}: {
+  value: string;
+  isEditing: boolean;
+  onStartEdit: () => void;
+  onConfirm: (value: string) => void;
+  onCancel: () => void;
+}) {
+  if (isEditing) {
+    return <EditableCellInput value={value} onConfirm={onConfirm} onCancel={onCancel} />;
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onStartEdit}
+      className="group inline-flex w-full items-center gap-1.5 rounded-lg px-1.5 py-1 text-left hover:bg-(--color-bg) cursor-pointer"
+    >
+      <span>{value || "—"}</span>
+      <Pencil
+        size={12}
+        className="text-(--color-text-muted) opacity-0 transition-opacity group-hover:opacity-100"
+        aria-hidden="true"
+      />
+    </button>
   );
 }
 
@@ -135,12 +231,33 @@ export function ImportWizard({ existingCategories }: ImportWizardProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [result, setResult] = useState<{ imported: number; skipped: number } | null>(null);
   const [isMappingExpanded, setIsMappingExpanded] = useState(false);
+  const [overrides, setOverrides] = useState<Record<number, Partial<Pick<MappedRow, EditableField>>>>({});
+  const [removedIndexes, setRemovedIndexes] = useState<Set<number>>(new Set());
+  const [rowFilter, setRowFilter] = useState<RowFilter>("all");
+  const [page, setPage] = useState(1);
+  const [editingCell, setEditingCell] = useState<{ index: number; field: EditableField } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const mappedRows = useMemo(() => {
+  const rawMappedRows = useMemo(() => {
     if (!sheet) return [];
     return buildMappedRows(sheet, mapping);
   }, [sheet, mapping]);
+
+  // Aplica overrides de edição inline por linha e revalida, depois remove as linhas excluídas pelo usuário.
+  const mappedRows = useMemo(() => {
+    return rawMappedRows
+      .filter((row) => !removedIndexes.has(row.index))
+      .map((row) => {
+        const override = overrides[row.index];
+        if (!override) return row;
+
+        const candidate = { ...row, ...override };
+        const parsed = importRowSchema.safeParse(candidate);
+        const error = parsed.success ? undefined : parsed.error.issues[0]?.message;
+
+        return { ...candidate, error };
+      });
+  }, [rawMappedRows, overrides, removedIndexes]);
 
   const validRows = mappedRows.filter((row) => !row.error);
   const invalidRows = mappedRows.filter((row) => row.error);
@@ -150,6 +267,39 @@ export function ImportWizard({ existingCategories }: ImportWizardProps) {
     () => summarizeMappedRows(mappedRows, existingCategories),
     [mappedRows, existingCategories]
   );
+
+  const filteredRows = useMemo(() => {
+    if (rowFilter === "valid") return mappedRows.filter((row) => !row.error);
+    if (rowFilter === "invalid") return mappedRows.filter((row) => row.error);
+    return mappedRows;
+  }, [mappedRows, rowFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const paginatedRows = useMemo(
+    () => filteredRows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE),
+    [filteredRows, currentPage]
+  );
+
+  function toggleFilter(filter: RowFilter) {
+    setRowFilter((current) => (current === filter ? "all" : filter));
+    setPage(1);
+  }
+
+  function handleRemoveRow(index: number) {
+    setRemovedIndexes((current) => {
+      const next = new Set(current);
+      next.add(index);
+      return next;
+    });
+  }
+
+  function handleEditField(index: number, field: EditableField, value: string) {
+    setOverrides((current) => ({
+      ...current,
+      [index]: { ...current[index], [field]: value },
+    }));
+  }
 
   async function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -208,6 +358,11 @@ export function ImportWizard({ existingCategories }: ImportWizardProps) {
       setMapping(guessedMapping);
       setFileName(file.name);
       setIsMappingExpanded(!allFieldsGuessed);
+      setOverrides({});
+      setRemovedIndexes(new Set());
+      setRowFilter("all");
+      setEditingCell(null);
+      setPage(1);
       setStep("map");
     } catch {
       toast.error("Não foi possível ler esse arquivo. Verifique se é um .xlsx ou .xls válido");
@@ -257,6 +412,11 @@ export function ImportWizard({ existingCategories }: ImportWizardProps) {
     setMapping({ date: NONE, description: NONE, amount: NONE, type: NONE, category: NONE, subcategory: NONE, tags: NONE });
     setResult(null);
     setIsMappingExpanded(false);
+    setOverrides({});
+    setRemovedIndexes(new Set());
+    setRowFilter("all");
+    setPage(1);
+    setEditingCell(null);
   }
 
   return (
@@ -373,8 +533,20 @@ export function ImportWizard({ existingCategories }: ImportWizardProps) {
 
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
                 <SummaryStat label="Linhas" value={String(summary.totalRows)} />
-                <SummaryStat label="Válidas" value={String(summary.validCount)} tone="success" />
-                <SummaryStat label="Com erro" value={String(summary.invalidCount)} tone={summary.invalidCount > 0 ? "danger" : undefined} />
+                <SummaryStat
+                  label="Válidas"
+                  value={String(summary.validCount)}
+                  tone="success"
+                  active={rowFilter === "valid"}
+                  onClick={() => toggleFilter("valid")}
+                />
+                <SummaryStat
+                  label="Com erro"
+                  value={String(summary.invalidCount)}
+                  tone={summary.invalidCount > 0 ? "danger" : undefined}
+                  active={rowFilter === "invalid"}
+                  onClick={() => toggleFilter("invalid")}
+                />
                 <SummaryStat label="Entradas" value={formatCurrency(summary.totalIncome)} tone="success" />
                 <SummaryStat label="Despesas" value={formatCurrency(summary.totalExpense)} tone="danger" />
                 <SummaryStat
@@ -406,7 +578,20 @@ export function ImportWizard({ existingCategories }: ImportWizardProps) {
                         <span className="text-(--color-danger)">{invalidRows.length} com erro</span>
                       </>
                     )}
+                    {removedIndexes.size > 0 && ` · ${removedIndexes.size} removida(s)`}
                   </p>
+                  {rowFilter !== "all" && (
+                    <p className="mt-1 flex items-center gap-2 text-xs text-(--color-text-muted)">
+                      Filtro ativo: {rowFilter === "valid" ? "somente válidas" : "somente com erro"}
+                      <button
+                        type="button"
+                        onClick={() => setRowFilter("all")}
+                        className="text-(--color-primary) underline-offset-2 hover:underline cursor-pointer"
+                      >
+                        Limpar filtro
+                      </button>
+                    </p>
+                  )}
                 </div>
                 <Button type="button" onClick={handleConfirmImport} isLoading={isSubmitting} disabled={validRows.length === 0}>
                   <CheckCircle2 size={16} aria-hidden="true" />
@@ -426,6 +611,25 @@ export function ImportWizard({ existingCategories }: ImportWizardProps) {
                     </p>
                   </div>
                 </div>
+              ) : filteredRows.length === 0 ? (
+                <div className="flex flex-col items-center justify-center gap-3 py-10 text-center">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-(--color-primary)/10 text-(--color-primary)">
+                    <ClipboardList size={22} aria-hidden="true" />
+                  </div>
+                  <div>
+                    <h3 className="font-display text-sm font-semibold text-(--color-text)">Nenhuma linha encontrada para esse filtro</h3>
+                    <p className="mt-1 text-sm text-(--color-text-muted)">
+                      <button
+                        type="button"
+                        onClick={() => setRowFilter("all")}
+                        className="text-(--color-primary) underline-offset-2 hover:underline cursor-pointer"
+                      >
+                        Limpar filtro
+                      </button>{" "}
+                      para ver todas as linhas
+                    </p>
+                  </div>
+                </div>
               ) : (
                 <>
                   <div className="overflow-x-auto rounded-xl border border-(--color-border)">
@@ -440,10 +644,13 @@ export function ImportWizard({ existingCategories }: ImportWizardProps) {
                           <th scope="col" className="px-3 py-2">Categoria</th>
                           <th scope="col" className="px-3 py-2">Sub-categoria</th>
                           <th scope="col" className="px-3 py-2">Tags</th>
+                          <th scope="col" className="px-3 py-2">
+                            <span className="sr-only">Ações</span>
+                          </th>
                         </tr>
                       </thead>
                       <tbody>
-                        {mappedRows.slice(0, 50).map((row) => (
+                        {paginatedRows.map((row) => (
                           <tr key={row.index} className="border-b border-(--color-border) last:border-0">
                             <td className="px-3 py-2">
                               {row.error ? (
@@ -466,18 +673,82 @@ export function ImportWizard({ existingCategories }: ImportWizardProps) {
                             <td className="px-3 py-2 text-(--color-text)">
                               {row.type === "EXPENSE" ? "Despesa" : row.type === "INCOME" ? "Entrada" : "—"}
                             </td>
-                            <td className="px-3 py-2 text-(--color-text)">{row.category || "—"}</td>
-                            <td className="px-3 py-2 text-(--color-text)">{row.subcategory || "—"}</td>
-                            <td className="px-3 py-2 text-(--color-text)">{row.tags || "—"}</td>
+                            <td className="px-3 py-2 text-(--color-text)">
+                              <EditableCell
+                                value={row.category}
+                                isEditing={editingCell?.index === row.index && editingCell?.field === "category"}
+                                onStartEdit={() => setEditingCell({ index: row.index, field: "category" })}
+                                onConfirm={(value) => {
+                                  handleEditField(row.index, "category", value);
+                                  setEditingCell(null);
+                                }}
+                                onCancel={() => setEditingCell(null)}
+                              />
+                            </td>
+                            <td className="px-3 py-2 text-(--color-text)">
+                              <EditableCell
+                                value={row.subcategory}
+                                isEditing={editingCell?.index === row.index && editingCell?.field === "subcategory"}
+                                onStartEdit={() => setEditingCell({ index: row.index, field: "subcategory" })}
+                                onConfirm={(value) => {
+                                  handleEditField(row.index, "subcategory", value);
+                                  setEditingCell(null);
+                                }}
+                                onCancel={() => setEditingCell(null)}
+                              />
+                            </td>
+                            <td className="px-3 py-2 text-(--color-text)">
+                              <EditableCell
+                                value={row.tags}
+                                isEditing={editingCell?.index === row.index && editingCell?.field === "tags"}
+                                onStartEdit={() => setEditingCell({ index: row.index, field: "tags" })}
+                                onConfirm={(value) => {
+                                  handleEditField(row.index, "tags", value);
+                                  setEditingCell(null);
+                                }}
+                                onCancel={() => setEditingCell(null)}
+                              />
+                            </td>
+                            <td className="px-3 py-2">
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveRow(row.index)}
+                                title="Remover linha"
+                                aria-label="Remover linha"
+                                className="inline-flex items-center justify-center rounded-lg p-1.5 text-(--color-text-muted) transition-colors hover:bg-(--color-danger)/10 hover:text-(--color-danger) cursor-pointer"
+                              >
+                                <Trash2 size={15} aria-hidden="true" />
+                              </button>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
-                  {mappedRows.length > 50 && (
-                    <p className="text-center text-xs text-(--color-text-muted)">
-                      Mostrando 50 de {mappedRows.length} linhas. Todas serão processadas ao importar.
-                    </p>
+                  {totalPages > 1 && (
+                    <div className="flex items-center justify-between gap-3">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => setPage((current) => Math.max(1, current - 1))}
+                        disabled={currentPage === 1}
+                      >
+                        <ChevronLeft size={16} aria-hidden="true" />
+                        Anterior
+                      </Button>
+                      <span className="text-xs text-(--color-text-muted)">
+                        Página {currentPage} de {totalPages} · {filteredRows.length} linha(s)
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                        disabled={currentPage === totalPages}
+                      >
+                        Próxima
+                        <ChevronRight size={16} aria-hidden="true" />
+                      </Button>
+                    </div>
                   )}
                 </>
               )}
