@@ -2,12 +2,13 @@ import { AlertTriangle, Hash, Sprout, TrendingDown, TrendingUp } from "lucide-re
 import { clsx } from "clsx";
 import { Card } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/format";
-import { MarkFixedButton } from "@/components/insights/mark-fixed-button";
+import { FixedExpenseCandidateCard, FixedExpenseResolvedCard } from "@/components/insights/fixed-expense-candidate-card";
 import type {
   CategoryAverageComparison,
   CategoryGrowth,
   FixedExpenseAlert,
   FixedExpenseCandidate,
+  FixedExpenseResolvedInsight,
   HashtagRanking,
   ReductionSuggestion,
 } from "@/lib/insights-data";
@@ -202,48 +203,14 @@ export function HashtagRankingCard({ data }: { data: HashtagRanking[] }) {
   );
 }
 
-function FixedExpenseCandidateRow({ candidate }: { candidate: FixedExpenseCandidate }) {
-  const title = candidate.descriptions.length === 1 ? candidate.descriptions[0] : `${candidate.descriptions.length} descrições diferentes`;
-  const { min, max } = candidate.dayOfMonthRange;
-  const dayLabel = min === max ? `todo dia ${min}` : `entre os dias ${min} e ${max}`;
-
-  return (
-    <li className="flex flex-col gap-2 rounded-xl border border-(--color-border) p-3.5 sm:flex-row sm:items-center sm:justify-between">
-      <div className="min-w-0">
-        <div className="flex items-center gap-2">
-          <p className="truncate text-sm font-medium text-(--color-text)">{title}</p>
-          <span
-            className={clsx(
-              "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
-              candidate.confidence === "alta"
-                ? "bg-(--color-primary)/10 text-(--color-primary)"
-                : "bg-(--color-accent)/15 text-(--color-accent)"
-            )}
-          >
-            {candidate.confidence === "alta" ? "Alta confiança" : "Possível"}
-          </span>
-        </div>
-        <p className="mt-1 text-xs text-(--color-text-muted)">
-          {candidate.amount !== null ? (
-            <span className="font-numeric font-medium text-(--color-text)">{formatCurrency(candidate.amount)}</span>
-          ) : (
-            "Valores variam"
-          )}
-          {" · "}
-          recorrente em {candidate.monthsCount} meses · {dayLabel}
-        </p>
-      </div>
-      <MarkFixedButton ids={candidate.transactions.map((tx) => tx.id)} />
-    </li>
-  );
-}
-
 export function FixedExpenseAlertCard({
   data,
   candidates,
+  resolved,
 }: {
   data: FixedExpenseAlert | null;
   candidates: FixedExpenseCandidate[];
+  resolved: FixedExpenseResolvedInsight[];
 }) {
   const candidatesSection = candidates.length > 0 && (
     <div className="mt-5 border-t border-(--color-border) pt-4">
@@ -253,7 +220,18 @@ export function FixedExpenseAlertCard({
       </p>
       <ul className="mt-3 flex flex-col gap-2.5">
         {candidates.map((candidate) => (
-          <FixedExpenseCandidateRow key={candidate.key} candidate={candidate} />
+          <FixedExpenseCandidateCard key={candidate.groupKey} candidate={candidate} />
+        ))}
+      </ul>
+    </div>
+  );
+
+  const resolvedSection = resolved.length > 0 && (
+    <div className="mt-5 border-t border-(--color-border) pt-4">
+      <h4 className="text-sm font-medium text-(--color-text)">Já resolvidos</h4>
+      <ul className="mt-3 flex flex-col gap-2.5">
+        {resolved.map((insight) => (
+          <FixedExpenseResolvedCard key={insight.groupKey} insight={insight} />
         ))}
       </ul>
     </div>
@@ -265,6 +243,7 @@ export function FixedExpenseAlertCard({
         <h3 className="font-display text-base font-semibold text-(--color-text)">Despesas fixas</h3>
         <EmptySection message="Registre despesas neste mês para acompanhar o peso dos seus compromissos fixos" />
         {candidatesSection}
+        {resolvedSection}
       </Card>
     );
   }
@@ -309,6 +288,7 @@ export function FixedExpenseAlertCard({
       </div>
 
       {candidatesSection}
+      {resolvedSection}
     </Card>
   );
 }

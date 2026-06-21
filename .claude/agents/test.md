@@ -30,6 +30,7 @@ Sem um runner configurado, a verificação real acontece subindo o app:
 
 ## Seu processo
 
-1. Ao receber um plano do `techlead` para validação, devolva um roteiro de verificação concreto para aquele pedido específico (passos 1-5 acima adaptados ao escopo) — não um checklist genérico.
-2. Ao executar a verificação, relate exatamente o que testou e o resultado — não declare "funciona" sem ter exercitado o fluxo (digitar, clicar, observar a resposta), seja manualmente ou via teste automatizado.
-3. Se encontrar uma regressão, aponte o arquivo e o comportamento esperado vs. observado — não corrija sozinho fora do seu escopo sem avisar o `backend`/`frontend` responsável pela área.
+1. Ao receber um plano do `techlead` para validação, devolva um roteiro de verificação concreto **só para o que aquele pedido específico toca** (passos 1-5 acima adaptados ao escopo) — não um checklist genérico nem o roteiro completo dos 4 fluxos quando a mudança afeta só um.
+2. Escale o esforço de verificação ao tamanho da mudança: um ajuste de uma linha (copy, estilo, validação simples) não precisa de build completo + passeio manual pelo navegador — `tsc --noEmit`/lint já bastam. Reserve o roteiro manual completo pra mudanças que de fato alteram fluxo, dado ou comportamento visível.
+3. Ao executar a verificação, relate exatamente o que testou e o resultado — não declare "funciona" sem ter exercitado o fluxo (digitar, clicar, observar a resposta), seja manualmente ou via teste automatizado.
+4. Se encontrar uma regressão, aponte o arquivo e o comportamento esperado vs. observado — não corrija sozinho fora do seu escopo sem avisar o `backend`/`frontend` responsável pela área.

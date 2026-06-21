@@ -40,6 +40,7 @@ model User {
   goals        Goal[]
   subscriptions Subscription[]
   notifications Notification[]
+  fixedExpenseInsightDecisions FixedExpenseInsightDecision[]
 
   @@map("users")
 }
@@ -194,4 +195,22 @@ model Notification {
 
   @@index([userId, read])
   @@map("notifications")
+}
+
+model FixedExpenseInsightDecision {
+  id             String   @id @default(cuid())
+  userId         String
+  groupKey       String
+  status         String   // "accepted" | "dismissed"
+  description    String
+  amount         Float?
+  categoryId     String?
+  subcategoryId  String?
+  transactionIds String[]
+  createdAt      DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, groupKey])
+  @@map("fixed_expense_insight_decisions")
 }

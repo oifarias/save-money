@@ -56,13 +56,22 @@ export type FixedExpenseAlert = {
 };
 
 export type FixedExpenseCandidate = {
-  key: string;
+  groupKey: string;
   descriptions: string[];
   amount: number | null;
-  confidence: "alta" | "possivel";
   monthsCount: number;
   dayOfMonthRange: { min: number; max: number };
   transactions: { id: string; date: string; amount: number }[];
+};
+
+export type FixedExpenseResolvedInsight = {
+  groupKey: string;
+  descriptions: string[];
+  amount: number | null;
+  categoryName: string | null;
+  subcategoryName: string | null;
+  transactions: { id: string; date: string; amount: number }[];
+  decidedAt: string;
 };
 
 export type InsightsPageData = {
@@ -74,6 +83,7 @@ export type InsightsPageData = {
   hashtagRanking: HashtagRanking[];
   fixedExpenseAlert: FixedExpenseAlert | null;
   fixedExpenseCandidates: FixedExpenseCandidate[];
+  fixedExpenseResolvedInsights: FixedExpenseResolvedInsight[];
   hasData: boolean;
 };
 
@@ -84,18 +94,21 @@ export async function getInsightsPageData(userId: string): Promise<InsightsPageD
   const historyStart = addMonths(monthStart, -(HISTORY_WINDOW - 1));
   const growthStart = addMonths(monthStart, -(GROWTH_WINDOW - 1));
 
-  const transactions = await prisma.transaction.findMany({
-    where: { userId, type: "EXPENSE", date: { gte: historyStart, lt: nextMonthStart } },
-    select: {
-      id: true,
-      description: true,
-      amount: true,
-      date: true,
-      isFixed: true,
-      category: { select: { id: true, name: true, color: true } },
-      tags: { select: { tag: { select: { name: true } } } },
-    },
-  });
+  const [transactions, decisions] = await Promise.all([
+    prisma.transaction.findMany({
+      where: { userId, type: "EXPENSE", date: { gte: historyStart, lt: nextMonthStart } },
+      select: {
+        id: true,
+        description: true,
+        amount: true,
+        date: true,
+        isFixed: true,
+        category: { select: { id: true, name: true, color: true } },
+        tags: { select: { tag: { select: { name: true } } } },
+      },
+    }),
+    prisma.fixedExpenseInsightDecision.findMany({ where: { userId } }),
+  ]);
 
   const categoriesById = new Map<string, CategoryMeta>();
   /** monthKey -> categoryId -> total */
@@ -188,13 +201,51 @@ export async function getInsightsPageData(userId: string): Promise<InsightsPageD
       ? { fixedTotal: currentMonthFixed, expenseTotal: currentMonthExpense, share: fixedShare }
       : null;
 
-  // 6. Candidatos a despesa fixa: lançamentos ainda não marcados como fixos que se repetem mês a mês.
-  // Confiança "alta" = mesma descrição e mesmo valor em pelo menos 2 meses distintos (a combinação que
-  // mais caracteriza uma despesa fixa real). Confiança "possível" = mesma descrição OU mesmo valor
-  // isoladamente, também recorrente em pelo menos 2 meses.
+  // 6. Candidatos a despesa fixa: lançamentos ainda não marcados como fixos que se repetem mês a mês,
+  // excluindo qualquer grupo que o usuário já aceitou ou descartou anteriormente (decisão permanente por groupKey).
+  const decidedGroupKeys = new Set(decisions.map((d) => d.groupKey));
   const fixedExpenseCandidates = detectFixedExpenseCandidates(
-    transactions.filter((tx) => !tx.isFixed).map((tx) => ({ id: tx.id, description: tx.description, amount: tx.amount, date: tx.date }))
+    transactions.filter((tx) => !tx.isFixed).map((tx) => ({ id: tx.id, description: tx.description, amount: tx.amount, date: tx.date })),
+    decidedGroupKeys
   );
+
+  // 7. Insights já resolvidos (aceitos): descrição/valor/categoria vêm do snapshot salvo na decisão;
+  // data/valor por lançamento são buscados de novo (mais confiável que confiar só no snapshot).
+  const acceptedDecisions = decisions.filter((d) => d.status === "accepted");
+  const categoryIds = Array.from(
+    new Set(acceptedDecisions.flatMap((d) => [d.categoryId, d.subcategoryId]).filter((id): id is string => Boolean(id)))
+  );
+  const allResolvedTransactionIds = Array.from(new Set(acceptedDecisions.flatMap((d) => d.transactionIds)));
+
+  const [categoryRows, resolvedTransactionRows] = await Promise.all([
+    categoryIds.length > 0
+      ? prisma.category.findMany({ where: { id: { in: categoryIds }, userId }, select: { id: true, name: true } })
+      : Promise.resolve([]),
+    allResolvedTransactionIds.length > 0
+      ? prisma.transaction.findMany({
+          where: { id: { in: allResolvedTransactionIds }, userId },
+          select: { id: true, date: true, amount: true },
+        })
+      : Promise.resolve([]),
+  ]);
+
+  const categoryNamesById = new Map(categoryRows.map((c) => [c.id, c.name]));
+  const resolvedTransactionsById = new Map(resolvedTransactionRows.map((tx) => [tx.id, tx]));
+
+  const fixedExpenseResolvedInsights: FixedExpenseResolvedInsight[] = acceptedDecisions
+    .map((d) => ({
+      groupKey: d.groupKey,
+      descriptions: [d.description],
+      amount: d.amount,
+      categoryName: d.categoryId ? categoryNamesById.get(d.categoryId) ?? null : null,
+      subcategoryName: d.subcategoryId ? categoryNamesById.get(d.subcategoryId) ?? null : null,
+      transactions: d.transactionIds
+        .map((id) => resolvedTransactionsById.get(id))
+        .filter((tx): tx is { id: string; date: Date; amount: number } => Boolean(tx))
+        .map((tx) => ({ id: tx.id, date: tx.date.toISOString(), amount: tx.amount })),
+      decidedAt: d.createdAt.toISOString(),
+    }))
+    .sort((a, b) => b.decidedAt.localeCompare(a.decidedAt));
 
   return {
     windowLabel: `${monthLabel(historyStart)} – ${monthLabel(monthStart)}`,
@@ -205,6 +256,7 @@ export async function getInsightsPageData(userId: string): Promise<InsightsPageD
     hashtagRanking,
     fixedExpenseAlert,
     fixedExpenseCandidates,
+    fixedExpenseResolvedInsights,
     hasData: transactions.length > 0,
   };
 }
@@ -220,19 +272,13 @@ function dayOfMonthRangeOf(txs: CandidateTx[]): { min: number; max: number } {
   return { min: Math.min(...days), max: Math.max(...days) };
 }
 
-function toCandidate(
-  txs: CandidateTx[],
-  confidence: FixedExpenseCandidate["confidence"],
-  amount: number | null,
-  index: number
-): FixedExpenseCandidate {
+function toCandidate(txs: CandidateTx[], groupKey: string, amount: number | null): FixedExpenseCandidate {
   const sorted = [...txs].sort((a, b) => a.date.getTime() - b.date.getTime());
   const descriptions = Array.from(new Set(sorted.map((tx) => tx.description)));
   return {
-    key: `${confidence}-${index}`,
+    groupKey,
     descriptions,
     amount,
-    confidence,
     monthsCount: new Set(sorted.map((tx) => monthKey(tx.date))).size,
     dayOfMonthRange: dayOfMonthRangeOf(sorted),
     transactions: sorted.map((tx) => ({ id: tx.id, date: tx.date.toISOString(), amount: tx.amount })),
@@ -241,7 +287,15 @@ function toCandidate(
 
 const MAX_FIXED_EXPENSE_CANDIDATES = 8;
 
-function detectFixedExpenseCandidates(nonFixedExpenses: CandidateTx[]): FixedExpenseCandidate[] {
+/**
+ * Chave estável do grupo (sobrevive a recálculos): liga um candidato recorrente
+ * a uma decisão (aceita/descartada) já tomada pelo usuário no passado.
+ */
+function buildGroupKey(kind: "alta" | "possivel-desc" | "possivel-amount", value: string) {
+  return `${kind}::${value}`;
+}
+
+function detectFixedExpenseCandidates(nonFixedExpenses: CandidateTx[], decidedGroupKeys: Set<string>): FixedExpenseCandidate[] {
   const claimedIds = new Set<string>();
   const candidates: FixedExpenseCandidate[] = [];
 
@@ -253,11 +307,12 @@ function detectFixedExpenseCandidates(nonFixedExpenses: CandidateTx[]): FixedExp
     list.push(tx);
     exactGroups.set(key, list);
   }
-  for (const txs of exactGroups.values()) {
+  for (const [rawKey, txs] of exactGroups) {
+    const groupKey = buildGroupKey("alta", rawKey);
     const monthsCount = new Set(txs.map((tx) => monthKey(tx.date))).size;
-    if (txs.length < 2 || monthsCount < 2) continue;
+    if (txs.length < 2 || monthsCount < 2 || decidedGroupKeys.has(groupKey)) continue;
     txs.forEach((tx) => claimedIds.add(tx.id));
-    candidates.push(toCandidate(txs, "alta", txs[0].amount, candidates.length));
+    candidates.push(toCandidate(txs, groupKey, txs[0].amount));
   }
 
   // Possível: mesma descrição OU mesmo valor isoladamente, só considerando o que não entrou acima.
@@ -271,22 +326,21 @@ function detectFixedExpenseCandidates(nonFixedExpenses: CandidateTx[]): FixedExp
     amountGroups.set(tx.amount, [...(amountGroups.get(tx.amount) ?? []), tx]);
   }
 
-  function pushPossibleGroup(group: CandidateTx[], amount: number | null) {
+  function pushPossibleGroup(group: CandidateTx[], groupKey: string, amount: number | null) {
+    if (decidedGroupKeys.has(groupKey)) return;
     const freshTxs = group.filter((tx) => !claimedIds.has(tx.id));
     const monthsCount = new Set(freshTxs.map((tx) => monthKey(tx.date))).size;
     if (freshTxs.length < 2 || monthsCount < 2) return;
     freshTxs.forEach((tx) => claimedIds.add(tx.id));
-    candidates.push(toCandidate(freshTxs, "possivel", amount, candidates.length));
+    candidates.push(toCandidate(freshTxs, groupKey, amount));
   }
 
-  for (const group of descriptionGroups.values()) {
-    if (group.length >= 2) pushPossibleGroup(group, null);
+  for (const [descKey, group] of descriptionGroups) {
+    if (group.length >= 2) pushPossibleGroup(group, buildGroupKey("possivel-desc", descKey), null);
   }
   for (const [amount, group] of amountGroups) {
-    if (group.length >= 2) pushPossibleGroup(group, amount);
+    if (group.length >= 2) pushPossibleGroup(group, buildGroupKey("possivel-amount", String(amount)), amount);
   }
 
-  return candidates
-    .sort((a, b) => (a.confidence === b.confidence ? b.monthsCount - a.monthsCount : a.confidence === "alta" ? -1 : 1))
-    .slice(0, MAX_FIXED_EXPENSE_CANDIDATES);
+  return candidates.sort((a, b) => b.monthsCount - a.monthsCount).slice(0, MAX_FIXED_EXPENSE_CANDIDATES);
 }

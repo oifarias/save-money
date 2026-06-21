@@ -223,23 +223,124 @@ export async function loadMoreTransactionsAction(searchParamsString: string, pag
   return getTransactionsPage(userId, filters, page);
 }
 
-export async function markTransactionsFixedAction(ids: string[]): Promise<ActionResult> {
-  const userId = await requireUserId();
+/** Combinação (categoryId, subcategoryId) mais frequente entre as transações; empate vai para a mais recente. */
+function pickCanonicalCategory(
+  transactions: { categoryId: string | null; subcategoryId: string | null; date: Date }[]
+): { categoryId: string | null; subcategoryId: string | null } {
+  const counts = new Map<string, { categoryId: string | null; subcategoryId: string | null; count: number; latestDate: Date }>();
 
-  if (!Array.isArray(ids) || ids.length === 0) {
-    return { success: false, message: "Selecione ao menos um lançamento" };
+  for (const tx of transactions) {
+    const pairKey = `${tx.categoryId ?? ""}::${tx.subcategoryId ?? ""}`;
+    const entry = counts.get(pairKey);
+    if (entry) {
+      entry.count += 1;
+      if (tx.date > entry.latestDate) entry.latestDate = tx.date;
+    } else {
+      counts.set(pairKey, { categoryId: tx.categoryId, subcategoryId: tx.subcategoryId, count: 1, latestDate: tx.date });
+    }
   }
 
-  const result = await prisma.transaction.updateMany({
-    where: { id: { in: ids }, userId },
-    data: { isFixed: true },
+  const ranked = Array.from(counts.values()).sort((a, b) => {
+    if (b.count !== a.count) return b.count - a.count;
+    return b.latestDate.getTime() - a.latestDate.getTime();
+  });
+
+  return { categoryId: ranked[0]?.categoryId ?? null, subcategoryId: ranked[0]?.subcategoryId ?? null };
+}
+
+/** Retira um snapshot de descrição/valor pra exibir no card de insight, mesmo quando variam entre as transações. */
+function snapshotDescriptionAndAmount(transactions: { description: string; amount: number }[]) {
+  const descriptions = Array.from(new Set(transactions.map((tx) => tx.description)));
+  const amounts = Array.from(new Set(transactions.map((tx) => tx.amount)));
+  return {
+    description: descriptions.length === 1 ? descriptions[0] : `${descriptions.length} descrições diferentes`,
+    amount: amounts.length === 1 ? amounts[0] : null,
+  };
+}
+
+export async function acceptFixedExpenseInsightAction(groupKey: string, transactionIds: string[]): Promise<ActionResult> {
+  const userId = await requireUserId();
+
+  if (!groupKey || !Array.isArray(transactionIds) || transactionIds.length === 0) {
+    return { success: false, message: "Seleção inválida" };
+  }
+
+  const transactions = await prisma.transaction.findMany({
+    where: { id: { in: transactionIds }, userId },
+    select: { id: true, description: true, amount: true, date: true, categoryId: true, subcategoryId: true },
+  });
+
+  if (transactions.length !== transactionIds.length) {
+    return { success: false, message: "Um ou mais lançamentos não foram encontrados" };
+  }
+
+  const canonical = pickCanonicalCategory(transactions);
+  const snapshot = snapshotDescriptionAndAmount(transactions);
+
+  await prisma.transaction.updateMany({
+    where: { id: { in: transactionIds }, userId },
+    data: { isFixed: true, categoryId: canonical.categoryId, subcategoryId: canonical.subcategoryId },
+  });
+
+  await prisma.fixedExpenseInsightDecision.upsert({
+    where: { userId_groupKey: { userId, groupKey } },
+    create: {
+      userId,
+      groupKey,
+      status: "accepted",
+      description: snapshot.description,
+      amount: snapshot.amount,
+      categoryId: canonical.categoryId,
+      subcategoryId: canonical.subcategoryId,
+      transactionIds,
+    },
+    update: {
+      status: "accepted",
+      description: snapshot.description,
+      amount: snapshot.amount,
+      categoryId: canonical.categoryId,
+      subcategoryId: canonical.subcategoryId,
+      transactionIds,
+    },
   });
 
   revalidatePath("/dashboard");
   revalidatePath("/lancamentos");
   revalidatePath("/insights");
 
-  return { success: true, message: `${result.count} lançamento(s) marcado(s) como despesa fixa` };
+  return { success: true, message: `${transactions.length} lançamento(s) marcado(s) como despesa fixa` };
+}
+
+export async function dismissFixedExpenseInsightAction(groupKey: string, transactionIds: string[]): Promise<ActionResult> {
+  const userId = await requireUserId();
+
+  if (!groupKey || !Array.isArray(transactionIds) || transactionIds.length === 0) {
+    return { success: false, message: "Seleção inválida" };
+  }
+
+  const transactions = await prisma.transaction.findMany({
+    where: { id: { in: transactionIds }, userId },
+    select: { description: true, amount: true },
+  });
+
+  const snapshot = snapshotDescriptionAndAmount(transactions);
+
+  await prisma.fixedExpenseInsightDecision.upsert({
+    where: { userId_groupKey: { userId, groupKey } },
+    create: {
+      userId,
+      groupKey,
+      status: "dismissed",
+      description: snapshot.description,
+      amount: snapshot.amount,
+      transactionIds,
+    },
+    update: { status: "dismissed", transactionIds },
+  });
+
+  revalidatePath("/insights");
+
+  return { success: true, message: "Sugestão removida" };
 }
 
 export async function deleteTransactionAction(id: string): Promise<ActionResult> {
