@@ -1,16 +1,29 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { TransactionList, type TransactionListItem } from "@/components/transactions/transaction-list";
+import { parseTransactionFilters } from "@/lib/validations/transaction-filters";
+import { buildTransactionWhere, TRANSACTIONS_PAGE_SIZE } from "@/lib/transaction-filters";
+import { TransactionsManager } from "@/components/transactions/transactions-manager";
 
-export default async function LancamentosPage() {
+type LancamentosPageProps = {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+};
+
+export default async function LancamentosPage({ searchParams }: LancamentosPageProps) {
   const session = await auth();
   const userId = session!.user.id;
 
-  const [transactions, categories, tags] = await Promise.all([
+  const rawSearchParams = await searchParams;
+  const filters = parseTransactionFilters(rawSearchParams);
+  const where = await buildTransactionWhere(userId, filters);
+  const page = filters.page ?? 1;
+
+  const [total, transactions, categories, tags] = await Promise.all([
+    prisma.transaction.count({ where }),
     prisma.transaction.findMany({
-      where: { userId },
+      where,
       orderBy: { date: "desc" },
-      take: 100,
+      skip: (page - 1) * TRANSACTIONS_PAGE_SIZE,
+      take: TRANSACTIONS_PAGE_SIZE,
       include: {
         category: { select: { id: true, name: true, color: true, icon: true } },
         subcategory: { select: { id: true, name: true, color: true, icon: true } },
@@ -25,7 +38,7 @@ export default async function LancamentosPage() {
     prisma.tag.findMany({ where: { userId }, orderBy: { name: "asc" }, select: { name: true } }),
   ]);
 
-  const items: TransactionListItem[] = transactions.map((transaction) => ({
+  const items = transactions.map((transaction) => ({
     id: transaction.id,
     type: transaction.type,
     date: transaction.date.toISOString(),
@@ -39,7 +52,7 @@ export default async function LancamentosPage() {
   }));
 
   return (
-    <TransactionList
+    <TransactionsManager
       transactions={items}
       categories={categories.map((category) => ({
         id: category.id,
@@ -47,6 +60,9 @@ export default async function LancamentosPage() {
         children: category.children,
       }))}
       tagSuggestions={tags.map((tag) => tag.name)}
+      totalCount={total}
+      page={page}
+      pageSize={TRANSACTIONS_PAGE_SIZE}
     />
   );
 }

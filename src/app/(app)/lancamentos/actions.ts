@@ -6,7 +6,9 @@ import { prisma } from "@/lib/prisma";
 import { getDefaultAccountId } from "@/lib/accounts";
 import { syncTransactionTags } from "@/lib/tags";
 import { transactionSchema } from "@/lib/validations/transaction";
-import type { Recurrence, TransactionType } from "@/generated/prisma/client";
+import { bulkUpdateTransactionSchema } from "@/lib/validations/bulk-transaction";
+import { resolveCategoryAndSubcategory } from "@/lib/category-resolver";
+import type { Prisma, Recurrence, TransactionType } from "@/generated/prisma/client";
 
 export type ActionResult = {
   success: boolean;
@@ -47,31 +49,6 @@ function parseFormData(formData: FormData) {
     recurrence: String(formData.get("recurrence") ?? "NONE"),
     tags,
   });
-}
-
-async function resolveCategoryAndSubcategory(
-  userId: string,
-  categoryId: string,
-  subcategoryId: string
-): Promise<{ error: Record<string, string> | null }> {
-  if (categoryId) {
-    const category = await prisma.category.findFirst({ where: { id: categoryId, userId, parentId: null } });
-    if (!category) {
-      return { error: { categoryId: "Grupo inválido" } };
-    }
-  }
-
-  if (subcategoryId) {
-    if (!categoryId) {
-      return { error: { subcategoryId: "Selecione um grupo antes do sub-grupo" } };
-    }
-    const subcategory = await prisma.category.findFirst({ where: { id: subcategoryId, userId, parentId: categoryId } });
-    if (!subcategory) {
-      return { error: { subcategoryId: "Sub-grupo inválido" } };
-    }
-  }
-
-  return { error: null };
 }
 
 export async function createTransactionAction(_prev: ActionResult, formData: FormData): Promise<ActionResult> {
@@ -156,6 +133,84 @@ export async function updateTransactionAction(_prev: ActionResult, formData: For
   revalidatePath("/dashboard");
   revalidatePath("/lancamentos");
   return { success: true, message: "Lançamento atualizado com sucesso" };
+}
+
+export async function bulkUpdateTransactionsAction(input: unknown): Promise<ActionResult> {
+  const userId = await requireUserId();
+  const parsed = bulkUpdateTransactionSchema.safeParse(input);
+
+  if (!parsed.success) {
+    return { success: false, fieldErrors: flattenZodErrors(parsed.error) };
+  }
+
+  const { ids, categoryId, subcategoryId, amount, description, date } = parsed.data;
+  const hasCategoryChange = categoryId !== undefined;
+  const hasSubcategoryChange = subcategoryId !== undefined;
+
+  if (!hasCategoryChange && !hasSubcategoryChange && amount === undefined && description === undefined && date === undefined) {
+    return { success: false, message: "Selecione ao menos um campo para alterar" };
+  }
+
+  const existing = await prisma.transaction.findMany({
+    where: { id: { in: ids }, userId },
+    select: { id: true, categoryId: true },
+  });
+
+  if (existing.length !== ids.length) {
+    return { success: false, message: "Um ou mais lançamentos não foram encontrados" };
+  }
+
+  const data: Prisma.TransactionUncheckedUpdateManyInput = {};
+
+  if (hasCategoryChange) {
+    if (categoryId) {
+      const { error } = await resolveCategoryAndSubcategory(userId, categoryId, "");
+      if (error) {
+        return { success: false, fieldErrors: error };
+      }
+    }
+    data.categoryId = categoryId || null;
+  }
+
+  if (hasSubcategoryChange) {
+    if (subcategoryId) {
+      const effectiveCategoryId = hasCategoryChange ? categoryId : existing[0]?.categoryId;
+      const allShareCategory = existing.every((t) => t.categoryId === effectiveCategoryId);
+
+      if (!effectiveCategoryId || !allShareCategory) {
+        return {
+          success: false,
+          fieldErrors: { subcategoryId: "Os lançamentos selecionados precisam ter o mesmo grupo para alterar o sub-grupo em lote" },
+        };
+      }
+
+      const { error } = await resolveCategoryAndSubcategory(userId, effectiveCategoryId, subcategoryId);
+      if (error) {
+        return { success: false, fieldErrors: error };
+      }
+    }
+    data.subcategoryId = subcategoryId || null;
+  } else if (hasCategoryChange) {
+    data.subcategoryId = null;
+  }
+
+  if (amount !== undefined) data.amount = amount;
+  if (description !== undefined) data.description = description;
+  if (date !== undefined) data.date = new Date(date);
+
+  const result = await prisma.transaction.updateMany({
+    where: { id: { in: ids }, userId },
+    data,
+  });
+
+  revalidatePath("/dashboard");
+  revalidatePath("/lancamentos");
+
+  if (result.count !== ids.length) {
+    return { success: false, message: "Alguns lançamentos não puderam ser atualizados" };
+  }
+
+  return { success: true, message: `${result.count} lançamento(s) atualizado(s) com sucesso` };
 }
 
 export async function deleteTransactionAction(id: string): Promise<ActionResult> {
