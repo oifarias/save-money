@@ -8,13 +8,14 @@ type SummaryCardsProps = {
   expense: number;
   balance: number;
   fixedExpense: number;
+  periodLabel?: string;
 };
 
-export function SummaryCards({ income, expense, balance, fixedExpense }: SummaryCardsProps) {
+export function SummaryCards({ income, expense, balance, fixedExpense, periodLabel = "do mês" }: SummaryCardsProps) {
   const cards = [
     {
       id: "income",
-      label: "Entradas do mês",
+      label: `Entradas ${periodLabel}`,
       value: income,
       icon: ArrowDownLeft,
       tone: "text-(--color-success)",
@@ -22,7 +23,7 @@ export function SummaryCards({ income, expense, balance, fixedExpense }: Summary
     },
     {
       id: "expense",
-      label: "Despesas do mês",
+      label: `Despesas ${periodLabel}`,
       value: expense,
       icon: ArrowUpRight,
       tone: "text-(--color-danger)",
@@ -64,7 +65,7 @@ export function SummaryCards({ income, expense, balance, fixedExpense }: Summary
             {formatCurrency(fixedExpense)}
           </p>
           <p className="mt-1 text-xs text-(--color-text-muted)">
-            {expense > 0 ? `${((fixedExpense / expense) * 100).toFixed(0)}% das despesas do mês` : "Nenhuma despesa registrada"}
+            {expense > 0 ? `${((fixedExpense / expense) * 100).toFixed(0)}% das despesas ${periodLabel}` : "Nenhuma despesa registrada"}
           </p>
         </div>
         <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-(--color-accent)/15 text-(--color-accent)">

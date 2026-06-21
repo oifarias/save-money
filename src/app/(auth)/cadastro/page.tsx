@@ -15,9 +15,13 @@ export default function CadastroPage() {
   const [state, formAction, isPending] = useActionState(registerAction, initialState);
 
   useEffect(() => {
-    if (state.success) {
-      toast.success("Conta criada com sucesso! Faça login para continuar.");
+    if (state.success && state.message) {
+      toast.success(state.message);
       router.push("/login");
+    } else if (state.success) {
+      toast.success("Conta criada com sucesso!");
+      router.push("/dashboard");
+      router.refresh();
     } else if (state.message) {
       toast.error(state.message);
     }

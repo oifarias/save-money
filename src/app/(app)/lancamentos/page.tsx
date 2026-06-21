@@ -1,11 +1,19 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { parseTransactionFilters } from "@/lib/validations/transaction-filters";
-import { buildTransactionWhere, TRANSACTIONS_PAGE_SIZE } from "@/lib/transaction-filters";
+import { buildTransactionWhere, getEffectivePeriod, TRANSACTIONS_PAGE_SIZE } from "@/lib/transaction-filters";
+import { getTransactionsPage } from "@/lib/transactions-query";
 import { TransactionsManager } from "@/components/transactions/transactions-manager";
 
 type LancamentosPageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
+};
+
+const PERIOD_SUMMARY_LABELS: Record<"30" | "45" | "60" | "all", string> = {
+  "30": "nos últimos 30 dias",
+  "45": "nos últimos 45 dias",
+  "60": "nos últimos 60 dias",
+  all: "no período exibido",
 };
 
 export default async function LancamentosPage({ searchParams }: LancamentosPageProps) {
@@ -15,41 +23,26 @@ export default async function LancamentosPage({ searchParams }: LancamentosPageP
   const rawSearchParams = await searchParams;
   const filters = parseTransactionFilters(rawSearchParams);
   const where = await buildTransactionWhere(userId, filters);
-  const page = filters.page ?? 1;
+  const effectivePeriod = getEffectivePeriod(filters);
+  const periodLabel = effectivePeriod ? PERIOD_SUMMARY_LABELS[effectivePeriod] : "na data selecionada";
 
-  const [total, transactions, categories, tags] = await Promise.all([
+  const [total, items, categories, tags, incomeAgg, expenseAgg, fixedExpenseAgg] = await Promise.all([
     prisma.transaction.count({ where }),
-    prisma.transaction.findMany({
-      where,
-      orderBy: { date: "desc" },
-      skip: (page - 1) * TRANSACTIONS_PAGE_SIZE,
-      take: TRANSACTIONS_PAGE_SIZE,
-      include: {
-        category: { select: { id: true, name: true, color: true, icon: true } },
-        subcategory: { select: { id: true, name: true, color: true, icon: true } },
-        tags: { include: { tag: { select: { name: true } } } },
-      },
-    }),
+    getTransactionsPage(userId, filters, 1),
     prisma.category.findMany({
       where: { userId, parentId: null },
       orderBy: { name: "asc" },
       include: { children: { orderBy: { name: "asc" }, select: { id: true, name: true } } },
     }),
     prisma.tag.findMany({ where: { userId }, orderBy: { name: "asc" }, select: { name: true } }),
+    prisma.transaction.aggregate({ where: { ...where, type: "INCOME" }, _sum: { amount: true } }),
+    prisma.transaction.aggregate({ where: { ...where, type: "EXPENSE" }, _sum: { amount: true } }),
+    prisma.transaction.aggregate({ where: { ...where, type: "EXPENSE", isFixed: true }, _sum: { amount: true } }),
   ]);
 
-  const items = transactions.map((transaction) => ({
-    id: transaction.id,
-    type: transaction.type,
-    date: transaction.date.toISOString(),
-    description: transaction.description,
-    amount: transaction.amount,
-    isFixed: transaction.isFixed,
-    recurrence: transaction.recurrence,
-    category: transaction.category,
-    subcategory: transaction.subcategory,
-    tags: transaction.tags.map((t) => t.tag.name),
-  }));
+  const income = incomeAgg._sum.amount ?? 0;
+  const expense = expenseAgg._sum.amount ?? 0;
+  const fixedExpense = fixedExpenseAgg._sum.amount ?? 0;
 
   return (
     <TransactionsManager
@@ -61,8 +54,8 @@ export default async function LancamentosPage({ searchParams }: LancamentosPageP
       }))}
       tagSuggestions={tags.map((tag) => tag.name)}
       totalCount={total}
-      page={page}
       pageSize={TRANSACTIONS_PAGE_SIZE}
+      summary={{ income, expense, balance: income - expense, fixedExpense, periodLabel }}
     />
   );
 }

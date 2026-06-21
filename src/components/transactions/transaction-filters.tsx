@@ -43,8 +43,13 @@ export function TransactionFiltersBar({ categories }: TransactionFiltersProps) {
       params.set("amountOperator", next.amountOperator);
       params.set("amountValue", next.amountValue);
     }
-    if (next.month) params.set("month", next.month);
-    if (next.month && next.day) params.set("day", next.day);
+    if (next.month) {
+      params.set("month", next.month);
+      if (next.day) params.set("day", next.day);
+    } else {
+      const currentPeriod = searchParams.get("period");
+      if (currentPeriod) params.set("period", currentPeriod);
+    }
     router.replace(params.size > 0 ? `/lancamentos?${params.toString()}` : "/lancamentos", { scroll: false });
   }
 

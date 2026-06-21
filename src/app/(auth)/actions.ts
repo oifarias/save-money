@@ -58,11 +58,19 @@ export async function registerAction(_prev: ActionResult, formData: FormData): P
       });
     });
 
-    return { success: true };
   } catch (error) {
     console.error("[registerAction] erro ao criar conta:", error);
     return { success: false, message: "Erro interno ao criar conta. Tente novamente." };
   }
+
+  try {
+    await signIn("credentials", { email, password, redirect: false });
+  } catch (error) {
+    console.error("[registerAction] conta criada mas falhou o login automático:", error);
+    return { success: true, message: "Conta criada! Faça login para continuar." };
+  }
+
+  return { success: true };
 }
 
 export async function loginAction(_prev: ActionResult, formData: FormData): Promise<ActionResult> {

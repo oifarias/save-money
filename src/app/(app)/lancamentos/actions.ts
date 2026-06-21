@@ -8,6 +8,9 @@ import { syncTransactionTags } from "@/lib/tags";
 import { transactionSchema } from "@/lib/validations/transaction";
 import { bulkUpdateTransactionSchema } from "@/lib/validations/bulk-transaction";
 import { resolveCategoryAndSubcategory } from "@/lib/category-resolver";
+import { parseTransactionFilters } from "@/lib/validations/transaction-filters";
+import { getTransactionsPage } from "@/lib/transactions-query";
+import type { TransactionListItem } from "@/components/transactions/transaction-list";
 import type { Prisma, Recurrence, TransactionType } from "@/generated/prisma/client";
 
 export type ActionResult = {
@@ -211,6 +214,13 @@ export async function bulkUpdateTransactionsAction(input: unknown): Promise<Acti
   }
 
   return { success: true, message: `${result.count} lançamento(s) atualizado(s) com sucesso` };
+}
+
+export async function loadMoreTransactionsAction(searchParamsString: string, page: number): Promise<TransactionListItem[]> {
+  const userId = await requireUserId();
+  const rawSearchParams = Object.fromEntries(new URLSearchParams(searchParamsString));
+  const filters = parseTransactionFilters(rawSearchParams);
+  return getTransactionsPage(userId, filters, page);
 }
 
 export async function deleteTransactionAction(id: string): Promise<ActionResult> {

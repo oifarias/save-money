@@ -58,7 +58,21 @@ export async function buildTransactionWhere(
       const end = new Date(Date.UTC(year, month, 1));
       where.date = { gte: start, lt: end };
     }
+  } else {
+    const period = filters.period ?? "30";
+    if (period !== "all") {
+      const days = Number(period);
+      const now = new Date();
+      const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
+      const start = new Date(end.getTime() - days * 24 * 60 * 60 * 1000);
+      where.date = { gte: start, lt: end };
+    }
   }
 
   return where;
+}
+
+export function getEffectivePeriod(filters: Pick<TransactionFilters, "month" | "period">): "30" | "45" | "60" | "all" | null {
+  if (filters.month) return null;
+  return filters.period ?? "30";
 }

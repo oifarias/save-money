@@ -35,16 +35,7 @@ export const transactionFiltersSchema = z.object({
       .refine((value) => Number.isInteger(value) && value >= 1 && value <= 31, { message: "Dia inválido" })
       .optional()
   ),
-  page: z.preprocess(
-    firstValue,
-    z
-      .string()
-      .trim()
-      .transform((value) => Number(value))
-      .refine((value) => Number.isInteger(value) && value >= 1, { message: "Página inválida" })
-      .optional()
-      .default(1)
-  ),
+  period: z.preprocess(firstValue, z.enum(["30", "45", "60", "all"]).optional()),
 });
 
 export type TransactionFilters = z.infer<typeof transactionFiltersSchema>;
@@ -52,7 +43,7 @@ export type TransactionFilters = z.infer<typeof transactionFiltersSchema>;
 export function parseTransactionFilters(searchParams: Record<string, string | string[] | undefined>): TransactionFilters {
   const result = transactionFiltersSchema.safeParse(searchParams);
   if (!result.success) {
-    return { page: 1 };
+    return {};
   }
   return result.data;
 }
