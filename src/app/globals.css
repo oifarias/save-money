@@ -91,3 +91,28 @@ h1, h2, h3, h4, .font-display {
 .animate-fade-grow {
   animation: fade-grow 320ms ease-out both;
 }
+
+/* Extrato vivo: rolagem contínua da lista de lançamentos na landing page */
+@keyframes ledger-scroll {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-50%);
+  }
+}
+
+.animate-ledger-scroll {
+  animation: ledger-scroll 16s linear infinite;
+}
+
+.animate-ledger-scroll:hover,
+.animate-ledger-scroll:focus-within {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-ledger-scroll {
+    animation: none;
+  }
+}
