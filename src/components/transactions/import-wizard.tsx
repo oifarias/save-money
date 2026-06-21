@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Download,
   FileSpreadsheet,
@@ -30,7 +31,7 @@ import {
   type ExistingCategoryRef,
 } from "@/lib/import-helpers";
 import { formatCurrency } from "@/lib/format";
-import { importTransactionsAction } from "@/app/(app)/importar/actions";
+import { importTransactionsAction } from "@/app/(app)/lancamentos/import-actions";
 
 type Step = "upload" | "map" | "result";
 
@@ -215,6 +216,7 @@ type ImportWizardProps = {
 };
 
 export function ImportWizard({ existingCategories }: ImportWizardProps) {
+  const router = useRouter();
   const [step, setStep] = useState<Step>("upload");
   const [fileName, setFileName] = useState("");
   const [sheet, setSheet] = useState<ParsedSheet | null>(null);
@@ -773,9 +775,9 @@ export function ImportWizard({ existingCategories }: ImportWizardProps) {
             <Button type="button" variant="secondary" onClick={handleReset}>
               Importar outro arquivo
             </Button>
-            <a href="/lancamentos">
-              <Button type="button">Ver lançamentos</Button>
-            </a>
+            <Button type="button" onClick={() => router.push("/lancamentos")}>
+              Ver lançamentos importados
+            </Button>
           </div>
         </Card>
       )}

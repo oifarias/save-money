@@ -6,7 +6,8 @@ export const TRANSACTIONS_PAGE_SIZE = 25;
 
 export async function buildTransactionWhere(
   userId: string,
-  filters: TransactionFilters
+  filters: TransactionFilters,
+  options: { defaultPeriod?: "30" | "45" | "60" | "all" } = {}
 ): Promise<Prisma.TransactionWhereInput> {
   const where: Prisma.TransactionWhereInput = { userId };
 
@@ -59,7 +60,7 @@ export async function buildTransactionWhere(
       where.date = { gte: start, lt: end };
     }
   } else {
-    const period = filters.period ?? "30";
+    const period = filters.period ?? options.defaultPeriod ?? "30";
     if (period !== "all") {
       const days = Number(period);
       const now = new Date();
@@ -72,7 +73,10 @@ export async function buildTransactionWhere(
   return where;
 }
 
-export function getEffectivePeriod(filters: Pick<TransactionFilters, "month" | "period">): "30" | "45" | "60" | "all" | null {
+export function getEffectivePeriod(
+  filters: Pick<TransactionFilters, "month" | "period">,
+  defaultPeriod: "30" | "45" | "60" | "all" = "30"
+): "30" | "45" | "60" | "all" | null {
   if (filters.month) return null;
-  return filters.period ?? "30";
+  return filters.period ?? defaultPeriod;
 }

@@ -223,6 +223,25 @@ export async function loadMoreTransactionsAction(searchParamsString: string, pag
   return getTransactionsPage(userId, filters, page);
 }
 
+export async function markTransactionsFixedAction(ids: string[]): Promise<ActionResult> {
+  const userId = await requireUserId();
+
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return { success: false, message: "Selecione ao menos um lançamento" };
+  }
+
+  const result = await prisma.transaction.updateMany({
+    where: { id: { in: ids }, userId },
+    data: { isFixed: true },
+  });
+
+  revalidatePath("/dashboard");
+  revalidatePath("/lancamentos");
+  revalidatePath("/insights");
+
+  return { success: true, message: `${result.count} lançamento(s) marcado(s) como despesa fixa` };
+}
+
 export async function deleteTransactionAction(id: string): Promise<ActionResult> {
   const userId = await requireUserId();
 

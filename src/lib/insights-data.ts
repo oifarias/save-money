@@ -55,6 +55,16 @@ export type FixedExpenseAlert = {
   share: number;
 };
 
+export type FixedExpenseCandidate = {
+  key: string;
+  descriptions: string[];
+  amount: number | null;
+  confidence: "alta" | "possivel";
+  monthsCount: number;
+  dayOfMonthRange: { min: number; max: number };
+  transactions: { id: string; date: string; amount: number }[];
+};
+
 export type InsightsPageData = {
   windowLabel: string;
   growthWindowLabel: { from: string; to: string };
@@ -63,6 +73,7 @@ export type InsightsPageData = {
   reductionSuggestions: ReductionSuggestion[];
   hashtagRanking: HashtagRanking[];
   fixedExpenseAlert: FixedExpenseAlert | null;
+  fixedExpenseCandidates: FixedExpenseCandidate[];
   hasData: boolean;
 };
 
@@ -76,6 +87,8 @@ export async function getInsightsPageData(userId: string): Promise<InsightsPageD
   const transactions = await prisma.transaction.findMany({
     where: { userId, type: "EXPENSE", date: { gte: historyStart, lt: nextMonthStart } },
     select: {
+      id: true,
+      description: true,
       amount: true,
       date: true,
       isFixed: true,
@@ -175,6 +188,14 @@ export async function getInsightsPageData(userId: string): Promise<InsightsPageD
       ? { fixedTotal: currentMonthFixed, expenseTotal: currentMonthExpense, share: fixedShare }
       : null;
 
+  // 6. Candidatos a despesa fixa: lançamentos ainda não marcados como fixos que se repetem mês a mês.
+  // Confiança "alta" = mesma descrição e mesmo valor em pelo menos 2 meses distintos (a combinação que
+  // mais caracteriza uma despesa fixa real). Confiança "possível" = mesma descrição OU mesmo valor
+  // isoladamente, também recorrente em pelo menos 2 meses.
+  const fixedExpenseCandidates = detectFixedExpenseCandidates(
+    transactions.filter((tx) => !tx.isFixed).map((tx) => ({ id: tx.id, description: tx.description, amount: tx.amount, date: tx.date }))
+  );
+
   return {
     windowLabel: `${monthLabel(historyStart)} – ${monthLabel(monthStart)}`,
     growthWindowLabel: { from: monthLabel(growthStart), to: monthLabel(monthStart) },
@@ -183,6 +204,89 @@ export async function getInsightsPageData(userId: string): Promise<InsightsPageD
     reductionSuggestions,
     hashtagRanking,
     fixedExpenseAlert,
+    fixedExpenseCandidates,
     hasData: transactions.length > 0,
   };
+}
+
+type CandidateTx = { id: string; description: string; amount: number; date: Date };
+
+function normalizeDescription(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function dayOfMonthRangeOf(txs: CandidateTx[]): { min: number; max: number } {
+  const days = txs.map((tx) => tx.date.getDate());
+  return { min: Math.min(...days), max: Math.max(...days) };
+}
+
+function toCandidate(
+  txs: CandidateTx[],
+  confidence: FixedExpenseCandidate["confidence"],
+  amount: number | null,
+  index: number
+): FixedExpenseCandidate {
+  const sorted = [...txs].sort((a, b) => a.date.getTime() - b.date.getTime());
+  const descriptions = Array.from(new Set(sorted.map((tx) => tx.description)));
+  return {
+    key: `${confidence}-${index}`,
+    descriptions,
+    amount,
+    confidence,
+    monthsCount: new Set(sorted.map((tx) => monthKey(tx.date))).size,
+    dayOfMonthRange: dayOfMonthRangeOf(sorted),
+    transactions: sorted.map((tx) => ({ id: tx.id, date: tx.date.toISOString(), amount: tx.amount })),
+  };
+}
+
+const MAX_FIXED_EXPENSE_CANDIDATES = 8;
+
+function detectFixedExpenseCandidates(nonFixedExpenses: CandidateTx[]): FixedExpenseCandidate[] {
+  const claimedIds = new Set<string>();
+  const candidates: FixedExpenseCandidate[] = [];
+
+  // Alta confiança: mesma descrição normalizada + mesmo valor, recorrente em ≥2 meses distintos.
+  const exactGroups = new Map<string, CandidateTx[]>();
+  for (const tx of nonFixedExpenses) {
+    const key = `${normalizeDescription(tx.description)}::${tx.amount}`;
+    const list = exactGroups.get(key) ?? [];
+    list.push(tx);
+    exactGroups.set(key, list);
+  }
+  for (const txs of exactGroups.values()) {
+    const monthsCount = new Set(txs.map((tx) => monthKey(tx.date))).size;
+    if (txs.length < 2 || monthsCount < 2) continue;
+    txs.forEach((tx) => claimedIds.add(tx.id));
+    candidates.push(toCandidate(txs, "alta", txs[0].amount, candidates.length));
+  }
+
+  // Possível: mesma descrição OU mesmo valor isoladamente, só considerando o que não entrou acima.
+  const remaining = nonFixedExpenses.filter((tx) => !claimedIds.has(tx.id));
+
+  const descriptionGroups = new Map<string, CandidateTx[]>();
+  const amountGroups = new Map<number, CandidateTx[]>();
+  for (const tx of remaining) {
+    const dKey = normalizeDescription(tx.description);
+    descriptionGroups.set(dKey, [...(descriptionGroups.get(dKey) ?? []), tx]);
+    amountGroups.set(tx.amount, [...(amountGroups.get(tx.amount) ?? []), tx]);
+  }
+
+  function pushPossibleGroup(group: CandidateTx[], amount: number | null) {
+    const freshTxs = group.filter((tx) => !claimedIds.has(tx.id));
+    const monthsCount = new Set(freshTxs.map((tx) => monthKey(tx.date))).size;
+    if (freshTxs.length < 2 || monthsCount < 2) return;
+    freshTxs.forEach((tx) => claimedIds.add(tx.id));
+    candidates.push(toCandidate(freshTxs, "possivel", amount, candidates.length));
+  }
+
+  for (const group of descriptionGroups.values()) {
+    if (group.length >= 2) pushPossibleGroup(group, null);
+  }
+  for (const [amount, group] of amountGroups) {
+    if (group.length >= 2) pushPossibleGroup(group, amount);
+  }
+
+  return candidates
+    .sort((a, b) => (a.confidence === b.confidence ? b.monthsCount - a.monthsCount : a.confidence === "alta" ? -1 : 1))
+    .slice(0, MAX_FIXED_EXPENSE_CANDIDATES);
 }

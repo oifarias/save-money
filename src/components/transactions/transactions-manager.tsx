@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useSearchParams } from "next/navigation";
 import toast from "react-hot-toast";
-import { Download, Loader2, Pencil, Plus, SlidersHorizontal } from "lucide-react";
+import { Download, Loader2, Pencil } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
@@ -15,8 +15,7 @@ import {
   type TransactionFormValues,
 } from "@/components/transactions/transaction-form";
 import { TransactionRow } from "@/components/transactions/transaction-row";
-import { TransactionFiltersBar } from "@/components/transactions/transaction-filters";
-import { PeriodFilter } from "@/components/transactions/period-filter";
+import { FiltersPanel } from "@/components/transactions/filters-panel";
 import { BulkEditForm } from "@/components/transactions/bulk-edit-form";
 import type { TransactionListItem } from "@/components/transactions/transaction-list";
 import { toInputDate } from "@/lib/format";
@@ -39,8 +38,6 @@ type TransactionsManagerProps = {
   summary: TransactionsSummary;
 };
 
-const ADVANCED_FILTER_KEYS = ["categoryId", "subcategoryId", "description", "amountOperator", "month"];
-
 export function TransactionsManager({
   transactions,
   categories,
@@ -50,8 +47,6 @@ export function TransactionsManager({
   summary,
 }: TransactionsManagerProps) {
   const searchParams = useSearchParams();
-  const [filtersOpen, setFiltersOpen] = useState(false);
-  const activeAdvancedFilterCount = ADVANCED_FILTER_KEYS.filter((key) => searchParams.get(key)).length;
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<TransactionListItem | null>(null);
@@ -68,10 +63,17 @@ export function TransactionsManager({
   const selectAllRef = useRef<HTMLInputElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const filtersKey = searchParams.toString();
-  const [previousFiltersKey, setPreviousFiltersKey] = useState(filtersKey);
 
-  if (filtersKey !== previousFiltersKey) {
-    setPreviousFiltersKey(filtersKey);
+  // Assinatura da primeira página vinda do servidor: muda quando um lançamento é criado, editado ou excluído
+  // (via revalidatePath nas Server Actions), mesmo sem o usuário trocar nenhum filtro.
+  const transactionsSignature = transactions
+    .map((t) => `${t.id}:${t.amount}:${t.description}:${t.category?.id ?? ""}:${t.subcategory?.id ?? ""}:${t.date}`)
+    .join("|");
+  const resetKey = `${filtersKey}::${transactionsSignature}`;
+  const [previousResetKey, setPreviousResetKey] = useState(resetKey);
+
+  if (resetKey !== previousResetKey) {
+    setPreviousResetKey(resetKey);
     setSelectedIds(new Set());
     setItems(transactions);
     setNextPage(2);
@@ -118,11 +120,6 @@ export function TransactionsManager({
     return () => observer.disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasMore, nextPage, filtersKey]);
-
-  function openCreate() {
-    setEditing(null);
-    setFormOpen(true);
-  }
 
   function openEdit(item: TransactionListItem) {
     setEditing(item);
@@ -197,16 +194,10 @@ export function TransactionsManager({
   const exportHref = filtersKey ? `/api/export/transactions?${filtersKey}` : "/api/export/transactions";
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="font-display text-2xl font-semibold text-(--color-text)">Lançamentos</h1>
-          <p className="mt-1 text-sm text-(--color-text-muted)">Registre e acompanhe suas entradas e despesas</p>
-        </div>
-        <Button onClick={openCreate}>
-          <Plus className="h-4 w-4" aria-hidden="true" />
-          Novo lançamento
-        </Button>
+    <div id="lancamentos-realizados" className="flex flex-col gap-6">
+      <div>
+        <h2 className="font-display text-xl font-semibold text-(--color-text)">Lançamentos realizados</h2>
+        <p className="mt-1 text-sm text-(--color-text-muted)">Acompanhe, filtre e edite o que já foi lançado</p>
       </div>
 
       <SummaryCards
@@ -217,25 +208,9 @@ export function TransactionsManager({
         periodLabel={summary.periodLabel}
       />
 
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <PeriodFilter />
-        <div className="flex gap-2">
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => setFiltersOpen((open) => !open)}
-            aria-expanded={filtersOpen}
-            aria-label="Filtros"
-            title="Filtros"
-            className="px-2"
-          >
-            <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
-            {activeAdvancedFilterCount > 0 && (
-              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-(--color-primary) text-[11px] font-semibold text-white">
-                {activeAdvancedFilterCount}
-              </span>
-            )}
-          </Button>
+      <FiltersPanel
+        categories={categories}
+        actions={
           <a
             href={exportHref}
             aria-label="Baixar Excel"
@@ -244,10 +219,8 @@ export function TransactionsManager({
           >
             <Download className="h-4 w-4" aria-hidden="true" />
           </a>
-        </div>
-      </div>
-
-      {filtersOpen && <TransactionFiltersBar categories={categories} />}
+        }
+      />
 
       {selectedCount > 0 && (
         <div
@@ -271,12 +244,8 @@ export function TransactionsManager({
         <Card className="flex flex-col items-center gap-2 py-12 text-center">
           <p className="font-display text-lg font-semibold text-(--color-text)">Nenhum lançamento encontrado</p>
           <p className="max-w-sm text-sm text-(--color-text-muted)">
-            Ajuste os filtros ou registre um novo lançamento para começar.
+            Ajuste os filtros ou registre um lançamento na seção &quot;Novo lançamento&quot;, acima.
           </p>
-          <Button onClick={openCreate} className="mt-2">
-            <Plus className="h-4 w-4" aria-hidden="true" />
-            Criar lançamento
-          </Button>
         </Card>
       ) : (
         <>
@@ -321,7 +290,7 @@ export function TransactionsManager({
         </>
       )}
 
-      <Modal open={formOpen} title={editing ? "Editar lançamento" : "Novo lançamento"} onClose={closeForm}>
+      <Modal open={formOpen} title="Editar lançamento" onClose={closeForm}>
         <TransactionForm
           categories={categories}
           tagSuggestions={tagSuggestions}

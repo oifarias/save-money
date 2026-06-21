@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { clsx } from "clsx";
 
 const PERIOD_OPTIONS = [
@@ -12,6 +12,7 @@ const PERIOD_OPTIONS = [
 
 export function PeriodFilter() {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
 
   const hasExactDate = Boolean(searchParams.get("month"));
@@ -26,7 +27,7 @@ export function PeriodFilter() {
     } else {
       params.set("period", period);
     }
-    router.replace(params.size > 0 ? `/lancamentos?${params.toString()}` : "/lancamentos", { scroll: false });
+    router.replace(params.size > 0 ? `${pathname}?${params.toString()}` : pathname, { scroll: false });
   }
 
   return (

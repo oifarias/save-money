@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { parseTransactionFilters } from "@/lib/validations/transaction-filters";
 import { buildTransactionWhere, getEffectivePeriod, TRANSACTIONS_PAGE_SIZE } from "@/lib/transaction-filters";
 import { getTransactionsPage } from "@/lib/transactions-query";
+import { TransactionIntake } from "@/components/transactions/transaction-intake";
 import { TransactionsManager } from "@/components/transactions/transactions-manager";
 
 type LancamentosPageProps = {
@@ -44,18 +45,30 @@ export default async function LancamentosPage({ searchParams }: LancamentosPageP
   const expense = expenseAgg._sum.amount ?? 0;
   const fixedExpense = fixedExpenseAgg._sum.amount ?? 0;
 
+  const formCategories = categories.map((category) => ({
+    id: category.id,
+    name: category.name,
+    children: category.children,
+  }));
+  const tagSuggestions = tags.map((tag) => tag.name);
+
   return (
-    <TransactionsManager
-      transactions={items}
-      categories={categories.map((category) => ({
-        id: category.id,
-        name: category.name,
-        children: category.children,
-      }))}
-      tagSuggestions={tags.map((tag) => tag.name)}
-      totalCount={total}
-      pageSize={TRANSACTIONS_PAGE_SIZE}
-      summary={{ income, expense, balance: income - expense, fixedExpense, periodLabel }}
-    />
+    <div className="flex flex-col gap-8">
+      <div>
+        <h1 className="font-display text-2xl font-semibold text-(--color-text)">Lançamentos</h1>
+        <p className="mt-1 text-sm text-(--color-text-muted)">Registre e acompanhe suas entradas e despesas</p>
+      </div>
+
+      <TransactionIntake categories={formCategories} tagSuggestions={tagSuggestions} />
+
+      <TransactionsManager
+        transactions={items}
+        categories={formCategories}
+        tagSuggestions={tagSuggestions}
+        totalCount={total}
+        pageSize={TRANSACTIONS_PAGE_SIZE}
+        summary={{ income, expense, balance: income - expense, fixedExpense, periodLabel }}
+      />
+    </div>
   );
 }

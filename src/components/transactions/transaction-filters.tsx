@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,7 @@ const AMOUNT_OPERATORS = [
 
 export function TransactionFiltersBar({ categories }: TransactionFiltersProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
 
   const [categoryId, setCategoryId] = useState(searchParams.get("categoryId") ?? "");
@@ -50,7 +51,7 @@ export function TransactionFiltersBar({ categories }: TransactionFiltersProps) {
       const currentPeriod = searchParams.get("period");
       if (currentPeriod) params.set("period", currentPeriod);
     }
-    router.replace(params.size > 0 ? `/lancamentos?${params.toString()}` : "/lancamentos", { scroll: false });
+    router.replace(params.size > 0 ? `${pathname}?${params.toString()}` : pathname, { scroll: false });
   }
 
   function scheduleApply(next: Record<string, string>) {
@@ -110,7 +111,7 @@ export function TransactionFiltersBar({ categories }: TransactionFiltersProps) {
     setAmountValue("");
     setMonth("");
     setDay("");
-    router.replace("/lancamentos", { scroll: false });
+    router.replace(pathname, { scroll: false });
   }
 
   const hasActiveFilters = Boolean(categoryId || subcategoryId || description || (amountOperator && amountValue) || month);

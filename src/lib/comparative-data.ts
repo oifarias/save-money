@@ -1,5 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { monthLabel } from "@/lib/format";
+import { buildTransactionWhere } from "@/lib/transaction-filters";
+import type { TransactionFilters } from "@/lib/validations/transaction-filters";
+import type { Prisma } from "@/generated/prisma/client";
 
 const NO_CATEGORY_ID = "sem-grupo";
 const NO_CATEGORY_COLOR = "#6B7A72";
@@ -36,14 +39,24 @@ export type ComparativeData = {
 
 const MONTHS_WINDOW = 12;
 
-export async function getComparativeData(userId: string): Promise<ComparativeData> {
+export async function getComparativeData(userId: string, filters: TransactionFilters = {}): Promise<ComparativeData> {
   const now = new Date();
   const monthStart = startOfMonth(now);
   const nextMonthStart = addMonths(monthStart, 1);
   const windowStart = addMonths(monthStart, -(MONTHS_WINDOW - 1));
 
+  // Filtros de grupo/sub-grupo/descrição/valor/data, com período padrão "todo o período" (em vez dos
+  // últimos 30 dias usados em /lancamentos), já que aqui a janela natural é de 12 meses.
+  const filterWhere = await buildTransactionWhere(userId, filters, { defaultPeriod: "all" });
+  const filterDate = filterWhere.date as { gte?: Date; lt?: Date } | undefined;
+
+  const gte = filterDate?.gte && filterDate.gte > windowStart ? filterDate.gte : windowStart;
+  const lt = filterDate?.lt && filterDate.lt < nextMonthStart ? filterDate.lt : nextMonthStart;
+
+  const where: Prisma.TransactionWhereInput = { ...filterWhere, date: { gte, lt } };
+
   const transactions = await prisma.transaction.findMany({
-    where: { userId, date: { gte: windowStart, lt: nextMonthStart } },
+    where,
     select: {
       type: true,
       amount: true,

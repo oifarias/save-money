@@ -30,7 +30,7 @@ export default async function InsightsPage() {
       ) : (
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
           <GrowthRankingCard data={data.categoryGrowth} windowLabel={data.growthWindowLabel} />
-          <FixedExpenseAlertCard data={data.fixedExpenseAlert} />
+          <FixedExpenseAlertCard data={data.fixedExpenseAlert} candidates={data.fixedExpenseCandidates} />
           <CategoryAveragesCard data={data.categoryAverages} windowLabel={data.windowLabel} />
           <HashtagRankingCard data={data.hashtagRanking} />
           <div className="lg:col-span-2">
