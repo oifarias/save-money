@@ -6,5 +6,5 @@ export const DEFAULT_CATEGORIES = [
   { name: "Lazer", color: "#22C97A", icon: "Popcorn" },
   { name: "Educação", color: "#147A55", icon: "GraduationCap" },
   { name: "Assinaturas", color: "#8A9E94", icon: "Repeat" },
-  { name: "Outros", color: "#1C1E1D", icon: "MoreHorizontal" },
+  { name: "Outros", color: "#7D8C87", icon: "MoreHorizontal" },
 ] as const;
