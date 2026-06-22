@@ -1,4 +1,4 @@
-import { ArrowLeftRight, LayoutDashboard, Lightbulb, ListChecks } from "lucide-react";
+import { ArrowLeftRight, LayoutDashboard, Lightbulb, ListChecks, Target, Share2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 
 const FEATURES = [
@@ -11,6 +11,16 @@ const FEATURES = [
     icon: ListChecks,
     title: "Lançamentos",
     description: "Registre, filtre por grupo, valor, descrição ou data, e edite em lote quando precisar.",
+  },
+  {
+    icon: Target,
+    title: "Metas",
+    description: "Defina sua renda, divida em necessidades, desejos e poupança, e acompanhe o limite de cada categoria.",
+  },
+  {
+    icon: Share2,
+    title: "Divisão de contas",
+    description: "Selecione as despesas, gere um link e divida a conta com amigos sem precisar de cadastro.",
   },
   {
     icon: ArrowLeftRight,
@@ -31,7 +41,7 @@ export function FeatureShowcase() {
         As telas que você vai usar todo dia
       </h2>
 
-      <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {FEATURES.map((feature) => (
           <Card key={feature.title} className="flex flex-col gap-3">
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-(--color-accent)/15 text-(--color-accent)">
