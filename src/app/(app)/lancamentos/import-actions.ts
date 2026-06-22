@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ensureDefaultAccountId } from "@/lib/accounts";
@@ -8,6 +8,9 @@ import { syncTransactionTags } from "@/lib/tags";
 import { findOrCreateRootCategory, findOrCreateSubcategory } from "@/lib/category-resolver";
 import { normalizeTags } from "@/lib/import-helpers";
 import { importRowSchema } from "@/lib/validations/import";
+import { dashboardCacheTag } from "@/lib/dashboard-data";
+import { comparativeCacheTag } from "@/lib/comparative-data";
+import { insightsCacheTag } from "@/lib/insights-data";
 import { Prisma, type Category, type PrismaClient, type TransactionType } from "@/generated/prisma/client";
 
 export type ImportActionResult = {
@@ -163,6 +166,9 @@ export async function importTransactionsAction(rows: ImportRowPayload[]): Promis
   revalidatePath("/dashboard");
   revalidatePath("/lancamentos");
   revalidatePath("/grupos");
+  revalidateTag(dashboardCacheTag(userId), { expire: 0 });
+  revalidateTag(comparativeCacheTag(userId), { expire: 0 });
+  revalidateTag(insightsCacheTag(userId), { expire: 0 });
 
   return {
     success: true,

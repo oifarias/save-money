@@ -29,7 +29,7 @@ export default async function LancamentosPage({ searchParams }: LancamentosPageP
 
   const [total, items, categories, tags, incomeAgg, expenseAgg, fixedExpenseAgg] = await Promise.all([
     prisma.transaction.count({ where }),
-    getTransactionsPage(userId, filters, 1),
+    getTransactionsPage(where, 1),
     prisma.category.findMany({
       where: { userId, parentId: null },
       orderBy: { name: "asc" },

@@ -20,19 +20,22 @@ export default async function MetasPage({ searchParams }: MetasPageProps) {
   const userId = session!.user.id;
   const month = currentMonthKey();
 
-  await ensureCurrentMonthBudgets(userId, month);
-
   const rawSearchParams = await searchParams;
   const forceWizard = Boolean(rawSearchParams.recalcular);
 
-  const [progress, rootCategories] = await Promise.all([
-    getBudgetProgress(userId, month),
+  // ensureCurrentMonthBudgets precisa terminar ANTES de getBudgetProgress (senão a leitura pode
+  // acontecer antes da cópia do mês anterior, mostrando o wizard indevidamente) — mas não depende
+  // da busca de categorias, então essas duas rodam em paralelo.
+  const [, rootCategories] = await Promise.all([
+    ensureCurrentMonthBudgets(userId, month),
     prisma.category.findMany({
       where: { userId, parentId: null },
       orderBy: { name: "asc" },
       select: { id: true, name: true, color: true, icon: true },
     }),
   ]);
+
+  const progress = await getBudgetProgress(userId, month);
 
   const showWizard = !progress || forceWizard;
   const [incomeBaseline, categoryAveragesMap] = showWizard

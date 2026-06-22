@@ -1,3 +1,4 @@
+import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { monthLabel } from "@/lib/format";
 import { buildTransactionWhere } from "@/lib/transaction-filters";
@@ -40,6 +41,17 @@ export type ComparativeData = {
 const MONTHS_WINDOW = 12;
 
 export async function getComparativeData(userId: string, filters: TransactionFilters = {}): Promise<ComparativeData> {
+  return unstable_cache(getComparativeDataUncached, ["comparative-data", userId], {
+    tags: [comparativeCacheTag(userId)],
+    revalidate: 60,
+  })(userId, filters);
+}
+
+export function comparativeCacheTag(userId: string) {
+  return `comparative:${userId}`;
+}
+
+async function getComparativeDataUncached(userId: string, filters: TransactionFilters = {}): Promise<ComparativeData> {
   const now = new Date();
   const monthStart = startOfMonth(now);
   const nextMonthStart = addMonths(monthStart, 1);

@@ -1,3 +1,4 @@
+import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { monthLabel } from "@/lib/format";
 
@@ -88,6 +89,17 @@ export type InsightsPageData = {
 };
 
 export async function getInsightsPageData(userId: string): Promise<InsightsPageData> {
+  return unstable_cache(getInsightsPageDataUncached, ["insights-data", userId], {
+    tags: [insightsCacheTag(userId)],
+    revalidate: 60,
+  })(userId);
+}
+
+export function insightsCacheTag(userId: string) {
+  return `insights:${userId}`;
+}
+
+async function getInsightsPageDataUncached(userId: string): Promise<InsightsPageData> {
   const now = new Date();
   const monthStart = startOfMonth(now);
   const nextMonthStart = addMonths(monthStart, 1);

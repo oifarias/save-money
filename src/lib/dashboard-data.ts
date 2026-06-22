@@ -1,3 +1,4 @@
+import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { monthLabel } from "@/lib/format";
 
@@ -7,6 +8,10 @@ function startOfMonth(date: Date) {
 
 function addMonths(date: Date, amount: number) {
   return new Date(date.getFullYear(), date.getMonth() + amount, 1);
+}
+
+function monthKeyOf(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
 export type CategorySlice = {
@@ -42,85 +47,117 @@ export type DashboardData = {
   insights: Insight[];
 };
 
+type TrendRow = { month: Date; type: "INCOME" | "EXPENSE"; total: number | string };
+
 export async function getDashboardData(userId: string): Promise<DashboardData> {
+  return unstable_cache(getDashboardDataUncached, ["dashboard-data", userId], {
+    tags: [dashboardCacheTag(userId)],
+    revalidate: 60,
+  })(userId);
+}
+
+export function dashboardCacheTag(userId: string) {
+  return `dashboard:${userId}`;
+}
+
+async function getDashboardDataUncached(userId: string): Promise<DashboardData> {
   const now = new Date();
   const monthStart = startOfMonth(now);
   const nextMonthStart = addMonths(monthStart, 1);
   const sixMonthsAgoStart = addMonths(monthStart, -5);
 
-  const transactions = await prisma.transaction.findMany({
-    where: { userId, date: { gte: sixMonthsAgoStart, lt: nextMonthStart } },
-    select: {
-      type: true,
-      amount: true,
-      date: true,
-      isFixed: true,
-      category: { select: { id: true, name: true, color: true } },
-      tags: { select: { tag: { select: { name: true } } } },
-    },
-  });
+  // Totais e distribuição agregados no banco (groupBy) em vez de trazer as transações do mês
+  // inteiras e somar em memória — só o trend de 6 meses precisa de SQL bruto (date_trunc),
+  // já que `groupBy` do Prisma não aceita expressões derivadas de coluna.
+  const [typeTotals, categoryTotals, trendRows, tagRows] = await Promise.all([
+    prisma.transaction.groupBy({
+      by: ["type", "isFixed"],
+      where: { userId, date: { gte: monthStart, lt: nextMonthStart } },
+      _sum: { amount: true },
+    }),
+    prisma.transaction.groupBy({
+      by: ["categoryId"],
+      where: { userId, type: "EXPENSE", date: { gte: monthStart, lt: nextMonthStart } },
+      _sum: { amount: true },
+    }),
+    prisma.$queryRaw<TrendRow[]>`
+      SELECT date_trunc('month', "date") AS month, "type" AS type, SUM("amount") AS total
+      FROM "transactions"
+      WHERE "userId" = ${userId} AND "date" >= ${sixMonthsAgoStart} AND "date" < ${nextMonthStart}
+      GROUP BY date_trunc('month', "date"), "type"
+    `,
+    prisma.transactionTag.findMany({
+      where: { transaction: { userId, type: "EXPENSE", date: { gte: monthStart, lt: nextMonthStart } } },
+      select: { transaction: { select: { amount: true } }, tag: { select: { name: true } } },
+    }),
+  ]);
 
-  const currentMonthTx = transactions.filter((tx) => tx.date >= monthStart && tx.date < nextMonthStart);
-
-  const totals = currentMonthTx.reduce(
-    (acc, tx) => {
-      if (tx.type === "INCOME") {
-        acc.income += tx.amount;
-      } else {
-        acc.expense += tx.amount;
-        if (tx.isFixed) acc.fixedExpense += tx.amount;
-      }
-      return acc;
-    },
-    { income: 0, expense: 0, fixedExpense: 0 }
-  );
-
-  const balance = totals.income - totals.expense;
-
-  // Distribuição por categoria (despesas do mês atual)
-  const categoryMap = new Map<string, CategorySlice>();
-  for (const tx of currentMonthTx) {
-    if (tx.type !== "EXPENSE") continue;
-    const key = tx.category?.id ?? "sem-grupo";
-    const existing = categoryMap.get(key);
-    if (existing) {
-      existing.value += tx.amount;
+  let income = 0;
+  let expense = 0;
+  let fixedExpense = 0;
+  for (const row of typeTotals) {
+    const sum = Number(row._sum.amount ?? 0);
+    if (row.type === "INCOME") {
+      income += sum;
     } else {
-      categoryMap.set(key, {
-        id: key,
-        name: tx.category?.name ?? "Sem grupo",
-        color: tx.category?.color ?? "#6B7A72",
-        value: tx.amount,
-      });
+      expense += sum;
+      if (row.isFixed) fixedExpense += sum;
     }
   }
-  const categoryDistribution = Array.from(categoryMap.values()).sort((a, b) => b.value - a.value);
+  const balance = income - expense;
 
-  // Evolução dos últimos 6 meses
+  const categoryIds = categoryTotals.map((row) => row.categoryId).filter((id): id is string => id !== null);
+  const categoryRows =
+    categoryIds.length > 0
+      ? await prisma.category.findMany({ where: { id: { in: categoryIds } }, select: { id: true, name: true, color: true } })
+      : [];
+  const categoryById = new Map(categoryRows.map((c) => [c.id, c]));
+
+  const categoryDistribution: CategorySlice[] = categoryTotals
+    .map((row) => {
+      const meta = row.categoryId ? categoryById.get(row.categoryId) : undefined;
+      return {
+        id: row.categoryId ?? "sem-grupo",
+        name: meta?.name ?? "Sem grupo",
+        color: meta?.color ?? "#6B7A72",
+        value: Number(row._sum.amount ?? 0),
+      };
+    })
+    .filter((slice) => slice.value > 0)
+    .sort((a, b) => b.value - a.value);
+
   const monthBuckets = new Map<string, MonthlyTrendPoint>();
   for (let i = 5; i >= 0; i -= 1) {
     const bucketDate = addMonths(monthStart, -i);
-    const key = `${bucketDate.getFullYear()}-${String(bucketDate.getMonth() + 1).padStart(2, "0")}`;
+    const key = monthKeyOf(bucketDate);
     monthBuckets.set(key, { key, label: monthLabel(bucketDate), income: 0, expense: 0 });
   }
-  for (const tx of transactions) {
-    const key = `${tx.date.getFullYear()}-${String(tx.date.getMonth() + 1).padStart(2, "0")}`;
-    const bucket = monthBuckets.get(key);
+  for (const row of trendRows) {
+    const bucket = monthBuckets.get(monthKeyOf(row.month));
     if (!bucket) continue;
-    if (tx.type === "INCOME") bucket.income += tx.amount;
-    else bucket.expense += tx.amount;
+    const total = Number(row.total ?? 0);
+    if (row.type === "INCOME") bucket.income += total;
+    else bucket.expense += total;
   }
   const monthlyTrend = Array.from(monthBuckets.values());
 
+  const tagTotals = new Map<string, { total: number; count: number }>();
+  for (const row of tagRows) {
+    const entry = tagTotals.get(row.tag.name) ?? { total: 0, count: 0 };
+    entry.total += row.transaction.amount;
+    entry.count += 1;
+    tagTotals.set(row.tag.name, entry);
+  }
+
   const insights = buildInsights({
-    totals: { ...totals, balance },
+    totals: { income, expense, balance, fixedExpense },
     categoryDistribution,
     monthlyTrend,
-    currentMonthTx,
+    tagTotals,
   });
 
   return {
-    totals: { ...totals, balance },
+    totals: { income, expense, balance, fixedExpense },
     categoryDistribution,
     monthlyTrend,
     insights,
@@ -131,12 +168,12 @@ function buildInsights({
   totals,
   categoryDistribution,
   monthlyTrend,
-  currentMonthTx,
+  tagTotals,
 }: {
   totals: { income: number; expense: number; balance: number; fixedExpense: number };
   categoryDistribution: CategorySlice[];
   monthlyTrend: MonthlyTrendPoint[];
-  currentMonthTx: { type: string; amount: number; tags: { tag: { name: string } }[] }[];
+  tagTotals: Map<string, { total: number; count: number }>;
 }): Insight[] {
   const insights: Insight[] = [];
 
@@ -203,20 +240,13 @@ function buildInsights({
   }
 
   // 5. Hashtag que concentra mais gastos
-  const tagTotals = new Map<string, number>();
-  for (const tx of currentMonthTx) {
-    if (tx.type !== "EXPENSE") continue;
-    for (const { tag } of tx.tags) {
-      tagTotals.set(tag.name, (tagTotals.get(tag.name) ?? 0) + tx.amount);
-    }
-  }
   if (tagTotals.size > 0) {
-    const [topTag, topTagValue] = Array.from(tagTotals.entries()).sort((a, b) => b[1] - a[1])[0];
+    const [topTag, topTagValue] = Array.from(tagTotals.entries()).sort((a, b) => b[1].total - a[1].total)[0];
     insights.push({
       id: "top-hashtag",
       tone: "info",
       title: `#${topTag} é a hashtag que mais concentra gastos`,
-      description: `Lançamentos marcados com #${topTag} somam ${formatBRL(topTagValue)} neste mês.`,
+      description: `Lançamentos marcados com #${topTag} somam ${formatBRL(topTagValue.total)} neste mês.`,
     });
   }
 

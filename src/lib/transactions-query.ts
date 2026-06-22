@@ -1,15 +1,13 @@
 import { prisma } from "@/lib/prisma";
-import { buildTransactionWhere, TRANSACTIONS_PAGE_SIZE } from "@/lib/transaction-filters";
-import type { TransactionFilters } from "@/lib/validations/transaction-filters";
+import { TRANSACTIONS_PAGE_SIZE } from "@/lib/transaction-filters";
+import type { Prisma } from "@/generated/prisma/client";
 import type { TransactionListItem } from "@/components/transactions/transaction-list";
 
+/** Recebe o `where` já resolvido (não os filtros crus) pra não revalidar categoria/sub-categoria de novo a cada página. */
 export async function getTransactionsPage(
-  userId: string,
-  filters: TransactionFilters,
+  where: Prisma.TransactionWhereInput,
   page: number
 ): Promise<TransactionListItem[]> {
-  const where = await buildTransactionWhere(userId, filters);
-
   const transactions = await prisma.transaction.findMany({
     where,
     orderBy: { date: "desc" },

@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getDefaultAccountId } from "@/lib/accounts";
@@ -9,9 +9,20 @@ import { transactionSchema } from "@/lib/validations/transaction";
 import { bulkUpdateTransactionSchema } from "@/lib/validations/bulk-transaction";
 import { resolveCategoryAndSubcategory } from "@/lib/category-resolver";
 import { parseTransactionFilters } from "@/lib/validations/transaction-filters";
+import { buildTransactionWhere } from "@/lib/transaction-filters";
 import { getTransactionsPage } from "@/lib/transactions-query";
+import { dashboardCacheTag } from "@/lib/dashboard-data";
+import { comparativeCacheTag } from "@/lib/comparative-data";
+import { insightsCacheTag } from "@/lib/insights-data";
 import type { TransactionListItem } from "@/components/transactions/transaction-list";
 import type { Prisma, Recurrence, TransactionType } from "@/generated/prisma/client";
+
+/** Invalida o cache (`unstable_cache`) das telas agregadas — chamar após qualquer mutação de Transaction. */
+function invalidateAggregateCaches(userId: string) {
+  revalidateTag(dashboardCacheTag(userId), { expire: 0 });
+  revalidateTag(comparativeCacheTag(userId), { expire: 0 });
+  revalidateTag(insightsCacheTag(userId), { expire: 0 });
+}
 
 export type ActionResult = {
   success: boolean;
@@ -93,6 +104,7 @@ export async function createTransactionAction(_prev: ActionResult, formData: For
 
   revalidatePath("/dashboard");
   revalidatePath("/lancamentos");
+  invalidateAggregateCaches(userId);
   return { success: true, message: "Lançamento registrado com sucesso" };
 }
 
@@ -135,6 +147,7 @@ export async function updateTransactionAction(_prev: ActionResult, formData: For
 
   revalidatePath("/dashboard");
   revalidatePath("/lancamentos");
+  invalidateAggregateCaches(userId);
   return { success: true, message: "Lançamento atualizado com sucesso" };
 }
 
@@ -208,6 +221,7 @@ export async function bulkUpdateTransactionsAction(input: unknown): Promise<Acti
 
   revalidatePath("/dashboard");
   revalidatePath("/lancamentos");
+  invalidateAggregateCaches(userId);
 
   if (result.count !== ids.length) {
     return { success: false, message: "Alguns lançamentos não puderam ser atualizados" };
@@ -220,7 +234,8 @@ export async function loadMoreTransactionsAction(searchParamsString: string, pag
   const userId = await requireUserId();
   const rawSearchParams = Object.fromEntries(new URLSearchParams(searchParamsString));
   const filters = parseTransactionFilters(rawSearchParams);
-  return getTransactionsPage(userId, filters, page);
+  const where = await buildTransactionWhere(userId, filters);
+  return getTransactionsPage(where, page);
 }
 
 /** Combinação (categoryId, subcategoryId) mais frequente entre as transações; empate vai para a mais recente. */
@@ -307,6 +322,7 @@ export async function acceptFixedExpenseInsightAction(groupKey: string, transact
   revalidatePath("/dashboard");
   revalidatePath("/lancamentos");
   revalidatePath("/insights");
+  invalidateAggregateCaches(userId);
 
   return { success: true, message: `${transactions.length} lançamento(s) marcado(s) como despesa fixa` };
 }
@@ -339,6 +355,7 @@ export async function dismissFixedExpenseInsightAction(groupKey: string, transac
   });
 
   revalidatePath("/insights");
+  invalidateAggregateCaches(userId);
 
   return { success: true, message: "Sugestão removida" };
 }
@@ -355,6 +372,7 @@ export async function deleteTransactionAction(id: string): Promise<ActionResult>
 
   revalidatePath("/dashboard");
   revalidatePath("/lancamentos");
+  invalidateAggregateCaches(userId);
   return { success: true, message: "Lançamento excluído com sucesso" };
 }
 

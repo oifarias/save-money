@@ -1,9 +1,12 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { categorySchema } from "@/lib/validations/category";
+import { dashboardCacheTag } from "@/lib/dashboard-data";
+import { comparativeCacheTag } from "@/lib/comparative-data";
+import { insightsCacheTag } from "@/lib/insights-data";
 
 export type ActionResult = {
   success: boolean;
@@ -17,6 +20,13 @@ async function requireUserId() {
     throw new Error("Não autenticado");
   }
   return session.user.id;
+}
+
+/** Invalida o cache (`unstable_cache`) das telas agregadas — nomes/cores de Category aparecem lá. */
+function invalidateAggregateCaches(userId: string) {
+  revalidateTag(dashboardCacheTag(userId), { expire: 0 });
+  revalidateTag(comparativeCacheTag(userId), { expire: 0 });
+  revalidateTag(insightsCacheTag(userId), { expire: 0 });
 }
 
 export async function createCategoryAction(_prev: ActionResult, formData: FormData): Promise<ActionResult> {
@@ -55,6 +65,7 @@ export async function createCategoryAction(_prev: ActionResult, formData: FormDa
 
   revalidatePath("/grupos");
   revalidatePath("/lancamentos");
+  invalidateAggregateCaches(userId);
   return { success: true, message: "Grupo criado com sucesso" };
 }
 
@@ -104,6 +115,7 @@ export async function updateCategoryAction(_prev: ActionResult, formData: FormDa
 
   revalidatePath("/grupos");
   revalidatePath("/lancamentos");
+  invalidateAggregateCaches(userId);
   return { success: true, message: "Grupo atualizado com sucesso" };
 }
 
@@ -137,6 +149,7 @@ export async function deleteCategoryAction(id: string): Promise<ActionResult> {
 
   revalidatePath("/grupos");
   revalidatePath("/lancamentos");
+  invalidateAggregateCaches(userId);
   return { success: true, message: "Grupo excluído com sucesso" };
 }
 
