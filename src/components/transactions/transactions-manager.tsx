@@ -17,6 +17,7 @@ import {
 import { TransactionRow } from "@/components/transactions/transaction-row";
 import { FiltersPanel } from "@/components/transactions/filters-panel";
 import { BulkEditForm } from "@/components/transactions/bulk-edit-form";
+import { ShareSplitButton } from "@/components/split/share-split-button";
 import type { TransactionListItem } from "@/components/transactions/transaction-list";
 import { toInputDate } from "@/lib/format";
 import { deleteTransactionAction, loadMoreTransactionsAction } from "@/app/(app)/lancamentos/actions";
@@ -232,6 +233,10 @@ export function TransactionsManager({
             <Button type="button" variant="ghost" onClick={() => setSelectedIds(new Set())}>
               Limpar seleção
             </Button>
+            <ShareSplitButton
+              transactions={items.filter((t) => selectedIds.has(t.id))}
+              onDone={() => setSelectedIds(new Set())}
+            />
             <Button type="button" onClick={() => setBulkEditOpen(true)}>
               <Pencil className="h-4 w-4" aria-hidden="true" />
               Editar em lote

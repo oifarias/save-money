@@ -5,6 +5,7 @@ import { buildTransactionWhere, getEffectivePeriod, TRANSACTIONS_PAGE_SIZE } fro
 import { getTransactionsPage } from "@/lib/transactions-query";
 import { TransactionIntake } from "@/components/transactions/transaction-intake";
 import { TransactionsManager } from "@/components/transactions/transactions-manager";
+import { ShareExplainerCard } from "@/components/transactions/share-explainer-card";
 
 type LancamentosPageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -58,6 +59,8 @@ export default async function LancamentosPage({ searchParams }: LancamentosPageP
         <h1 className="font-display text-2xl font-semibold text-(--color-text)">Lançamentos</h1>
         <p className="mt-1 text-sm text-(--color-text-muted)">Registre e acompanhe suas entradas e despesas</p>
       </div>
+
+      <ShareExplainerCard />
 
       <TransactionIntake categories={formCategories} tagSuggestions={tagSuggestions} />
 

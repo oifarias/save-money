@@ -42,6 +42,7 @@ model User {
   notifications Notification[]
   fixedExpenseInsightDecisions FixedExpenseInsightDecision[]
   budgetIncomes BudgetIncome[]
+  sharedSplits  SharedSplit[]
 
   @@map("users")
 }
@@ -230,4 +231,46 @@ model BudgetIncome {
 
   @@unique([userId, month])
   @@map("budget_incomes")
+}
+
+model SharedSplit {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  title     String
+  mode      String   // "equal" | "custom"
+  createdAt DateTime @default(now())
+
+  user         User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items        SharedSplitItem[]
+  participants SharedSplitParticipant[]
+
+  @@index([userId])
+  @@map("shared_splits")
+}
+
+model SharedSplitItem {
+  id            String   @id @default(cuid())
+  sharedSplitId String
+  description   String
+  amount        Float
+  date          DateTime
+
+  sharedSplit SharedSplit @relation(fields: [sharedSplitId], references: [id], onDelete: Cascade)
+
+  @@index([sharedSplitId])
+  @@map("shared_split_items")
+}
+
+model SharedSplitParticipant {
+  id            String @id @default(cuid())
+  sharedSplitId String
+  name          String
+  amount        Float
+  position      Int
+
+  sharedSplit SharedSplit @relation(fields: [sharedSplitId], references: [id], onDelete: Cascade)
+
+  @@index([sharedSplitId])
+  @@map("shared_split_participants")
 }
