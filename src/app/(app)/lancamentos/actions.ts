@@ -427,11 +427,6 @@ export async function deleteTransactionAction(id: string): Promise<ActionResult>
   return { success: true, message: "Lançamento excluído com sucesso" };
 }
 
-/** Extrai "YYYY-MM" de uma data de pagamento informada pelo usuário (não do "now" do servidor). */
-function referenceMonthFromDate(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-}
-
 /**
  * Marca uma ou mais despesas fixas como pagas, em lote. Cada item pode ter valor e data de
  * pagamento próprios (diferentes do `expectedAmount`/`dueDay` do template). Itens com template
@@ -468,7 +463,10 @@ export async function payFixedExpensesAction(items: unknown): Promise<ActionResu
       }
 
       const paidDate = new Date(item.paidDate);
-      const referenceMonth = referenceMonthFromDate(paidDate);
+      // Extrai "YYYY-MM" direto da string "YYYY-MM-DD" recebida do input, sem passar por
+      // getters de Date (que usam o fuso local do processo) — evita que `paidDate` seja
+      // interpretado como UTC e depois lido em fuso negativo, virando o mês errado.
+      const referenceMonth = item.paidDate.slice(0, 7);
 
       try {
         await tx.transaction.create({
