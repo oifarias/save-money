@@ -140,7 +140,7 @@ export function DivideStep({ total, initialMode, initialParticipants, onConfirme
                 placeholder={index === 0 ? "Você" : "Nome"}
                 value={row.name}
                 onChange={(event) => updateRow(index, { name: event.target.value })}
-                className="flex-1 rounded-xl border border-(--color-border) bg-(--color-surface) px-3.5 py-2.5 text-sm text-(--color-text) outline-none transition-colors focus:border-(--color-primary) focus:ring-2 focus:ring-(--color-primary)/20"
+                className="min-w-0 flex-1 rounded-xl border border-(--color-border) bg-(--color-surface) px-3.5 py-2.5 text-sm text-(--color-text) outline-none transition-colors focus:border-(--color-primary) focus:ring-2 focus:ring-(--color-primary)/20"
               />
               {mode === "equal" ? (
                 <span className="w-28 shrink-0 text-right font-numeric text-sm text-(--color-text-muted)">
