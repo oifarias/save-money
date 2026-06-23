@@ -63,9 +63,9 @@ export default async function LancamentosPage({ searchParams }: LancamentosPageP
         <p className="mt-1 text-sm text-(--color-text-muted)">Registre e acompanhe suas entradas e despesas</p>
       </div>
 
-      <FixedExpensesChecklist items={fixedExpensesChecklist} />
-
       <TransactionIntake categories={formCategories} tagSuggestions={tagSuggestions} />
+
+      <FixedExpensesChecklist items={fixedExpensesChecklist} />
 
       <TransactionsManager
         transactions={items}
