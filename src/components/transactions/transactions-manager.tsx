@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useSearchParams } from "next/navigation";
 import toast from "react-hot-toast";
-import { Download, Loader2, Pencil } from "lucide-react";
+import { ChevronDown, Download, Loader2, Pencil } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
@@ -54,6 +54,7 @@ export function TransactionsManager({
   const [deleting, setDeleting] = useState<TransactionListItem | null>(null);
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [summaryExpanded, setSummaryExpanded] = useState(true);
   const [isPending, startTransition] = useTransition();
 
   const [items, setItems] = useState(transactions);
@@ -196,19 +197,36 @@ export function TransactionsManager({
 
   return (
     <div id="lancamentos-realizados" className="flex flex-col gap-6">
-      <div>
-        <h2 className="font-display text-xl font-semibold text-(--color-text)">Lançamentos realizados</h2>
-        <p className="mt-1 text-sm text-(--color-text-muted)">Acompanhe, filtre e edite o que já foi lançado</p>
-      </div>
+      <button
+        type="button"
+        onClick={() => setSummaryExpanded((current) => !current)}
+        aria-expanded={summaryExpanded}
+        aria-controls="lancamentos-realizados-summary"
+        className="flex w-full items-center justify-between gap-3 text-left"
+      >
+        <div>
+          <h2 className="font-display text-xl font-semibold text-(--color-text)">Lançamentos realizados</h2>
+          <p className="mt-1 text-sm text-(--color-text-muted)">Acompanhe, filtre e edite o que já foi lançado</p>
+        </div>
+        <ChevronDown
+          className={`h-5 w-5 shrink-0 text-(--color-text-muted) transition-transform duration-200 ${summaryExpanded ? "rotate-180" : ""}`}
+          aria-hidden="true"
+        />
+      </button>
 
-      <SummaryCards
-        income={summary.income}
-        expense={summary.expense}
-        balance={summary.balance}
-        fixedExpense={summary.fixedExpense}
-        installments={{ currentMonth: 0, remaining: 0 }}
-        periodLabel={summary.periodLabel}
-      />
+      <div
+        id="lancamentos-realizados-summary"
+        className={`overflow-hidden transition-all duration-200 ${summaryExpanded ? "max-h-[10000px] opacity-100" : "max-h-0 opacity-0"}`}
+      >
+        <SummaryCards
+          income={summary.income}
+          expense={summary.expense}
+          balance={summary.balance}
+          fixedExpense={summary.fixedExpense}
+          installments={{ currentMonth: 0, remaining: 0 }}
+          periodLabel={summary.periodLabel}
+        />
+      </div>
 
       <FiltersPanel
         categories={categories}
