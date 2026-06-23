@@ -27,14 +27,17 @@ export function Modal({ open, title, onClose, children }: ModalProps) {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center sm:p-4 animate-fade-grow" role="presentation">
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-0 sm:items-center sm:p-4 animate-fade-grow"
+      role="presentation"
+    >
       <div
         ref={ref}
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
         tabIndex={-1}
-        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-(--color-border) bg-(--color-surface) p-6 shadow-xl outline-none animate-fade-grow sm:rounded-2xl"
+        className="max-h-[100dvh] w-full max-w-lg overflow-y-auto rounded-none border border-(--color-border) bg-(--color-surface) p-6 shadow-xl outline-none animate-fade-grow sm:max-h-[90dvh] sm:rounded-2xl"
       >
         <div className="mb-4 flex items-center justify-between">
           <h2 id="modal-title" className="font-display text-lg font-semibold text-(--color-text)">

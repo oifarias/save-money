@@ -38,7 +38,10 @@ export function ConfirmDialog({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 animate-fade-grow" role="presentation">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/40 p-4 animate-fade-grow"
+      role="presentation"
+    >
       <div
         ref={ref}
         role="alertdialog"
@@ -46,7 +49,7 @@ export function ConfirmDialog({
         aria-labelledby="confirm-dialog-title"
         aria-describedby="confirm-dialog-description"
         tabIndex={-1}
-        className="w-full max-w-sm rounded-2xl border border-(--color-border) bg-(--color-surface) p-6 shadow-xl outline-none animate-fade-grow"
+        className="max-h-[90dvh] w-full max-w-sm overflow-y-auto rounded-2xl border border-(--color-border) bg-(--color-surface) p-6 shadow-xl outline-none animate-fade-grow"
       >
         <h2 id="confirm-dialog-title" className="font-display text-lg font-semibold text-(--color-text)">
           {title}
