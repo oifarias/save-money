@@ -6,6 +6,7 @@ import {
   getBudgetProgress,
   getCategoryHistoricalAverages,
   getIncomeBaseline,
+  getInstallmentCommitmentsByCategory,
 } from "@/lib/budget-data";
 import type { Bucket } from "@/lib/budget-buckets";
 import { GoalsWizard } from "@/components/goals/goals-wizard";
@@ -38,9 +39,13 @@ export default async function MetasPage({ searchParams }: MetasPageProps) {
   const progress = await getBudgetProgress(userId, month);
 
   const showWizard = !progress || forceWizard;
-  const [incomeBaseline, categoryAveragesMap] = showWizard
-    ? await Promise.all([getIncomeBaseline(userId, month), getCategoryHistoricalAverages(userId)])
-    : [null, new Map<string, number>()];
+  const [incomeBaseline, categoryAveragesMap, committedByCategoryMap] = showWizard
+    ? await Promise.all([
+        getIncomeBaseline(userId, month),
+        getCategoryHistoricalAverages(userId),
+        getInstallmentCommitmentsByCategory(userId, month),
+      ])
+    : [null, new Map<string, number>(), new Map<string, number>()];
 
   const existingBudgets = progress?.categories.map((c) => ({
     categoryId: c.categoryId,
@@ -64,6 +69,7 @@ export default async function MetasPage({ searchParams }: MetasPageProps) {
           categories={rootCategories}
           incomeBaseline={incomeBaseline}
           categoryAverages={Object.fromEntries(categoryAveragesMap)}
+          committedByCategory={Object.fromEntries(committedByCategoryMap)}
           existingBudgets={existingBudgets}
         />
       )}

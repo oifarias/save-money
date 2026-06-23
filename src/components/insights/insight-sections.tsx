@@ -1,4 +1,4 @@
-import { AlertTriangle, Hash, Sprout, TrendingDown, TrendingUp } from "lucide-react";
+import { AlertTriangle, CalendarClock, Hash, Sprout, TrendingDown, TrendingUp } from "lucide-react";
 import { clsx } from "clsx";
 import { Card } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/format";
@@ -10,6 +10,7 @@ import type {
   FixedExpenseCandidate,
   FixedExpenseResolvedInsight,
   HashtagRanking,
+  InstallmentForecast,
   ReductionSuggestion,
 } from "@/lib/insights-data";
 
@@ -195,6 +196,55 @@ export function HashtagRankingCard({ data }: { data: HashtagRanking[] }) {
                   style={{ width: `${max > 0 ? (entry.total / max) * 100 : 0}%` }}
                 />
               </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
+export function InstallmentForecastCard({ data }: { data: InstallmentForecast[] }) {
+  return (
+    <Card>
+      <div className="flex items-center gap-2.5">
+        <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-(--color-primary)/10 text-(--color-primary)">
+          <CalendarClock className="h-4.5 w-4.5" aria-hidden="true" />
+        </span>
+        <div>
+          <h3 className="font-display text-base font-semibold text-(--color-text)">Previsibilidade de parcelamentos</h3>
+          <p className="mt-0.5 text-xs text-(--color-text-muted)">Quando cada parcelamento ativo termina</p>
+        </div>
+      </div>
+
+      {data.length === 0 ? (
+        <EmptySection message="Você não tem parcelamentos em andamento" />
+      ) : (
+        <ul className="mt-4 flex flex-col gap-3">
+          {data.map((entry) => (
+            <li key={entry.planId} className="rounded-xl border border-(--color-border) p-3.5">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm font-medium text-(--color-text)">{entry.baseDescription}</span>
+                {entry.categoryName && (
+                  <span className="rounded-full bg-(--color-border)/50 px-2.5 py-1 text-xs font-medium text-(--color-text-muted)">
+                    {entry.categoryName}
+                  </span>
+                )}
+              </div>
+              <p className="mt-2 text-xs text-(--color-text-muted)">
+                Termina em <span className="font-medium text-(--color-text)">{entry.endMonthLabel}</span>,{" "}
+                {entry.remainingInstallments === 1 ? (
+                  <>
+                    falta <span className="font-numeric font-medium text-(--color-text)">1 parcela</span>
+                  </>
+                ) : (
+                  <>
+                    faltam{" "}
+                    <span className="font-numeric font-medium text-(--color-text)">{entry.remainingInstallments} parcelas</span>
+                  </>
+                )}{" "}
+                de <span className="font-numeric font-medium text-(--color-text)">{formatCurrency(entry.estimatedAmount)}</span>
+              </p>
             </li>
           ))}
         </ul>

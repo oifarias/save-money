@@ -206,6 +206,7 @@ export function TransactionsManager({
         expense={summary.expense}
         balance={summary.balance}
         fixedExpense={summary.fixedExpense}
+        installments={{ currentMonth: 0, remaining: 0 }}
         periodLabel={summary.periodLabel}
       />
 

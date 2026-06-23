@@ -8,6 +8,7 @@ import { syncTransactionTags } from "@/lib/tags";
 import { transactionSchema } from "@/lib/validations/transaction";
 import { bulkUpdateTransactionSchema } from "@/lib/validations/bulk-transaction";
 import { resolveCategoryAndSubcategory } from "@/lib/category-resolver";
+import { resolveInstallmentPlan } from "@/lib/installment-resolver";
 import { parseTransactionFilters } from "@/lib/validations/transaction-filters";
 import { buildTransactionWhere } from "@/lib/transaction-filters";
 import { getTransactionsPage } from "@/lib/transactions-query";
@@ -85,22 +86,34 @@ export async function createTransactionAction(_prev: ActionResult, formData: For
     return { success: false, fieldErrors: error };
   }
 
-  const transaction = await prisma.transaction.create({
-    data: {
-      userId,
-      accountId,
-      categoryId: categoryId || null,
-      subcategoryId: subcategoryId || null,
-      type: type as TransactionType,
-      amount: Number(amount),
-      date: new Date(date),
+  await prisma.$transaction(async (tx) => {
+    const installmentInfo = await resolveInstallmentPlan(tx, userId, {
       description,
-      isFixed: Boolean(isFixed),
-      recurrence: recurrence as Recurrence,
-    },
-  });
+      date: new Date(date),
+      amount: Number(amount),
+      categoryId,
+      subcategoryId,
+    });
 
-  await syncTransactionTags(prisma, userId, transaction.id, tags);
+    const created = await tx.transaction.create({
+      data: {
+        userId,
+        accountId,
+        categoryId: categoryId || null,
+        subcategoryId: subcategoryId || null,
+        type: type as TransactionType,
+        amount: Number(amount),
+        date: new Date(date),
+        description,
+        isFixed: Boolean(isFixed),
+        recurrence: recurrence as Recurrence,
+        installmentPlanId: installmentInfo?.installmentPlanId ?? null,
+        installmentNumber: installmentInfo?.installmentNumber ?? null,
+      },
+    });
+
+    await syncTransactionTags(tx, userId, created.id, tags);
+  });
 
   revalidatePath("/dashboard");
   revalidatePath("/lancamentos");
@@ -129,21 +142,34 @@ export async function updateTransactionAction(_prev: ActionResult, formData: For
     return { success: false, fieldErrors: error };
   }
 
-  await prisma.transaction.update({
-    where: { id },
-    data: {
-      categoryId: categoryId || null,
-      subcategoryId: subcategoryId || null,
-      type: type as TransactionType,
-      amount: Number(amount),
-      date: new Date(date),
+  await prisma.$transaction(async (tx) => {
+    const installmentInfo = await resolveInstallmentPlan(tx, userId, {
       description,
-      isFixed: Boolean(isFixed),
-      recurrence: recurrence as Recurrence,
-    },
-  });
+      date: new Date(date),
+      amount: Number(amount),
+      categoryId,
+      subcategoryId,
+      excludeTransactionId: id,
+    });
 
-  await syncTransactionTags(prisma, userId, id, tags);
+    await tx.transaction.update({
+      where: { id },
+      data: {
+        categoryId: categoryId || null,
+        subcategoryId: subcategoryId || null,
+        type: type as TransactionType,
+        amount: Number(amount),
+        date: new Date(date),
+        description,
+        isFixed: Boolean(isFixed),
+        recurrence: recurrence as Recurrence,
+        installmentPlanId: installmentInfo?.installmentPlanId ?? null,
+        installmentNumber: installmentInfo?.installmentNumber ?? null,
+      },
+    });
+
+    await syncTransactionTags(tx, userId, id, tags);
+  });
 
   revalidatePath("/dashboard");
   revalidatePath("/lancamentos");

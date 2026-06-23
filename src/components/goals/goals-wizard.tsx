@@ -18,12 +18,19 @@ type GoalsWizardProps = {
   categories: CategoryInfo[];
   incomeBaseline: IncomeBaseline | null;
   categoryAverages: Record<string, number>;
+  committedByCategory?: Record<string, number>;
   existingBudgets?: ExistingBudgetItem[];
 };
 
 type Step = "income" | "allocation" | "categories" | "done";
 
-export function GoalsWizard({ categories, incomeBaseline, categoryAverages, existingBudgets }: GoalsWizardProps) {
+export function GoalsWizard({
+  categories,
+  incomeBaseline,
+  categoryAverages,
+  committedByCategory,
+  existingBudgets,
+}: GoalsWizardProps) {
   const [step, setStep] = useState<Step>("income");
   const [income, setIncome] = useState(incomeBaseline?.amount ?? 0);
   const [buckets, setBuckets] = useState<Record<string, Bucket> | null>(null);
@@ -73,6 +80,7 @@ export function GoalsWizard({ categories, incomeBaseline, categoryAverages, exis
             categories={categories}
             buckets={buckets}
             categoryAverages={categoryAverages}
+            committedByCategory={committedByCategory}
             initialAmounts={initialAmounts}
             onBack={() => setStep("allocation")}
             onSaved={() => setStep("done")}

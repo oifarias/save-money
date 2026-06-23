@@ -1,4 +1,4 @@
-import { ArrowDownLeft, ArrowUpRight, PiggyBank, ShieldCheck } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, CreditCard, PiggyBank, ShieldCheck } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/format";
 import { clsx } from "clsx";
@@ -8,10 +8,18 @@ type SummaryCardsProps = {
   expense: number;
   balance: number;
   fixedExpense: number;
+  installments: { currentMonth: number; remaining: number };
   periodLabel?: string;
 };
 
-export function SummaryCards({ income, expense, balance, fixedExpense, periodLabel = "do mês" }: SummaryCardsProps) {
+export function SummaryCards({
+  income,
+  expense,
+  balance,
+  fixedExpense,
+  installments,
+  periodLabel = "do mês",
+}: SummaryCardsProps) {
   const cards = [
     {
       id: "income",
@@ -70,6 +78,23 @@ export function SummaryCards({ income, expense, balance, fixedExpense, periodLab
         </div>
         <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-(--color-accent)/15 text-(--color-accent)">
           <ShieldCheck className="h-5 w-5" aria-hidden="true" />
+        </span>
+      </Card>
+
+      <Card className="flex items-start justify-between border-(--color-primary)/30 bg-gradient-to-br from-(--color-primary)/10 to-transparent">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wide text-(--color-primary)">Total de parcelamentos</p>
+          <p className="mt-2 font-numeric text-xl font-semibold text-(--color-text) sm:text-2xl">
+            {formatCurrency(installments.currentMonth)}
+          </p>
+          <p className="mt-1 text-xs text-(--color-text-muted)">
+            {installments.remaining > 0
+              ? `Faltam ${formatCurrency(installments.remaining)} em parcelas futuras`
+              : "Nenhuma parcela pendente"}
+          </p>
+        </div>
+        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-(--color-primary)/15 text-(--color-primary)">
+          <CreditCard className="h-5 w-5" aria-hidden="true" />
         </span>
       </Card>
     </div>

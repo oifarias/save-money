@@ -5,6 +5,7 @@ import {
   FixedExpenseAlertCard,
   GrowthRankingCard,
   HashtagRankingCard,
+  InstallmentForecastCard,
   ReductionSuggestionsCard,
 } from "@/components/insights/insight-sections";
 
@@ -35,6 +36,7 @@ export default async function InsightsPage() {
             candidates={data.fixedExpenseCandidates}
             resolved={data.fixedExpenseResolvedInsights}
           />
+          <InstallmentForecastCard data={data.installmentForecasts} />
           <CategoryAveragesCard data={data.categoryAverages} windowLabel={data.windowLabel} />
           <HashtagRankingCard data={data.hashtagRanking} />
           <div className="lg:col-span-2">
