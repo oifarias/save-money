@@ -135,6 +135,7 @@ export function CategoryBudgetStep({
                   <label
                     className="min-w-0 flex-1 truncate text-sm font-medium text-(--color-text)"
                     htmlFor={`amount-${category.id}`}
+                    title={category.name}
                   >
                     {category.name}
                   </label>
