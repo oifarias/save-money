@@ -35,12 +35,18 @@ export type Insight = {
   description: string;
 };
 
+export type InstallmentTotals = {
+  currentMonth: number;
+  remaining: number;
+};
+
 export type DashboardData = {
   totals: {
     income: number;
     expense: number;
     balance: number;
     fixedExpense: number;
+    installments: InstallmentTotals;
   };
   categoryDistribution: CategorySlice[];
   monthlyTrend: MonthlyTrendPoint[];
@@ -69,7 +75,7 @@ async function getDashboardDataUncached(userId: string): Promise<DashboardData> 
   // Totais e distribuição agregados no banco (groupBy) em vez de trazer as transações do mês
   // inteiras e somar em memória — só o trend de 6 meses precisa de SQL bruto (date_trunc),
   // já que `groupBy` do Prisma não aceita expressões derivadas de coluna.
-  const [typeTotals, categoryTotals, trendRows, tagRows] = await Promise.all([
+  const [typeTotals, categoryTotals, trendRows, tagRows, installmentCurrentMonth, installmentPlans] = await Promise.all([
     prisma.transaction.groupBy({
       by: ["type", "isFixed"],
       where: { userId, date: { gte: monthStart, lt: nextMonthStart } },
@@ -90,6 +96,18 @@ async function getDashboardDataUncached(userId: string): Promise<DashboardData> 
       where: { transaction: { userId, type: "EXPENSE", date: { gte: monthStart, lt: nextMonthStart } } },
       select: { transaction: { select: { amount: true } }, tag: { select: { name: true } } },
     }),
+    prisma.transaction.aggregate({
+      where: { userId, installmentPlanId: { not: null }, date: { gte: monthStart, lt: nextMonthStart } },
+      _sum: { amount: true },
+    }),
+    prisma.installmentPlan.findMany({
+      where: { userId },
+      select: {
+        totalInstallments: true,
+        estimatedAmount: true,
+        transactions: { select: { installmentNumber: true } },
+      },
+    }),
   ]);
 
   let income = 0;
@@ -104,6 +122,22 @@ async function getDashboardDataUncached(userId: string): Promise<DashboardData> 
       if (row.isFixed) fixedExpense += sum;
     }
   }
+
+  // Plano "ativo" é derivado: existe pelo menos uma transação lançada com installmentNumber < totalInstallments.
+  // "Falta pagar" = (totalInstallments - maior installmentNumber já lançado) × estimatedAmount, por plano.
+  let installmentsRemaining = 0;
+  for (const plan of installmentPlans) {
+    if (plan.transactions.length === 0) continue;
+    const maxLaunched = Math.max(...plan.transactions.map((t) => t.installmentNumber ?? 0));
+    const remainingCount = plan.totalInstallments - maxLaunched;
+    if (remainingCount > 0) {
+      installmentsRemaining += remainingCount * plan.estimatedAmount;
+    }
+  }
+  const installments = {
+    currentMonth: Number(installmentCurrentMonth._sum.amount ?? 0),
+    remaining: installmentsRemaining,
+  };
   const balance = income - expense;
 
   const categoryIds = categoryTotals.map((row) => row.categoryId).filter((id): id is string => id !== null);
@@ -157,7 +191,7 @@ async function getDashboardDataUncached(userId: string): Promise<DashboardData> 
   });
 
   return {
-    totals: { income, expense, balance, fixedExpense },
+    totals: { income, expense, balance, fixedExpense, installments },
     categoryDistribution,
     monthlyTrend,
     insights,

@@ -43,6 +43,7 @@ model User {
   fixedExpenseInsightDecisions FixedExpenseInsightDecision[]
   budgetIncomes BudgetIncome[]
   sharedSplits  SharedSplit[]
+  installmentPlans InstallmentPlan[]
 
   @@map("users")
 }
@@ -113,6 +114,8 @@ model Transaction {
   description   String
   isFixed       Boolean         @default(false)
   recurrence    Recurrence      @default(NONE)
+  installmentPlanId String?
+  installmentNumber  Int?
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
 
@@ -120,12 +123,14 @@ model Transaction {
   account     Account          @relation(fields: [accountId], references: [id], onDelete: Cascade)
   category    Category?        @relation("TransactionCategory", fields: [categoryId], references: [id], onDelete: SetNull)
   subcategory Category?        @relation("TransactionSubcategory", fields: [subcategoryId], references: [id], onDelete: SetNull)
+  installmentPlan InstallmentPlan? @relation(fields: [installmentPlanId], references: [id], onDelete: SetNull)
   tags        TransactionTag[]
 
   @@index([userId, date])
   @@index([userId, type])
   @@index([categoryId])
   @@index([subcategoryId])
+  @@index([installmentPlanId])
   @@map("transactions")
 }
 
@@ -231,6 +236,25 @@ model BudgetIncome {
 
   @@unique([userId, month])
   @@map("budget_incomes")
+}
+
+model InstallmentPlan {
+  id                String   @id @default(cuid())
+  userId            String
+  baseDescription   String              // descrição sem o "(x/y)", ex: "Notebook"
+  totalInstallments Int
+  estimatedAmount   Float               // estimativa para projeção; NÃO é fonte de verdade do valor pago
+  startDate         DateTime            // data projetada da parcela 1
+  categoryId        String?
+  subcategoryId     String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@index([userId, baseDescription, totalInstallments])
+  @@map("installment_plans")
 }
 
 model SharedSplit {

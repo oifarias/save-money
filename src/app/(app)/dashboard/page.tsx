@@ -67,6 +67,7 @@ export default async function DashboardPage() {
         expense={dashboardData.totals.expense}
         balance={dashboardData.totals.balance}
         fixedExpense={dashboardData.totals.fixedExpense}
+        installments={dashboardData.totals.installments}
       />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
