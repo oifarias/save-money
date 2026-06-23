@@ -728,7 +728,7 @@ export function ImportWizard({ existingCategories }: ImportWizardProps) {
                     </table>
                   </div>
                   {totalPages > 1 && (
-                    <div className="flex items-center justify-between gap-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
                       <Button
                         type="button"
                         variant="ghost"
