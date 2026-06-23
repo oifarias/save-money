@@ -30,7 +30,8 @@ const FEATURES = [
   {
     icon: Lightbulb,
     title: "Insights",
-    description: "Ranking de categorias que mais cresceram, alertas de despesas fixas e sugestões de economia.",
+    description:
+      "Ranking de categorias que mais cresceram, previsibilidade de parcelamentos, alertas de despesas fixas e sugestões de economia.",
   },
 ];
 
