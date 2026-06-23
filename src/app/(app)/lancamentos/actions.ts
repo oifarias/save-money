@@ -9,6 +9,8 @@ import { transactionSchema } from "@/lib/validations/transaction";
 import { bulkUpdateTransactionSchema } from "@/lib/validations/bulk-transaction";
 import { resolveCategoryAndSubcategory } from "@/lib/category-resolver";
 import { resolveInstallmentPlan } from "@/lib/installment-resolver";
+import { resolveFixedExpenseTemplate } from "@/lib/fixed-expense-resolver";
+import { payFixedExpensesSchema } from "@/lib/validations/fixed-expense";
 import { parseTransactionFilters } from "@/lib/validations/transaction-filters";
 import { buildTransactionWhere } from "@/lib/transaction-filters";
 import { getTransactionsPage } from "@/lib/transactions-query";
@@ -16,7 +18,7 @@ import { dashboardCacheTag } from "@/lib/dashboard-data";
 import { comparativeCacheTag } from "@/lib/comparative-data";
 import { insightsCacheTag } from "@/lib/insights-data";
 import type { TransactionListItem } from "@/components/transactions/transaction-list";
-import type { Prisma, Recurrence, TransactionType } from "@/generated/prisma/client";
+import { Prisma, type Recurrence, type TransactionType } from "@/generated/prisma/client";
 
 /** Invalida o cache (`unstable_cache`) das telas agregadas — chamar após qualquer mutação de Transaction. */
 function invalidateAggregateCaches(userId: string) {
@@ -95,6 +97,16 @@ export async function createTransactionAction(_prev: ActionResult, formData: For
       subcategoryId,
     });
 
+    const fixedExpenseInfo = await resolveFixedExpenseTemplate(tx, userId, {
+      isFixed: Boolean(isFixed),
+      description,
+      date: new Date(date),
+      amount: Number(amount),
+      categoryId,
+      subcategoryId,
+      previousTemplateId: null,
+    });
+
     const created = await tx.transaction.create({
       data: {
         userId,
@@ -109,6 +121,7 @@ export async function createTransactionAction(_prev: ActionResult, formData: For
         recurrence: recurrence as Recurrence,
         installmentPlanId: installmentInfo?.installmentPlanId ?? null,
         installmentNumber: installmentInfo?.installmentNumber ?? null,
+        fixedExpenseTemplateId: fixedExpenseInfo.fixedExpenseTemplateId,
       },
     });
 
@@ -152,6 +165,17 @@ export async function updateTransactionAction(_prev: ActionResult, formData: For
       excludeTransactionId: id,
     });
 
+    const fixedExpenseInfo = await resolveFixedExpenseTemplate(tx, userId, {
+      isFixed: Boolean(isFixed),
+      description,
+      date: new Date(date),
+      amount: Number(amount),
+      categoryId,
+      subcategoryId,
+      excludeTransactionId: id,
+      previousTemplateId: existing.fixedExpenseTemplateId,
+    });
+
     await tx.transaction.update({
       where: { id },
       data: {
@@ -165,6 +189,7 @@ export async function updateTransactionAction(_prev: ActionResult, formData: For
         recurrence: recurrence as Recurrence,
         installmentPlanId: installmentInfo?.installmentPlanId ?? null,
         installmentNumber: installmentInfo?.installmentNumber ?? null,
+        fixedExpenseTemplateId: fixedExpenseInfo.fixedExpenseTemplateId,
       },
     });
 
@@ -400,6 +425,95 @@ export async function deleteTransactionAction(id: string): Promise<ActionResult>
   revalidatePath("/lancamentos");
   invalidateAggregateCaches(userId);
   return { success: true, message: "Lançamento excluído com sucesso" };
+}
+
+/**
+ * Marca uma ou mais despesas fixas como pagas, em lote. Cada item pode ter valor e data de
+ * pagamento próprios (diferentes do `expectedAmount`/`dueDay` do template). Itens com template
+ * inexistente/de outro usuário/inativo, ou que já tenham um pagamento no mês de referência
+ * (constraint `[fixedExpenseTemplateId, referenceMonth]`), são reportados como falha sem abortar
+ * o restante do lote.
+ */
+export async function payFixedExpensesAction(items: unknown): Promise<ActionResult> {
+  const userId = await requireUserId();
+
+  const parsed = payFixedExpensesSchema.safeParse(items);
+  if (!parsed.success) {
+    return { success: false, fieldErrors: flattenZodErrors(parsed.error) };
+  }
+
+  const accountId = await getDefaultAccountId(userId);
+  if (!accountId) {
+    return { success: false, message: "Nenhuma conta encontrada para o usuário" };
+  }
+
+  let processedCount = 0;
+  let notFoundCount = 0;
+  let alreadyPaidCount = 0;
+
+  await prisma.$transaction(async (tx) => {
+    for (const item of parsed.data) {
+      const template = await tx.fixedExpenseTemplate.findFirst({
+        where: { id: item.templateId, userId, isActive: true },
+      });
+
+      if (!template) {
+        notFoundCount += 1;
+        continue;
+      }
+
+      const paidDate = new Date(item.paidDate);
+      // Extrai "YYYY-MM" direto da string "YYYY-MM-DD" recebida do input, sem passar por
+      // getters de Date (que usam o fuso local do processo) — evita que `paidDate` seja
+      // interpretado como UTC e depois lido em fuso negativo, virando o mês errado.
+      const referenceMonth = item.paidDate.slice(0, 7);
+
+      try {
+        await tx.transaction.create({
+          data: {
+            userId,
+            accountId,
+            categoryId: template.categoryId,
+            subcategoryId: template.subcategoryId,
+            type: "EXPENSE",
+            amount: item.paidAmount,
+            date: paidDate,
+            description: template.description,
+            isFixed: true,
+            fixedExpenseTemplateId: template.id,
+            referenceMonth,
+          },
+        });
+        processedCount += 1;
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+          alreadyPaidCount += 1;
+          continue;
+        }
+        throw error;
+      }
+    }
+  });
+
+  revalidatePath("/dashboard");
+  revalidatePath("/lancamentos");
+  invalidateAggregateCaches(userId);
+
+  if (processedCount === parsed.data.length) {
+    return { success: true, message: `${processedCount} despesa(s) marcada(s) como paga(s)` };
+  }
+
+  const failureParts: string[] = [];
+  if (alreadyPaidCount > 0) failureParts.push(`${alreadyPaidCount} já estava(m) paga(s) neste mês`);
+  if (notFoundCount > 0) failureParts.push(`${notFoundCount} não foi(ram) encontrada(s)`);
+
+  const failureMessage = failureParts.join("; ");
+  const message =
+    processedCount > 0
+      ? `${processedCount} despesa(s) processada(s); ${failureMessage}`
+      : `Nenhuma despesa foi processada: ${failureMessage}`;
+
+  return { success: false, message };
 }
 
 function flattenZodErrors(error: { issues: { path: PropertyKey[]; message: string }[] }) {

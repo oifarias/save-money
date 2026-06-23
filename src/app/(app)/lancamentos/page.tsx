@@ -3,9 +3,10 @@ import { prisma } from "@/lib/prisma";
 import { parseTransactionFilters } from "@/lib/validations/transaction-filters";
 import { buildTransactionWhere, getEffectivePeriod, TRANSACTIONS_PAGE_SIZE } from "@/lib/transaction-filters";
 import { getTransactionsPage } from "@/lib/transactions-query";
+import { getFixedExpensesChecklist } from "@/lib/fixed-expenses-data";
 import { TransactionIntake } from "@/components/transactions/transaction-intake";
 import { TransactionsManager } from "@/components/transactions/transactions-manager";
-import { ShareExplainerCard } from "@/components/transactions/share-explainer-card";
+import { FixedExpensesChecklist } from "@/components/transactions/fixed-expenses-checklist";
 
 type LancamentosPageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -28,19 +29,21 @@ export default async function LancamentosPage({ searchParams }: LancamentosPageP
   const effectivePeriod = getEffectivePeriod(filters);
   const periodLabel = effectivePeriod ? PERIOD_SUMMARY_LABELS[effectivePeriod] : "na data selecionada";
 
-  const [total, items, categories, tags, incomeAgg, expenseAgg, fixedExpenseAgg] = await Promise.all([
-    prisma.transaction.count({ where }),
-    getTransactionsPage(where, 1),
-    prisma.category.findMany({
-      where: { userId, parentId: null },
-      orderBy: { name: "asc" },
-      include: { children: { orderBy: { name: "asc" }, select: { id: true, name: true } } },
-    }),
-    prisma.tag.findMany({ where: { userId }, orderBy: { name: "asc" }, select: { name: true } }),
-    prisma.transaction.aggregate({ where: { ...where, type: "INCOME" }, _sum: { amount: true } }),
-    prisma.transaction.aggregate({ where: { ...where, type: "EXPENSE" }, _sum: { amount: true } }),
-    prisma.transaction.aggregate({ where: { ...where, type: "EXPENSE", isFixed: true }, _sum: { amount: true } }),
-  ]);
+  const [total, items, categories, tags, incomeAgg, expenseAgg, fixedExpenseAgg, fixedExpensesChecklist] =
+    await Promise.all([
+      prisma.transaction.count({ where }),
+      getTransactionsPage(where, 1),
+      prisma.category.findMany({
+        where: { userId, parentId: null },
+        orderBy: { name: "asc" },
+        include: { children: { orderBy: { name: "asc" }, select: { id: true, name: true } } },
+      }),
+      prisma.tag.findMany({ where: { userId }, orderBy: { name: "asc" }, select: { name: true } }),
+      prisma.transaction.aggregate({ where: { ...where, type: "INCOME" }, _sum: { amount: true } }),
+      prisma.transaction.aggregate({ where: { ...where, type: "EXPENSE" }, _sum: { amount: true } }),
+      prisma.transaction.aggregate({ where: { ...where, type: "EXPENSE", isFixed: true }, _sum: { amount: true } }),
+      getFixedExpensesChecklist(userId),
+    ]);
 
   const income = incomeAgg._sum.amount ?? 0;
   const expense = expenseAgg._sum.amount ?? 0;
@@ -60,9 +63,9 @@ export default async function LancamentosPage({ searchParams }: LancamentosPageP
         <p className="mt-1 text-sm text-(--color-text-muted)">Registre e acompanhe suas entradas e despesas</p>
       </div>
 
-      <ShareExplainerCard />
-
       <TransactionIntake categories={formCategories} tagSuggestions={tagSuggestions} />
+
+      <FixedExpensesChecklist items={fixedExpensesChecklist} />
 
       <TransactionsManager
         transactions={items}
