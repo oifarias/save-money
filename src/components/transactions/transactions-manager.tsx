@@ -229,7 +229,7 @@ export function TransactionsManager({
           className="sticky top-2 z-10 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-(--color-primary)/30 bg-(--color-primary)/10 px-4 py-3"
         >
           <p className="text-sm font-medium text-(--color-text)">{selectedCount} selecionado(s)</p>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button type="button" variant="ghost" onClick={() => setSelectedIds(new Set())}>
               Limpar seleção
             </Button>

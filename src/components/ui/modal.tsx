@@ -28,7 +28,7 @@ export function Modal({ open, title, onClose, children }: ModalProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-0 sm:items-center sm:p-4 animate-fade-grow"
+      className="fixed inset-0 z-50 flex flex-col items-center overflow-y-auto bg-black/40 sm:p-4 animate-fade-grow"
       role="presentation"
     >
       <div
@@ -37,7 +37,7 @@ export function Modal({ open, title, onClose, children }: ModalProps) {
         aria-modal="true"
         aria-labelledby="modal-title"
         tabIndex={-1}
-        className="max-h-[100dvh] w-full max-w-lg overflow-y-auto rounded-none border border-(--color-border) bg-(--color-surface) p-6 shadow-xl outline-none animate-fade-grow sm:max-h-[90dvh] sm:rounded-2xl"
+        className="my-auto max-h-[100dvh] w-full max-w-lg overflow-y-auto rounded-none border-(--color-border) bg-(--color-surface) p-6 shadow-xl outline-none animate-fade-grow sm:max-h-[90dvh] sm:rounded-2xl sm:border"
       >
         <div className="mb-4 flex items-center justify-between">
           <h2 id="modal-title" className="font-display text-lg font-semibold text-(--color-text)">

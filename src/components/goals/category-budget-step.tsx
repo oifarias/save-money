@@ -132,7 +132,11 @@ export function CategoryBudgetStep({
                   >
                     <Icon className="h-4.5 w-4.5" aria-hidden="true" />
                   </span>
-                  <label className="flex-1 text-sm font-medium text-(--color-text)" htmlFor={`amount-${category.id}`}>
+                  <label
+                    className="min-w-0 flex-1 truncate text-sm font-medium text-(--color-text)"
+                    htmlFor={`amount-${category.id}`}
+                    title={category.name}
+                  >
                     {category.name}
                   </label>
                   <input
