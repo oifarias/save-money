@@ -465,15 +465,15 @@ export function ImportWizard({ existingCategories }: ImportWizardProps) {
       {step === "map" && sheet && (
         <>
           <Card className="flex flex-col gap-4">
-            <div className="flex items-center justify-between gap-3">
-              <div>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="min-w-0">
                 <h2 className="font-display text-base font-semibold text-(--color-text)">Mapeamento de colunas</h2>
-                <p className="mt-0.5 text-xs text-(--color-text-muted)">
+                <p className="mt-0.5 truncate text-xs text-(--color-text-muted)">
                   {fileName} · {sheet.rows.length} linha(s) encontrada(s)
                   {!isMappingExpanded && isMappingComplete && " · detectado automaticamente"}
                 </p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 {isMappingComplete && (
                   <Button
                     type="button"
