@@ -1,6 +1,7 @@
 import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { monthLabel } from "@/lib/format";
+import { getFixedExpensesChecklist } from "@/lib/fixed-expenses-data";
 
 function startOfMonth(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), 1);
@@ -40,12 +41,20 @@ export type InstallmentTotals = {
   remaining: number;
 };
 
+export type FixedExpenseTemplatesTotals = {
+  pendingTotal: number;
+  paidTotal: number;
+  pendingCount: number;
+  paidCount: number;
+};
+
 export type DashboardData = {
   totals: {
     income: number;
     expense: number;
     balance: number;
     fixedExpense: number;
+    fixedExpenseTemplates: FixedExpenseTemplatesTotals;
     installments: InstallmentTotals;
   };
   categoryDistribution: CategorySlice[];
@@ -75,7 +84,15 @@ async function getDashboardDataUncached(userId: string): Promise<DashboardData> 
   // Totais e distribuição agregados no banco (groupBy) em vez de trazer as transações do mês
   // inteiras e somar em memória — só o trend de 6 meses precisa de SQL bruto (date_trunc),
   // já que `groupBy` do Prisma não aceita expressões derivadas de coluna.
-  const [typeTotals, categoryTotals, trendRows, tagRows, installmentCurrentMonth, installmentPlans] = await Promise.all([
+  const [
+    typeTotals,
+    categoryTotals,
+    trendRows,
+    tagRows,
+    installmentCurrentMonth,
+    installmentPlans,
+    fixedExpenseChecklist,
+  ] = await Promise.all([
     prisma.transaction.groupBy({
       by: ["type", "isFixed"],
       where: { userId, date: { gte: monthStart, lt: nextMonthStart } },
@@ -108,6 +125,7 @@ async function getDashboardDataUncached(userId: string): Promise<DashboardData> 
         transactions: { select: { installmentNumber: true } },
       },
     }),
+    getFixedExpensesChecklist(userId, monthKeyOf(monthStart)),
   ]);
 
   let income = 0;
@@ -122,6 +140,29 @@ async function getDashboardDataUncached(userId: string): Promise<DashboardData> 
       if (row.isFixed) fixedExpense += sum;
     }
   }
+
+  // Breakdown pendente/pago das despesas fixas COM TEMPLATE (FixedExpenseTemplate), distinto do
+  // `fixedExpense` acima (que é só a soma simples por `Transaction.isFixed`). Pago usa o valor
+  // real pago (paidAmount, vindo da Transaction criada), pendente usa o expectedAmount do template.
+  let fixedExpenseTemplatesPendingTotal = 0;
+  let fixedExpenseTemplatesPaidTotal = 0;
+  let fixedExpenseTemplatesPendingCount = 0;
+  let fixedExpenseTemplatesPaidCount = 0;
+  for (const item of fixedExpenseChecklist) {
+    if (item.status === "paid") {
+      fixedExpenseTemplatesPaidTotal += item.paidAmount ?? 0;
+      fixedExpenseTemplatesPaidCount += 1;
+    } else {
+      fixedExpenseTemplatesPendingTotal += item.expectedAmount;
+      fixedExpenseTemplatesPendingCount += 1;
+    }
+  }
+  const fixedExpenseTemplates: FixedExpenseTemplatesTotals = {
+    pendingTotal: fixedExpenseTemplatesPendingTotal,
+    paidTotal: fixedExpenseTemplatesPaidTotal,
+    pendingCount: fixedExpenseTemplatesPendingCount,
+    paidCount: fixedExpenseTemplatesPaidCount,
+  };
 
   // Plano "ativo" é derivado: existe pelo menos uma transação lançada com installmentNumber < totalInstallments.
   // "Falta pagar" = (totalInstallments - maior installmentNumber já lançado) × estimatedAmount, por plano.
@@ -191,7 +232,7 @@ async function getDashboardDataUncached(userId: string): Promise<DashboardData> 
   });
 
   return {
-    totals: { income, expense, balance, fixedExpense, installments },
+    totals: { income, expense, balance, fixedExpense, fixedExpenseTemplates, installments },
     categoryDistribution,
     monthlyTrend,
     insights,

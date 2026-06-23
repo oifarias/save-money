@@ -44,6 +44,7 @@ model User {
   budgetIncomes BudgetIncome[]
   sharedSplits  SharedSplit[]
   installmentPlans InstallmentPlan[]
+  fixedExpenseTemplates FixedExpenseTemplate[]
 
   @@map("users")
 }
@@ -81,6 +82,8 @@ model Category {
   subTransactions Transaction[] @relation("TransactionSubcategory")
   budgets      Budget[]
   goals        Goal[]
+  fixedExpenseTemplates    FixedExpenseTemplate[] @relation("FixedExpenseTemplateCategory")
+  fixedExpenseSubtemplates FixedExpenseTemplate[] @relation("FixedExpenseTemplateSubcategory")
 
   @@unique([userId, parentId, name])
   @@index([userId])
@@ -116,6 +119,8 @@ model Transaction {
   recurrence    Recurrence      @default(NONE)
   installmentPlanId String?
   installmentNumber  Int?
+  fixedExpenseTemplateId String?
+  referenceMonth    String?         // formato "YYYY-MM" — preenchido SÓ quando a transação foi gerada via "marcar como pago" da checklist de despesa fixa; fica null para lançamentos normais, inclusive despesas fixas lançadas manualmente
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
 
@@ -124,6 +129,7 @@ model Transaction {
   category    Category?        @relation("TransactionCategory", fields: [categoryId], references: [id], onDelete: SetNull)
   subcategory Category?        @relation("TransactionSubcategory", fields: [subcategoryId], references: [id], onDelete: SetNull)
   installmentPlan InstallmentPlan? @relation(fields: [installmentPlanId], references: [id], onDelete: SetNull)
+  fixedExpenseTemplate FixedExpenseTemplate? @relation(fields: [fixedExpenseTemplateId], references: [id], onDelete: SetNull)
   tags        TransactionTag[]
 
   @@index([userId, date])
@@ -131,6 +137,12 @@ model Transaction {
   @@index([categoryId])
   @@index([subcategoryId])
   @@index([installmentPlanId])
+  @@index([fixedExpenseTemplateId])
+  // `referenceMonth` só é preenchido quando a transação vem da checklist de despesa fixa; nesse caso,
+  // garantimos no máximo um pagamento por template/mês. Para as demais transações (fixedExpenseTemplateId
+  // e referenceMonth ambos null), o Postgres NÃO considera NULLs iguais entre si em unique constraints,
+  // então múltiplas linhas com ambos null coexistem livremente — esse é o comportamento desejado.
+  @@unique([fixedExpenseTemplateId, referenceMonth])
   @@map("transactions")
 }
 
@@ -255,6 +267,29 @@ model InstallmentPlan {
 
   @@index([userId, baseDescription, totalInstallments])
   @@map("installment_plans")
+}
+
+model FixedExpenseTemplate {
+  id             String   @id @default(cuid())
+  userId         String
+  description    String
+  expectedAmount Float
+  dueDay         Int      // dia do mês (1-31), derivado da data do lançamento que originou o template
+  categoryId     String?
+  subcategoryId  String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category     Category?     @relation("FixedExpenseTemplateCategory", fields: [categoryId], references: [id], onDelete: SetNull)
+  subcategory  Category?     @relation("FixedExpenseTemplateSubcategory", fields: [subcategoryId], references: [id], onDelete: SetNull)
+  transactions Transaction[]
+
+  @@index([userId, isActive])
+  @@index([categoryId])
+  @@index([subcategoryId])
+  @@map("fixed_expense_templates")
 }
 
 model SharedSplit {
