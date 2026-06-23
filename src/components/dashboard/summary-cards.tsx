@@ -1,7 +1,8 @@
-import { ArrowDownLeft, ArrowUpRight, CreditCard, PiggyBank, ShieldCheck } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, CalendarCheck, CreditCard, PiggyBank, ShieldCheck } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/format";
 import { clsx } from "clsx";
+import type { FixedExpenseTemplatesTotals } from "@/lib/dashboard-data";
 
 type SummaryCardsProps = {
   income: number;
@@ -10,6 +11,7 @@ type SummaryCardsProps = {
   fixedExpense: number;
   installments: { currentMonth: number; remaining: number };
   periodLabel?: string;
+  fixedExpenseTemplates?: FixedExpenseTemplatesTotals;
 };
 
 export function SummaryCards({
@@ -19,6 +21,7 @@ export function SummaryCards({
   fixedExpense,
   installments,
   periodLabel = "do mês",
+  fixedExpenseTemplates,
 }: SummaryCardsProps) {
   const cards = [
     {
@@ -97,6 +100,29 @@ export function SummaryCards({
           <CreditCard className="h-5 w-5" aria-hidden="true" />
         </span>
       </Card>
+
+      {fixedExpenseTemplates && (
+        <Card className="flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-medium uppercase tracking-wide text-(--color-text-muted)">Despesas fixas (mês)</p>
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-(--color-accent)/15 text-(--color-accent)">
+              <CalendarCheck className="h-5 w-5" aria-hidden="true" />
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-(--color-text-muted)">Pendente ({fixedExpenseTemplates.pendingCount})</span>
+            <span className="font-numeric text-sm font-semibold text-(--color-accent)">
+              {formatCurrency(fixedExpenseTemplates.pendingTotal)}
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-(--color-text-muted)">Pago ({fixedExpenseTemplates.paidCount})</span>
+            <span className="font-numeric text-sm font-semibold text-(--color-success)">
+              {formatCurrency(fixedExpenseTemplates.paidTotal)}
+            </span>
+          </div>
+        </Card>
+      )}
     </div>
   );
 }
