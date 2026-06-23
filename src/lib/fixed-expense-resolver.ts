@@ -85,7 +85,7 @@ export async function resolveFixedExpenseTemplate(
   // exatamente um, vinculamos SEM sobrescrever seus dados — é só mais uma transação naquela
   // série (ex.: lançamento do mês seguinte feito manualmente).
   const normalizedDescription = normalizeDescription(input.description);
-  const categoryId = input.categoryId ?? null;
+  const categoryId = input.categoryId || null;
 
   const candidates = await tx.fixedExpenseTemplate.findMany({
     where: { userId, isActive: true, categoryId },
@@ -105,7 +105,7 @@ export async function resolveFixedExpenseTemplate(
       expectedAmount: input.amount,
       dueDay: input.date.getDate(),
       categoryId,
-      subcategoryId: input.subcategoryId ?? null,
+      subcategoryId: input.subcategoryId || null,
       isActive: true,
     },
   });
