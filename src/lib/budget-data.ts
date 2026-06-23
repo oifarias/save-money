@@ -116,17 +116,64 @@ export type BudgetCategoryProgress = {
   bucket: Bucket;
   limitAmount: number;
   spent: number;
+  committed: number;
 };
 
 export type BudgetProgress = {
   month: string;
   income: number;
-  necessidade: { limit: number; spent: number };
-  desejo: { limit: number; spent: number };
+  necessidade: { limit: number; spent: number; committed: number };
+  desejo: { limit: number; spent: number; committed: number };
   savingsTarget: number;
   savingsActual: number;
   categories: BudgetCategoryProgress[];
 };
+
+function diffInMonths(monthKey: string, startDate: Date) {
+  const [year, month] = monthKey.split("-").map(Number);
+  return (year - startDate.getFullYear()) * 12 + (month - 1 - startDate.getMonth());
+}
+
+/**
+ * Calcula, para o mês `monthKey`, o valor comprometido por categoria a partir de `InstallmentPlan`s
+ * ativos com `categoryId` definido. Para cada plano, projeta o `installmentNumber` correspondente
+ * àquele mês (mesma lógica do resolver: `diffInMonths(monthKey, startDate) + 1`). Se a parcela já
+ * foi lançada como `Transaction` real dentro do próprio mês, o comprometido daquele plano é 0
+ * (já está em `spent`, evita contar em dobro). Planos com `categoryId = null` não participam.
+ */
+export async function getInstallmentCommitmentsByCategory(userId: string, monthKey: string): Promise<Map<string, number>> {
+  const [year, month] = monthKey.split("-").map(Number);
+  const monthStart = new Date(year, month - 1, 1);
+  const nextMonthStart = new Date(year, month, 1);
+
+  const plans = await prisma.installmentPlan.findMany({
+    where: { userId, categoryId: { not: null } },
+    select: {
+      categoryId: true,
+      totalInstallments: true,
+      estimatedAmount: true,
+      startDate: true,
+      transactions: { select: { installmentNumber: true, date: true } },
+    },
+  });
+
+  const committedByCategory = new Map<string, number>();
+
+  for (const plan of plans) {
+    const categoryId = plan.categoryId as string;
+    const projectedInstallmentNumber = diffInMonths(monthKey, plan.startDate) + 1;
+    if (projectedInstallmentNumber < 1 || projectedInstallmentNumber > plan.totalInstallments) continue;
+
+    const alreadyLaunchedThisMonth = plan.transactions.some(
+      (t) => t.installmentNumber === projectedInstallmentNumber && t.date >= monthStart && t.date < nextMonthStart
+    );
+    if (alreadyLaunchedThisMonth) continue;
+
+    committedByCategory.set(categoryId, (committedByCategory.get(categoryId) ?? 0) + plan.estimatedAmount);
+  }
+
+  return committedByCategory;
+}
 
 /** Retorna null quando o usuário ainda não definiu metas para esse mês (chamador decide mostrar o wizard). */
 export async function getBudgetProgress(userId: string, monthKey: string): Promise<BudgetProgress | null> {
@@ -141,13 +188,14 @@ export async function getBudgetProgress(userId: string, monthKey: string): Promi
   const nextMonthStart = new Date(year, month, 1);
   const categoryIds = budgets.map((b) => b.categoryId);
 
-  const [spentRows, incomeRow] = await Promise.all([
+  const [spentRows, incomeRow, committedByCategory] = await Promise.all([
     prisma.transaction.groupBy({
       by: ["categoryId"],
       where: { userId, type: "EXPENSE", categoryId: { in: categoryIds }, date: { gte: monthStart, lt: nextMonthStart } },
       _sum: { amount: true },
     }),
     prisma.budgetIncome.findUnique({ where: { userId_month: { userId, month: monthKey } } }),
+    getInstallmentCommitmentsByCategory(userId, monthKey),
   ]);
 
   const spentByCategory = new Map(spentRows.map((row) => [row.categoryId as string, row._sum.amount ?? 0]));
@@ -162,13 +210,17 @@ export async function getBudgetProgress(userId: string, monthKey: string): Promi
       bucket: (b.bucket as Bucket) ?? "desejo",
       limitAmount: b.limitAmount,
       spent: spentByCategory.get(b.categoryId) ?? 0,
+      committed: committedByCategory.get(b.categoryId) ?? 0,
     }))
     .sort((a, b) => b.limitAmount - a.limitAmount);
 
   function sumBucket(bucket: Bucket) {
     return categories
       .filter((c) => c.bucket === bucket)
-      .reduce((acc, c) => ({ limit: acc.limit + c.limitAmount, spent: acc.spent + c.spent }), { limit: 0, spent: 0 });
+      .reduce(
+        (acc, c) => ({ limit: acc.limit + c.limitAmount, spent: acc.spent + c.spent, committed: acc.committed + c.committed }),
+        { limit: 0, spent: 0, committed: 0 }
+      );
   }
 
   const necessidade = sumBucket("necessidade");

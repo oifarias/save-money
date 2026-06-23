@@ -75,6 +75,17 @@ export type FixedExpenseResolvedInsight = {
   decidedAt: string;
 };
 
+export type InstallmentForecast = {
+  planId: string;
+  baseDescription: string;
+  categoryName: string | null;
+  remainingInstallments: number;
+  totalInstallments: number;
+  estimatedAmount: number;
+  remainingAmount: number;
+  endMonthLabel: string;
+};
+
 export type InsightsPageData = {
   windowLabel: string;
   growthWindowLabel: { from: string; to: string };
@@ -85,6 +96,7 @@ export type InsightsPageData = {
   fixedExpenseAlert: FixedExpenseAlert | null;
   fixedExpenseCandidates: FixedExpenseCandidate[];
   fixedExpenseResolvedInsights: FixedExpenseResolvedInsight[];
+  installmentForecasts: InstallmentForecast[];
   hasData: boolean;
 };
 
@@ -106,7 +118,7 @@ async function getInsightsPageDataUncached(userId: string): Promise<InsightsPage
   const historyStart = addMonths(monthStart, -(HISTORY_WINDOW - 1));
   const growthStart = addMonths(monthStart, -(GROWTH_WINDOW - 1));
 
-  const [transactions, decisions] = await Promise.all([
+  const [transactions, decisions, installmentPlans] = await Promise.all([
     prisma.transaction.findMany({
       where: { userId, type: "EXPENSE", date: { gte: historyStart, lt: nextMonthStart } },
       select: {
@@ -120,6 +132,18 @@ async function getInsightsPageDataUncached(userId: string): Promise<InsightsPage
       },
     }),
     prisma.fixedExpenseInsightDecision.findMany({ where: { userId } }),
+    prisma.installmentPlan.findMany({
+      where: { userId },
+      select: {
+        id: true,
+        baseDescription: true,
+        totalInstallments: true,
+        estimatedAmount: true,
+        startDate: true,
+        categoryId: true,
+        transactions: { select: { installmentNumber: true } },
+      },
+    }),
   ]);
 
   const categoriesById = new Map<string, CategoryMeta>();
@@ -259,6 +283,40 @@ async function getInsightsPageDataUncached(userId: string): Promise<InsightsPage
     }))
     .sort((a, b) => b.decidedAt.localeCompare(a.decidedAt));
 
+  // 8. Previsibilidade de parcelamentos: para cada plano ativo (ainda falta pelo menos 1 parcela),
+  // calcula quando termina e quanto falta pagar — fato direto sobre dados já estruturados, sem
+  // necessidade de tabela de decisão (não é uma sugestão a aceitar/descartar).
+  const installmentPlanCategoryIds = Array.from(
+    new Set(installmentPlans.map((p) => p.categoryId).filter((id): id is string => Boolean(id)))
+  );
+  const installmentPlanCategories =
+    installmentPlanCategoryIds.length > 0
+      ? await prisma.category.findMany({ where: { id: { in: installmentPlanCategoryIds }, userId }, select: { id: true, name: true } })
+      : [];
+  const installmentPlanCategoryNamesById = new Map(installmentPlanCategories.map((c) => [c.id, c.name]));
+
+  const installmentForecasts: InstallmentForecast[] = installmentPlans
+    .map((plan) => {
+      const lastLaunchedInstallment =
+        plan.transactions.length > 0 ? Math.max(...plan.transactions.map((t) => t.installmentNumber ?? 0)) : 0;
+      const remainingInstallments = plan.totalInstallments - lastLaunchedInstallment;
+      const endDate = addMonths(plan.startDate, plan.totalInstallments - 1);
+      const forecast: InstallmentForecast = {
+        planId: plan.id,
+        baseDescription: plan.baseDescription,
+        categoryName: plan.categoryId ? installmentPlanCategoryNamesById.get(plan.categoryId) ?? null : null,
+        remainingInstallments,
+        totalInstallments: plan.totalInstallments,
+        estimatedAmount: plan.estimatedAmount,
+        remainingAmount: remainingInstallments * plan.estimatedAmount,
+        endMonthLabel: monthLabel(endDate),
+      };
+      return { forecast, endDate };
+    })
+    .filter((entry) => entry.forecast.remainingInstallments > 0)
+    .sort((a, b) => a.endDate.getTime() - b.endDate.getTime())
+    .map((entry) => entry.forecast);
+
   return {
     windowLabel: `${monthLabel(historyStart)} – ${monthLabel(monthStart)}`,
     growthWindowLabel: { from: monthLabel(growthStart), to: monthLabel(monthStart) },
@@ -269,6 +327,7 @@ async function getInsightsPageDataUncached(userId: string): Promise<InsightsPage
     fixedExpenseAlert,
     fixedExpenseCandidates,
     fixedExpenseResolvedInsights,
+    installmentForecasts,
     hasData: transactions.length > 0,
   };
 }

@@ -40,9 +40,12 @@ export function BudgetProgressView({ progress }: { progress: BudgetProgress }) {
         <ul className="mt-4 flex flex-col gap-4">
           {progress.categories.map((category) => {
             const Icon = getCategoryIcon(category.icon);
-            const share = category.limitAmount > 0 ? (category.spent / category.limitAmount) * 100 : 0;
-            const isOver = share >= 100;
-            const isNear = share >= 80 && !isOver;
+            const spentShare = category.limitAmount > 0 ? (category.spent / category.limitAmount) * 100 : 0;
+            const committedShare = category.limitAmount > 0 ? (category.committed / category.limitAmount) * 100 : 0;
+            const totalShare = spentShare + committedShare;
+            const isOver = totalShare >= 100;
+            const isNear = totalShare >= 80 && !isOver;
+            const hasCommitted = category.committed > 0;
             return (
               <li key={category.categoryId}>
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -66,19 +69,37 @@ export function BudgetProgressView({ progress }: { progress: BudgetProgress }) {
                     </span>
                   </span>
                   <span className="text-xs text-(--color-text-muted)">
-                    <span className="font-numeric font-medium text-(--color-text)">{formatCurrency(category.spent)}</span> de{" "}
-                    {formatCurrency(category.limitAmount)}
+                    <span className="font-numeric font-medium text-(--color-text)">{formatCurrency(category.spent)}</span>
+                    {hasCommitted && (
+                      <>
+                        {" + "}
+                        <span className="font-numeric font-medium text-(--color-text)">{formatCurrency(category.committed)}</span>
+                      </>
+                    )}{" "}
+                    de {formatCurrency(category.limitAmount)}
                   </span>
                 </div>
-                <div className="mt-2 h-2 overflow-hidden rounded-full bg-(--color-border)/60">
+                <div className="mt-2 flex h-2 overflow-hidden rounded-full bg-(--color-border)/60">
                   <div
                     className={clsx(
-                      "h-full rounded-full",
+                      "h-full",
                       isOver ? "bg-(--color-danger)" : isNear ? "bg-(--color-accent)" : "bg-(--color-primary)"
                     )}
-                    style={{ width: `${Math.min(100, share)}%` }}
+                    style={{ width: `${Math.min(100, spentShare)}%` }}
                   />
+                  {hasCommitted && (
+                    <div
+                      className={clsx(
+                        "h-full opacity-40",
+                        isOver ? "bg-(--color-danger)" : isNear ? "bg-(--color-accent)" : "bg-(--color-primary)"
+                      )}
+                      style={{ width: `${Math.min(100 - Math.min(100, spentShare), committedShare)}%` }}
+                    />
+                  )}
                 </div>
+                {hasCommitted && (
+                  <p className="mt-1 text-[11px] text-(--color-text-muted)">Inclui parcela ainda não lançada</p>
+                )}
               </li>
             );
           })}

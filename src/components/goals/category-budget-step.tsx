@@ -16,6 +16,7 @@ type CategoryBudgetStepProps = {
   categories: CategoryInfo[];
   buckets: Record<string, Bucket>;
   categoryAverages: Record<string, number>;
+  committedByCategory?: Record<string, number>;
   initialAmounts?: Record<string, number>;
   onSaved: () => void;
   onBack: () => void;
@@ -26,6 +27,7 @@ function computeDefaultAmounts(
   buckets: Record<string, Bucket>,
   categoryAverages: Record<string, number>,
   income: number,
+  committedByCategory: Record<string, number>,
   initialAmounts?: Record<string, number>
 ): Record<string, string> {
   const result: Record<string, string> = {};
@@ -43,7 +45,9 @@ function computeDefaultAmounts(
         continue;
       }
       const average = categoryAverages[category.id] ?? 0;
-      const amount = sumAverage > 0 ? target * (average / sumAverage) : target / bucketCategories.length;
+      const suggested = sumAverage > 0 ? target * (average / sumAverage) : target / bucketCategories.length;
+      const committed = committedByCategory[category.id] ?? 0;
+      const amount = Math.max(suggested, committed);
       result[category.id] = amount.toFixed(2);
     }
   }
@@ -58,12 +62,13 @@ export function CategoryBudgetStep({
   categories,
   buckets,
   categoryAverages,
+  committedByCategory,
   initialAmounts,
   onSaved,
   onBack,
 }: CategoryBudgetStepProps) {
   const [amounts, setAmounts] = useState<Record<string, string>>(() =>
-    computeDefaultAmounts(categories, buckets, categoryAverages, income, initialAmounts)
+    computeDefaultAmounts(categories, buckets, categoryAverages, income, committedByCategory ?? {}, initialAmounts)
   );
   const [isPending, startTransition] = useTransition();
 
