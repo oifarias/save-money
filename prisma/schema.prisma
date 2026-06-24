@@ -28,6 +28,22 @@ enum WishStatus {
   ABANDONED
 }
 
+enum WishKind {
+  NEED
+  WANT
+}
+
+enum WishPurchaseTiming {
+  THIS_MONTH
+  NEXT_MONTH
+  LATER
+}
+
+enum WishPaymentMethod {
+  CASH
+  INSTALLMENTS
+}
+
 model User {
   id           String   @id @default(cuid())
   name         String
@@ -210,6 +226,13 @@ model Wish {
   categoryId      String              // obrigatório — requisito explícito do usuário
   subcategoryId   String              // obrigatório — requisito explícito do usuário
   status          WishStatus @default(ACTIVE)
+  priority        Int        @default(0) // ordem de prioridade entre os desejos ACTIVE do usuário
+  link            String?
+  kind            WishKind           @default(WANT) // necessidade x desejo, granularidade do item (distinto do Budget.bucket, que é por categoria)
+  purchaseTiming  WishPurchaseTiming @default(THIS_MONTH)
+  paymentMethod   WishPaymentMethod  @default(CASH)
+  installmentsCount Int?             // só relevante quando paymentMethod = INSTALLMENTS
+  installmentAmount Float?           // só relevante quando paymentMethod = INSTALLMENTS — estimativa informativa, não cria InstallmentPlan até a compra ser confirmada
   notes           String?
   imageUrl        String?
   purchasedAt     DateTime?
@@ -226,6 +249,7 @@ model Wish {
   goal        Goal?
 
   @@index([userId, status])
+  @@index([userId, priority])
   @@index([categoryId])
   @@index([subcategoryId])
   @@map("wishes")

@@ -2,6 +2,10 @@ import { z } from "zod";
 
 const MAX_SANE_AMOUNT = 10_000_000;
 
+const wishKindSchema = z.enum(["NEED", "WANT"]);
+const wishPurchaseTimingSchema = z.enum(["THIS_MONTH", "NEXT_MONTH", "LATER"]);
+const wishPaymentMethodSchema = z.enum(["CASH", "INSTALLMENTS"]);
+
 export const createWishSchema = z.object({
   name: z.string().trim().min(2, "Informe um nome com pelo menos 2 caracteres").max(140, "Nome muito longo"),
   estimatedAmount: z
@@ -84,3 +88,54 @@ export const abandonWishSchema = z.object({
 });
 
 export type AbandonWishInput = z.infer<typeof abandonWishSchema>;
+
+const wishBatchItemSchema = z
+  .object({
+    name: z.string().trim().min(2, "Informe um nome com pelo menos 2 caracteres").max(140, "Nome muito longo"),
+    estimatedAmount: z
+      .number()
+      .positive("Informe um valor maior que zero")
+      .max(MAX_SANE_AMOUNT, "Valor informado é muito alto"),
+    link: z.string().trim().url("Link inválido").max(2000).optional().or(z.literal("")),
+    purchaseTiming: wishPurchaseTimingSchema,
+    paymentMethod: wishPaymentMethodSchema,
+    installmentsCount: z.number().int().positive("Informe ao menos 1 parcela").max(360).optional(),
+    kind: wishKindSchema,
+  })
+  .refine((data) => data.paymentMethod !== "INSTALLMENTS" || Boolean(data.installmentsCount), {
+    message: "Informe em quantas parcelas",
+    path: ["installmentsCount"],
+  });
+
+export const createWishBatchSchema = z.object({
+  categoryId: z.string().trim().min(1, "Selecione um grupo"),
+  subcategoryId: z.string().trim().min(1, "Selecione um sub-grupo"),
+  items: z.array(wishBatchItemSchema).min(1, "Adicione ao menos um item").max(100, "Adicione no máximo 100 itens por vez"),
+});
+
+export type CreateWishBatchInput = z.infer<typeof createWishBatchSchema>;
+
+export const createWishesBulkSchema = z.object({
+  categoryId: z.string().trim().min(1, "Selecione um grupo"),
+  subcategoryId: z.string().trim().min(1, "Selecione um sub-grupo"),
+  items: z
+    .array(
+      z.object({
+        name: z.string().trim().min(2, "Informe um nome com pelo menos 2 caracteres").max(140, "Nome muito longo"),
+        estimatedAmount: z
+          .number()
+          .positive("Informe um valor maior que zero")
+          .max(MAX_SANE_AMOUNT, "Valor informado é muito alto"),
+      })
+    )
+    .min(1, "Adicione ao menos um item")
+    .max(200, "Adicione no máximo 200 itens por vez"),
+});
+
+export type CreateWishesBulkInput = z.infer<typeof createWishesBulkSchema>;
+
+export const reorderWishesSchema = z.object({
+  wishIds: z.array(z.string().trim().min(1)).min(1, "Informe ao menos um desejo").max(500, "Quantidade de itens inválida"),
+});
+
+export type ReorderWishesInput = z.infer<typeof reorderWishesSchema>;
