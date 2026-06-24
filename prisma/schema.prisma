@@ -22,6 +22,12 @@ enum Recurrence {
   MONTHLY
 }
 
+enum WishStatus {
+  ACTIVE
+  PURCHASED
+  ABANDONED
+}
+
 model User {
   id           String   @id @default(cuid())
   name         String
@@ -45,6 +51,7 @@ model User {
   sharedSplits  SharedSplit[]
   installmentPlans InstallmentPlan[]
   fixedExpenseTemplates FixedExpenseTemplate[]
+  wishes Wish[]
 
   @@map("users")
 }
@@ -84,6 +91,8 @@ model Category {
   goals        Goal[]
   fixedExpenseTemplates    FixedExpenseTemplate[] @relation("FixedExpenseTemplateCategory")
   fixedExpenseSubtemplates FixedExpenseTemplate[] @relation("FixedExpenseTemplateSubcategory")
+  wishes Wish[] @relation("WishCategory")
+  subWishes Wish[] @relation("WishSubcategory")
 
   @@unique([userId, parentId, name])
   @@index([userId])
@@ -131,6 +140,7 @@ model Transaction {
   installmentPlan InstallmentPlan? @relation(fields: [installmentPlanId], references: [id], onDelete: SetNull)
   fixedExpenseTemplate FixedExpenseTemplate? @relation(fields: [fixedExpenseTemplateId], references: [id], onDelete: SetNull)
   tags        TransactionTag[]
+  purchasedWish Wish?
 
   @@index([userId, date])
   @@index([userId, type])
@@ -177,6 +187,7 @@ model Goal {
   id            String    @id @default(cuid())
   userId        String
   categoryId    String?
+  wishId        String?   @unique
   name          String
   targetAmount  Float
   currentAmount Float     @default(0)
@@ -185,8 +196,40 @@ model Goal {
 
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   category Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  wish     Wish?     @relation(fields: [wishId], references: [id], onDelete: SetNull)
 
+  @@index([userId])
   @@map("goals")
+}
+
+model Wish {
+  id              String     @id @default(cuid())
+  userId          String
+  name            String
+  estimatedAmount Float
+  categoryId      String              // obrigatório — requisito explícito do usuário
+  subcategoryId   String              // obrigatório — requisito explícito do usuário
+  status          WishStatus @default(ACTIVE)
+  notes           String?
+  imageUrl        String?
+  coolingOffUntil DateTime?           // null quando o valor está abaixo do threshold de fricção
+  purchasedAt     DateTime?
+  purchasedTransactionId String? @unique
+  abandonedAt     DateTime?
+  abandonReason   String?             // texto livre opcional, sem categorização — copy neutra, sem culpa
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category    Category     @relation("WishCategory", fields: [categoryId], references: [id], onDelete: Restrict)
+  subcategory Category     @relation("WishSubcategory", fields: [subcategoryId], references: [id], onDelete: Restrict)
+  purchasedTransaction Transaction? @relation(fields: [purchasedTransactionId], references: [id], onDelete: SetNull)
+  goal        Goal?
+
+  @@index([userId, status])
+  @@index([categoryId])
+  @@index([subcategoryId])
+  @@map("wishes")
 }
 
 model Subscription {
