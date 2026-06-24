@@ -6,7 +6,7 @@ import {
   getCategoryHistoricalAverages,
 } from "@/lib/budget-data";
 import { evaluateWishReadiness, type WishReadiness } from "@/lib/wish-readiness";
-import type { WishStatus } from "@/generated/prisma/client";
+import type { WishKind, WishPaymentMethod, WishPurchaseTiming, WishStatus } from "@/generated/prisma/client";
 
 const READINESS_HORIZON_MONTHS = 12;
 
@@ -45,6 +45,13 @@ export type WishSummary = {
   name: string;
   estimatedAmount: number;
   status: WishStatus;
+  priority: number;
+  link: string | null;
+  kind: WishKind;
+  purchaseTiming: WishPurchaseTiming;
+  paymentMethod: WishPaymentMethod;
+  installmentsCount: number | null;
+  installmentAmount: number | null;
   notes: string | null;
   imageUrl: string | null;
   purchasedAt: string | null;
@@ -77,6 +84,13 @@ type WishRow = {
   name: string;
   estimatedAmount: number;
   status: WishStatus;
+  priority: number;
+  link: string | null;
+  kind: WishKind;
+  purchaseTiming: WishPurchaseTiming;
+  paymentMethod: WishPaymentMethod;
+  installmentsCount: number | null;
+  installmentAmount: number | null;
   notes: string | null;
   imageUrl: string | null;
   purchasedAt: Date | null;
@@ -149,6 +163,13 @@ function toWishSummary(wish: WishRow, readiness: WishReadiness | null): WishSumm
     name: wish.name,
     estimatedAmount: wish.estimatedAmount,
     status: wish.status,
+    priority: wish.priority,
+    link: wish.link,
+    kind: wish.kind,
+    purchaseTiming: wish.purchaseTiming,
+    paymentMethod: wish.paymentMethod,
+    installmentsCount: wish.installmentsCount,
+    installmentAmount: wish.installmentAmount,
     notes: wish.notes,
     imageUrl: wish.imageUrl,
     purchasedAt: wish.purchasedAt ? wish.purchasedAt.toISOString() : null,
@@ -188,6 +209,8 @@ export async function getWishesPageData(userId: string): Promise<WishesPageData>
     else if (wish.status === "PURCHASED") purchased.push(summary);
     else abandoned.push(summary);
   }
+
+  active.sort((a, b) => a.priority - b.priority);
 
   return { active, purchased, abandoned };
 }

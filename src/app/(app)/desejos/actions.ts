@@ -11,6 +11,9 @@ import {
   addWishContributionSchema,
   markWishPurchasedSchema,
   abandonWishSchema,
+  createWishBatchSchema,
+  createWishesBulkSchema,
+  reorderWishesSchema,
 } from "@/lib/validations/wish";
 import { dashboardCacheTag } from "@/lib/dashboard-data";
 import { comparativeCacheTag } from "@/lib/comparative-data";
@@ -27,11 +30,7 @@ export type ActionResult = {
   fieldErrors?: Record<string, string>;
 };
 
-/**
- * Mesmo shape de `ActionResult`, com o id do desejo criado quando a operação é bem-sucedida — usado
- * pelo modal de cadastro para encadear o convite opcional de estratégia (`linkWishGoalAction`) sem
- * precisar de uma segunda consulta.
- */
+/** Mesmo shape de `ActionResult`, com o id do desejo criado quando a operação é bem-sucedida. */
 export type CreateWishResult = ActionResult & { wishId?: string };
 
 async function requireUserId() {
@@ -78,20 +77,163 @@ export async function createWishAction(input: unknown): Promise<CreateWishResult
     return { success: false, fieldErrors: error };
   }
 
-  const created = await prisma.wish.create({
-    data: {
-      userId,
-      name,
-      estimatedAmount,
-      categoryId,
-      subcategoryId,
-      notes: notes || null,
-      imageUrl: imageUrl || null,
-    },
+  const created = await prisma.$transaction(async (tx) => {
+    const priority = await nextPriority(tx, userId);
+    return tx.wish.create({
+      data: {
+        userId,
+        name,
+        estimatedAmount,
+        categoryId,
+        subcategoryId,
+        notes: notes || null,
+        imageUrl: imageUrl || null,
+        priority,
+      },
+    });
   });
 
   revalidatePath("/desejos");
   return { success: true, message: "Desejo cadastrado com sucesso", wishId: created.id };
+}
+
+/** Próxima prioridade livre entre os desejos ACTIVE do usuário, escopada à transaction chamadora. */
+async function nextPriority(tx: Prisma.TransactionClient, userId: string) {
+  const last = await tx.wish.findFirst({
+    where: { userId, status: "ACTIVE" },
+    orderBy: { priority: "desc" },
+    select: { priority: true },
+  });
+  return (last?.priority ?? 0) + 1;
+}
+
+/**
+ * Cria vários itens de uma vez, todos no mesmo grupo/sub-grupo, cada um com seus próprios dados de
+ * planejamento de compra (quando comprar, forma de pagamento, necessidade x desejo). Usado pelo
+ * fluxo "Individual" da Lista de compras, que permite adicionar mais de um item por vez.
+ */
+export async function createWishBatchAction(input: unknown): Promise<ActionResult> {
+  const userId = await requireUserId();
+  const parsed = createWishBatchSchema.safeParse(input);
+
+  if (!parsed.success) {
+    return { success: false, fieldErrors: flattenZodErrors(parsed.error) };
+  }
+
+  const { categoryId, subcategoryId, items } = parsed.data;
+
+  const { error } = await resolveCategoryAndSubcategory(userId, categoryId, subcategoryId);
+  if (error) {
+    return { success: false, fieldErrors: error };
+  }
+
+  await prisma.$transaction(async (tx) => {
+    let priority = await nextPriority(tx, userId);
+    for (const item of items) {
+      const installmentAmount =
+        item.paymentMethod === "INSTALLMENTS" && item.installmentsCount
+          ? item.estimatedAmount / item.installmentsCount
+          : null;
+
+      await tx.wish.create({
+        data: {
+          userId,
+          name: item.name,
+          estimatedAmount: item.estimatedAmount,
+          categoryId,
+          subcategoryId,
+          link: item.link || null,
+          purchaseTiming: item.purchaseTiming,
+          paymentMethod: item.paymentMethod,
+          installmentsCount: item.paymentMethod === "INSTALLMENTS" ? item.installmentsCount : null,
+          installmentAmount: item.paymentMethod === "INSTALLMENTS" ? installmentAmount : null,
+          kind: item.kind,
+          priority,
+        },
+      });
+      priority += 1;
+    }
+  });
+
+  revalidatePath("/desejos");
+  return { success: true, message: `${items.length} item${items.length === 1 ? "" : "s"} cadastrado${items.length === 1 ? "" : "s"} com sucesso` };
+}
+
+/**
+ * Cadastro em lote: vários itens no mesmo grupo/sub-grupo, apenas nome e valor estimado — sem
+ * planejamento de compra detalhado (assume os padrões: à vista, este mês, desejo).
+ */
+export async function createWishesBulkAction(input: unknown): Promise<ActionResult> {
+  const userId = await requireUserId();
+  const parsed = createWishesBulkSchema.safeParse(input);
+
+  if (!parsed.success) {
+    return { success: false, fieldErrors: flattenZodErrors(parsed.error) };
+  }
+
+  const { categoryId, subcategoryId, items } = parsed.data;
+
+  const { error } = await resolveCategoryAndSubcategory(userId, categoryId, subcategoryId);
+  if (error) {
+    return { success: false, fieldErrors: error };
+  }
+
+  await prisma.$transaction(async (tx) => {
+    let priority = await nextPriority(tx, userId);
+    for (const item of items) {
+      await tx.wish.create({
+        data: {
+          userId,
+          name: item.name,
+          estimatedAmount: item.estimatedAmount,
+          categoryId,
+          subcategoryId,
+          priority,
+        },
+      });
+      priority += 1;
+    }
+  });
+
+  revalidatePath("/desejos");
+  return { success: true, message: `${items.length} item${items.length === 1 ? "" : "s"} cadastrado${items.length === 1 ? "" : "s"} com sucesso` };
+}
+
+/**
+ * Reordena a prioridade dos desejos ACTIVE do usuário (drag-and-drop). Verifica que TODOS os ids
+ * recebidos pertencem ao usuário autenticado antes de aplicar qualquer mudança — um usuário malicioso
+ * não pode incluir ids de outro usuário para afetá-los.
+ */
+export async function reorderWishesAction(input: unknown): Promise<ActionResult> {
+  const userId = await requireUserId();
+  const parsed = reorderWishesSchema.safeParse(input);
+
+  if (!parsed.success) {
+    return { success: false, fieldErrors: flattenZodErrors(parsed.error) };
+  }
+
+  const { wishIds } = parsed.data;
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      const owned = await tx.wish.findMany({ where: { id: { in: wishIds }, userId }, select: { id: true } });
+      if (owned.length !== wishIds.length) {
+        throw new Error(NOT_FOUND_MESSAGE);
+      }
+
+      await Promise.all(
+        wishIds.map((id, index) => tx.wish.update({ where: { id }, data: { priority: index + 1 } }))
+      );
+    });
+  } catch (e) {
+    if (e instanceof Error && e.message === NOT_FOUND_MESSAGE) {
+      return { success: false, message: NOT_FOUND_MESSAGE };
+    }
+    throw e;
+  }
+
+  revalidatePath("/desejos");
+  return { success: true };
 }
 
 /**
@@ -241,6 +383,26 @@ export async function markWishPurchasedAction(input: unknown): Promise<ActionRes
       let purchasedTransactionId: string | null = null;
 
       if (createTransaction) {
+        const purchaseDate = new Date(date as string);
+        let installmentPlanId: string | null = null;
+
+        if (wish.paymentMethod === "INSTALLMENTS" && wish.installmentsCount) {
+          // Só agora, com a compra confirmada, o parcelamento passa a comprometer o orçamento via InstallmentPlan —
+          // nunca no cadastro do desejo, para não poluir a projeção com parcelamentos especulativos.
+          const plan = await tx.installmentPlan.create({
+            data: {
+              userId,
+              baseDescription: wish.name,
+              totalInstallments: wish.installmentsCount,
+              estimatedAmount: wish.installmentAmount ?? (amount as number) / wish.installmentsCount,
+              startDate: purchaseDate,
+              categoryId: wish.categoryId,
+              subcategoryId: wish.subcategoryId,
+            },
+          });
+          installmentPlanId = plan.id;
+        }
+
         const created = await tx.transaction.create({
           data: {
             userId,
@@ -249,8 +411,10 @@ export async function markWishPurchasedAction(input: unknown): Promise<ActionRes
             subcategoryId: wish.subcategoryId,
             type: "EXPENSE",
             amount: amount as number,
-            date: new Date(date as string),
+            date: purchaseDate,
             description: wish.name,
+            installmentPlanId,
+            installmentNumber: installmentPlanId ? 1 : null,
           },
         });
         purchasedTransactionId = created.id;

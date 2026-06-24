@@ -1,20 +1,22 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
+import toast from "react-hot-toast";
 import { AlertTriangle, CheckCircle2, ChevronLeft, Trash2, Upload } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/format";
-import type { MockCategory } from "@/lib/wish-mock-data";
+import { createWishesBulkAction } from "@/app/(app)/desejos/actions";
+import type { WishFormCategory } from "@/components/wishes/wish-batch-modal";
 
 type Step = "input" | "review";
 type ParsedLine = { index: number; name: string; amount: number; raw: string; error?: string };
 
-type WishPreviewBulkModalProps = {
+type WishBulkModalProps = {
   open: boolean;
-  categories: MockCategory[];
+  categories: WishFormCategory[];
   onClose: () => void;
-  onAddMany: (input: { name: string; estimatedAmount: number; categoryId: string; subcategoryId: string }[]) => void;
+  onAdded: () => void;
 };
 
 function parseLines(text: string): ParsedLine[] {
@@ -27,7 +29,7 @@ function parseLines(text: string): ParsedLine[] {
       if (!match) return { index, raw, name: raw, amount: 0, error: "Não foi possível identificar o valor" };
       const name = match[1].trim();
       const amount = Number(match[2].replace(/\./g, "").replace(",", ".")) || 0;
-      if (!name) return { index, raw, name, amount, error: "Nome do desejo não encontrado" };
+      if (!name) return { index, raw, name, amount, error: "Nome do item não encontrado" };
       if (amount <= 0) return { index, raw, name, amount, error: "Valor inválido" };
       return { index, raw, name, amount };
     });
@@ -43,13 +45,14 @@ function StatCard({ label, value, tone }: { label: string; value: string; tone?:
   );
 }
 
-export function WishPreviewBulkModal({ open, categories, onClose, onAddMany }: WishPreviewBulkModalProps) {
+export function WishBulkModal({ open, categories, onClose, onAdded }: WishBulkModalProps) {
   const [step, setStep] = useState<Step>("input");
   const [text, setText] = useState("");
   const [fileName, setFileName] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [subcategoryId, setSubcategoryId] = useState("");
   const [removedIndexes, setRemovedIndexes] = useState<Set<number>>(new Set());
+  const [isPending, startTransition] = useTransition();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const subcategoryOptions = categories.find((category) => category.id === categoryId)?.children ?? [];
@@ -87,15 +90,30 @@ export function WishPreviewBulkModal({ open, categories, onClose, onAddMany }: W
 
   function handleConfirm() {
     if (!categoryId || !subcategoryId || validRows.length === 0) return;
-    onAddMany(validRows.map((line) => ({ name: line.name, estimatedAmount: line.amount, categoryId, subcategoryId })));
-    reset();
-    onClose();
+
+    startTransition(async () => {
+      const result = await createWishesBulkAction({
+        categoryId,
+        subcategoryId,
+        items: validRows.map((line) => ({ name: line.name, estimatedAmount: line.amount })),
+      });
+
+      if (!result.success) {
+        toast.error(result.message ?? "Não foi possível cadastrar os itens");
+        return;
+      }
+
+      toast.success(result.message ?? "Itens cadastrados");
+      reset();
+      onAdded();
+      onClose();
+    });
   }
 
   return (
     <Modal
       open={open}
-      title="Adicionar desejos em lote"
+      title="Adicionar itens em lote"
       size="lg"
       onClose={() => {
         reset();
@@ -110,7 +128,7 @@ export function WishPreviewBulkModal({ open, categories, onClose, onAddMany }: W
             </div>
             <div>
               <p className="text-sm font-medium text-(--color-text)">Envie um arquivo .csv ou .txt</p>
-              <p className="mt-1 text-xs text-(--color-text-muted)">Uma linha por desejo, no formato &quot;Nome - Valor&quot;</p>
+              <p className="mt-1 text-xs text-(--color-text-muted)">Uma linha por item, no formato &quot;Nome - Valor&quot;</p>
             </div>
             <input
               ref={fileInputRef}
@@ -128,7 +146,7 @@ export function WishPreviewBulkModal({ open, categories, onClose, onAddMany }: W
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-(--color-text)">Ou cole uma linha por desejo</label>
+            <label className="text-sm font-medium text-(--color-text)">Ou cole uma linha por item</label>
             <textarea
               rows={5}
               value={text}
@@ -266,9 +284,14 @@ export function WishPreviewBulkModal({ open, categories, onClose, onAddMany }: W
               <ChevronLeft className="h-4 w-4" aria-hidden="true" />
               Voltar
             </Button>
-            <Button type="button" onClick={handleConfirm} disabled={!categoryId || !subcategoryId || validRows.length === 0}>
+            <Button
+              type="button"
+              onClick={handleConfirm}
+              disabled={!categoryId || !subcategoryId || validRows.length === 0}
+              isLoading={isPending}
+            >
               <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-              Cadastrar {validRows.length} desejo{validRows.length === 1 ? "" : "s"}
+              Cadastrar {validRows.length} item{validRows.length === 1 ? "" : "s"}
             </Button>
           </div>
         </div>

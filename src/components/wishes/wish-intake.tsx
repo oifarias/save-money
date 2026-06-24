@@ -2,18 +2,18 @@
 
 import { ChevronRight, FileSpreadsheet, UserRound } from "lucide-react";
 
-type WishPreviewIntakeProps = {
+type WishIntakeProps = {
   onIndividual: () => void;
   onBulk: () => void;
 };
 
-export function WishPreviewIntake({ onIndividual, onBulk }: WishPreviewIntakeProps) {
+export function WishIntake({ onIndividual, onBulk }: WishIntakeProps) {
   return (
     <section className="flex flex-col gap-4">
       <div>
-        <h2 className="font-display text-xl font-semibold text-(--color-text)">Novo desejo</h2>
+        <h2 className="font-display text-xl font-semibold text-(--color-text)">Novo item</h2>
         <p className="mt-1 text-sm text-(--color-text-muted)">
-          Cadastre um desejo individual ou importe vários de uma vez a partir de um arquivo
+          Cadastre um item individual ou importe vários de uma vez a partir de um arquivo
         </p>
       </div>
 
@@ -29,7 +29,7 @@ export function WishPreviewIntake({ onIndividual, onBulk }: WishPreviewIntakePro
           <span className="flex-1">
             <span className="block font-display text-sm font-semibold text-(--color-text)">Individual</span>
             <span className="mt-0.5 block text-xs text-(--color-text-muted)">
-              Um desejo por vez, com grupo e sub-grupo
+              Um ou mais itens do mesmo grupo, com plano de compra
             </span>
           </span>
           <ChevronRight
