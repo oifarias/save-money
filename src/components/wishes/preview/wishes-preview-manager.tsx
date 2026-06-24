@@ -7,7 +7,7 @@ import { ChevronDown, Layers, ListOrdered } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { MOCK_CATEGORIES, MOCK_WISHES, type MockWish } from "@/lib/wish-mock-data";
 import { WishPreviewCard } from "@/components/wishes/preview/wish-preview-card";
-import { WishPreviewAddModal } from "@/components/wishes/preview/wish-preview-add-modal";
+import { WishPreviewAddModal, type WishPreviewAddInput } from "@/components/wishes/preview/wish-preview-add-modal";
 import { WishPreviewBulkModal } from "@/components/wishes/preview/wish-preview-bulk-modal";
 import { WishPreviewIntake } from "@/components/wishes/preview/wish-preview-intake";
 
@@ -52,22 +52,27 @@ export function WishesPreviewManager() {
     });
   }
 
-  function handleAdd(input: { name: string; estimatedAmount: number; categoryId: string; subcategoryId: string }) {
-    const maxPriority = Math.max(0, ...wishes.filter((w) => w.status === "ACTIVE").map((w) => w.priority));
+  function handleAdd(inputs: WishPreviewAddInput[]) {
+    const baseMax = Math.max(0, ...wishes.filter((w) => w.status === "ACTIVE").map((w) => w.priority));
     setWishes((current) => [
       ...current,
-      {
-        id: `wish-mock-${Date.now()}`,
+      ...inputs.map((input, index) => ({
+        id: `wish-mock-${Date.now()}-${index}`,
         name: input.name,
         estimatedAmount: input.estimatedAmount,
+        link: input.link,
         categoryId: input.categoryId,
         subcategoryId: input.subcategoryId,
-        status: "ACTIVE",
-        priority: maxPriority + 1,
+        status: "ACTIVE" as const,
+        priority: baseMax + index + 1,
         notes: null,
         goal: null,
         cashTimelineLabel: null,
-      },
+        purchaseTiming: input.purchaseTiming,
+        paymentMethod: input.paymentMethod,
+        installmentsCount: input.installmentsCount,
+        installmentAmount: input.installmentAmount,
+      })),
     ]);
   }
 
@@ -76,9 +81,10 @@ export function WishesPreviewManager() {
     setWishes((current) => [
       ...current,
       ...inputs.map((input, index) => ({
-        id: `wish-mock-${Date.now()}-${index}`,
+        id: `wish-mock-bulk-${Date.now()}-${index}`,
         name: input.name,
         estimatedAmount: input.estimatedAmount,
+        link: null,
         categoryId: input.categoryId,
         subcategoryId: input.subcategoryId,
         status: "ACTIVE" as const,
@@ -86,6 +92,10 @@ export function WishesPreviewManager() {
         notes: null,
         goal: null,
         cashTimelineLabel: null,
+        purchaseTiming: "this_month" as const,
+        paymentMethod: "cash" as const,
+        installmentsCount: null,
+        installmentAmount: null,
       })),
     ]);
   }

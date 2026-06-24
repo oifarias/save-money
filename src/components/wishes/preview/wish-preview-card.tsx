@@ -3,11 +3,11 @@
 import Link from "next/link";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Sparkles, Target, Wallet } from "lucide-react";
+import { ExternalLink, GripVertical, Sparkles, Target, Wallet } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { getCategoryIcon } from "@/lib/category-icons";
 import { formatCurrency } from "@/lib/format";
-import type { MockCategory, MockWish } from "@/lib/wish-mock-data";
+import { PURCHASE_TIMING_LABELS, type MockCategory, type MockWish } from "@/lib/wish-mock-data";
 
 type WishPreviewCardProps = {
   wish: MockWish;
@@ -94,6 +94,32 @@ export function WishPreviewCard({ wish, position, category, subcategory, draggab
             <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
             {wish.cashTimelineLabel}
           </span>
+        )}
+
+        <span className="inline-flex items-center gap-1 rounded-full border border-(--color-border) px-2.5 py-1 text-xs font-medium text-(--color-text-muted)">
+          {PURCHASE_TIMING_LABELS[wish.purchaseTiming]}
+        </span>
+
+        {wish.paymentMethod === "installments" && wish.installmentsCount && wish.installmentAmount ? (
+          <span className="inline-flex items-center gap-1 rounded-full border border-(--color-border) px-2.5 py-1 text-xs font-medium text-(--color-text-muted)">
+            {wish.installmentsCount}x de <span className="font-numeric">{formatCurrency(wish.installmentAmount)}</span>
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1 rounded-full border border-(--color-border) px-2.5 py-1 text-xs font-medium text-(--color-text-muted)">
+            À vista
+          </span>
+        )}
+
+        {wish.link && (
+          <Link
+            href={wish.link}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 rounded-full border border-(--color-border) px-2.5 py-1 text-xs font-medium text-(--color-text-muted) hover:border-(--color-primary) hover:text-(--color-text)"
+          >
+            <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+            Ver item
+          </Link>
         )}
 
         <Link
