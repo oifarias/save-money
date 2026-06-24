@@ -21,12 +21,13 @@ import { ShareSplitButton } from "@/components/split/share-split-button";
 import type { TransactionListItem } from "@/components/transactions/transaction-list";
 import { toInputDate } from "@/lib/format";
 import { deleteTransactionAction, loadMoreTransactionsAction } from "@/app/(app)/lancamentos/actions";
+import type { FixedExpenseTemplatesTotals } from "@/lib/dashboard-data";
 
 type TransactionsSummary = {
   income: number;
   expense: number;
   balance: number;
-  fixedExpense: number;
+  fixedExpenseTemplates: FixedExpenseTemplatesTotals;
   periodLabel: string;
 };
 
@@ -222,7 +223,7 @@ export function TransactionsManager({
           income={summary.income}
           expense={summary.expense}
           balance={summary.balance}
-          fixedExpense={summary.fixedExpense}
+          fixedExpenseTemplates={summary.fixedExpenseTemplates}
           installments={{ currentMonth: 0, remaining: 0 }}
           periodLabel={summary.periodLabel}
         />

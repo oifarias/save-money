@@ -1,6 +1,7 @@
 import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { monthLabel } from "@/lib/format";
+import { getFixedExpensesChecklist } from "@/lib/fixed-expenses-data";
 
 const NO_CATEGORY_ID = "sem-grupo";
 const NO_CATEGORY_COLOR = "#6B7A72";
@@ -127,7 +128,7 @@ async function getInsightsPageDataUncached(userId: string): Promise<InsightsPage
   const historyStart = addMonths(monthStart, -(HISTORY_WINDOW - 1));
   const growthStart = addMonths(monthStart, -(GROWTH_WINDOW - 1));
 
-  const [transactions, decisions, installmentPlans] = await Promise.all([
+  const [transactions, decisions, installmentPlans, fixedExpenseChecklist] = await Promise.all([
     prisma.transaction.findMany({
       where: { userId, type: "EXPENSE", date: { gte: historyStart, lt: nextMonthStart } },
       select: {
@@ -154,13 +155,13 @@ async function getInsightsPageDataUncached(userId: string): Promise<InsightsPage
         transactions: { select: { installmentNumber: true } },
       },
     }),
+    getFixedExpensesChecklist(userId, monthKey(monthStart)),
   ]);
 
   const categoriesById = new Map<string, CategoryMeta>();
   /** monthKey -> categoryId -> total */
   const monthlyByCategory = new Map<string, Map<string, number>>();
   let currentMonthExpense = 0;
-  let currentMonthFixed = 0;
   const currentMonthTagTotals = new Map<string, { total: number; count: number }>();
 
   for (const tx of transactions) {
@@ -181,7 +182,6 @@ async function getInsightsPageDataUncached(userId: string): Promise<InsightsPage
     const isCurrentMonth = tx.date >= monthStart && tx.date < nextMonthStart;
     if (isCurrentMonth) {
       currentMonthExpense += tx.amount;
-      if (tx.isFixed) currentMonthFixed += tx.amount;
       for (const { tag } of tx.tags) {
         const entry = currentMonthTagTotals.get(tag.name) ?? { total: 0, count: 0 };
         entry.total += tx.amount;
@@ -240,7 +240,12 @@ async function getInsightsPageDataUncached(userId: string): Promise<InsightsPage
     .sort((a, b) => b.total - a.total)
     .slice(0, 5);
 
-  // 5. Alerta de despesas fixas acima de 50%
+  // 5. Alerta de despesas fixas acima de 50%, com base no `FixedExpenseTemplate` (pendente + pago
+  // do mês de referência atual), fonte única de verdade para despesas fixas.
+  const currentMonthFixed = fixedExpenseChecklist.reduce(
+    (sum, item) => sum + (item.status === "paid" ? item.paidAmount ?? 0 : item.expectedAmount),
+    0
+  );
   const fixedShare = currentMonthExpense > 0 ? (currentMonthFixed / currentMonthExpense) * 100 : 0;
   const fixedExpenseAlert: FixedExpenseAlert | null =
     currentMonthExpense > 0

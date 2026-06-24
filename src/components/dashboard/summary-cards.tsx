@@ -1,4 +1,4 @@
-import { ArrowDownLeft, ArrowUpRight, CalendarCheck, CreditCard, PiggyBank, ShieldCheck } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, CalendarCheck, CreditCard, PiggyBank } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/format";
 import { clsx } from "clsx";
@@ -8,21 +8,20 @@ type SummaryCardsProps = {
   income: number;
   expense: number;
   balance: number;
-  fixedExpense: number;
   installments: { currentMonth: number; remaining: number };
   periodLabel?: string;
-  fixedExpenseTemplates?: FixedExpenseTemplatesTotals;
+  fixedExpenseTemplates: FixedExpenseTemplatesTotals;
 };
 
 export function SummaryCards({
   income,
   expense,
   balance,
-  fixedExpense,
   installments,
   periodLabel = "do mês",
   fixedExpenseTemplates,
 }: SummaryCardsProps) {
+  const fixedExpenseTotal = fixedExpenseTemplates.pendingTotal + fixedExpenseTemplates.paidTotal;
   const cards = [
     {
       id: "income",
@@ -69,21 +68,6 @@ export function SummaryCards({
         );
       })}
 
-      <Card className="flex items-start justify-between border-(--color-accent)/30 bg-gradient-to-br from-(--color-accent)/10 to-transparent">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-(--color-accent)">Despesas fixas</p>
-          <p className="mt-2 font-numeric text-xl font-semibold text-(--color-text) sm:text-2xl">
-            {formatCurrency(fixedExpense)}
-          </p>
-          <p className="mt-1 text-xs text-(--color-text-muted)">
-            {expense > 0 ? `${((fixedExpense / expense) * 100).toFixed(0)}% das despesas ${periodLabel}` : "Nenhuma despesa registrada"}
-          </p>
-        </div>
-        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-(--color-accent)/15 text-(--color-accent)">
-          <ShieldCheck className="h-5 w-5" aria-hidden="true" />
-        </span>
-      </Card>
-
       <Card className="flex items-start justify-between border-(--color-primary)/30 bg-gradient-to-br from-(--color-primary)/10 to-transparent">
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-(--color-primary)">Total de parcelamentos</p>
@@ -101,28 +85,33 @@ export function SummaryCards({
         </span>
       </Card>
 
-      {fixedExpenseTemplates && (
-        <Card className="flex flex-col gap-3">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-medium uppercase tracking-wide text-(--color-text-muted)">Despesas fixas (mês)</p>
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-(--color-accent)/15 text-(--color-accent)">
-              <CalendarCheck className="h-5 w-5" aria-hidden="true" />
-            </span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-(--color-text-muted)">Pendente ({fixedExpenseTemplates.pendingCount})</span>
-            <span className="font-numeric text-sm font-semibold text-(--color-accent)">
-              {formatCurrency(fixedExpenseTemplates.pendingTotal)}
-            </span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-(--color-text-muted)">Pago ({fixedExpenseTemplates.paidCount})</span>
-            <span className="font-numeric text-sm font-semibold text-(--color-success)">
-              {formatCurrency(fixedExpenseTemplates.paidTotal)}
-            </span>
-          </div>
-        </Card>
-      )}
+      <Card className="flex flex-col gap-3">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-medium uppercase tracking-wide text-(--color-text-muted)">Despesas fixas (mês)</p>
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-(--color-accent)/15 text-(--color-accent)">
+            <CalendarCheck className="h-5 w-5" aria-hidden="true" />
+          </span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-(--color-text-muted)">Total</span>
+          <span className="font-numeric text-sm font-semibold text-(--color-text)">{formatCurrency(fixedExpenseTotal)}</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-(--color-text-muted)">Pendente ({fixedExpenseTemplates.pendingCount})</span>
+          <span className="font-numeric text-sm font-semibold text-(--color-accent)">
+            {formatCurrency(fixedExpenseTemplates.pendingTotal)}
+          </span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-(--color-text-muted)">Pago ({fixedExpenseTemplates.paidCount})</span>
+          <span className="font-numeric text-sm font-semibold text-(--color-success)">
+            {formatCurrency(fixedExpenseTemplates.paidTotal)}
+          </span>
+        </div>
+        <p className="text-xs text-(--color-text-muted)">
+          {expense > 0 ? `${((fixedExpenseTotal / expense) * 100).toFixed(0)}% das despesas ${periodLabel}` : "Nenhuma despesa fixa registrada"}
+        </p>
+      </Card>
     </div>
   );
 }
