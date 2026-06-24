@@ -185,7 +185,7 @@ export function FixedExpenseResolvedCard({ insight }: { insight: FixedExpenseRes
   );
 }
 
-const PAGE_SIZE = 5;
+const PAGE_SIZE = 3;
 
 function PaginationControls({
   page,
