@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { ChevronDown, Plus, Trash2 } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -68,13 +68,18 @@ export function WishPreviewAddModal({ open, categories, onClose, onAdd }: WishPr
   const [categoryId, setCategoryId] = useState("");
   const [subcategoryId, setSubcategoryId] = useState("");
   const [items, setItems] = useState<ItemDraft[]>([createItem()]);
+  const [expandedKey, setExpandedKey] = useState<string | null>(items[0]?.key ?? null);
 
   const subcategoryOptions = categories.find((category) => category.id === categoryId)?.children ?? [];
+  const selectedCategory = categories.find((category) => category.id === categoryId);
+  const selectedSubcategory = subcategoryOptions.find((subcategory) => subcategory.id === subcategoryId);
 
   function reset() {
     setCategoryId("");
     setSubcategoryId("");
-    setItems([createItem()]);
+    const initial = createItem();
+    setItems([initial]);
+    setExpandedKey(initial.key);
   }
 
   function updateItem(key: string, patch: Partial<ItemDraft>) {
@@ -82,11 +87,22 @@ export function WishPreviewAddModal({ open, categories, onClose, onAdd }: WishPr
   }
 
   function addItem() {
-    setItems((current) => [...current, createItem()]);
+    const item = createItem();
+    setItems((current) => [...current, item]);
+    setExpandedKey(item.key);
   }
 
   function removeItem(key: string) {
-    setItems((current) => (current.length > 1 ? current.filter((item) => item.key !== key) : current));
+    setItems((current) => {
+      if (current.length <= 1) return current;
+      const next = current.filter((item) => item.key !== key);
+      setExpandedKey((expanded) => (expanded === key ? next[next.length - 1].key : expanded));
+      return next;
+    });
+  }
+
+  function toggleExpanded(key: string) {
+    setExpandedKey((current) => (current === key ? null : key));
   }
 
   const validItems = items.filter((item) => item.name.trim() && (Number(item.amount.replace(",", ".")) || 0) > 0);
@@ -180,6 +196,33 @@ export function WishPreviewAddModal({ open, categories, onClose, onAdd }: WishPr
             const amountValue = Number(item.amount.replace(",", ".")) || 0;
             const installments = Math.max(1, Number(item.installmentsCount) || 1);
             const installmentAmount = item.paymentMethod === "installments" && amountValue > 0 ? amountValue / installments : null;
+            const isExpanded = expandedKey === item.key;
+
+            if (!isExpanded) {
+              return (
+                <button
+                  key={item.key}
+                  type="button"
+                  onClick={() => toggleExpanded(item.key)}
+                  className="flex flex-col gap-0.5 rounded-xl border border-(--color-border) p-3.5 text-left transition-colors hover:border-(--color-primary)/40"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-medium text-(--color-text)">
+                      {item.name || `Item ${index + 1}`}{" "}
+                      <span className="font-numeric text-(--color-text-muted)">
+                        {amountValue > 0 ? formatCurrency(amountValue) : ""}
+                      </span>
+                    </p>
+                    <ChevronDown className="h-4 w-4 shrink-0 text-(--color-text-muted)" aria-hidden="true" />
+                  </div>
+                  {selectedCategory && selectedSubcategory && (
+                    <p className="text-xs text-(--color-text-muted)">
+                      {selectedCategory.name} · {selectedSubcategory.name}
+                    </p>
+                  )}
+                </button>
+              );
+            }
 
             return (
               <div key={item.key} className="flex flex-col gap-4 rounded-xl border border-(--color-border) p-3.5">
