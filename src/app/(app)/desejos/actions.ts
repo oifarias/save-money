@@ -32,6 +32,13 @@ export type ActionResult = {
   fieldErrors?: Record<string, string>;
 };
 
+/**
+ * Mesmo shape de `ActionResult`, com o id do desejo criado quando a operação é bem-sucedida — usado
+ * pelo modal de cadastro para encadear o convite opcional de estratégia (`linkWishGoalAction`) sem
+ * precisar de uma segunda consulta.
+ */
+export type CreateWishResult = ActionResult & { wishId?: string };
+
 async function requireUserId() {
   const session = await auth();
   if (!session?.user?.id) {
@@ -67,7 +74,7 @@ function addDays(date: Date, amount: number) {
  * em cooling-off de 3 dias corridos a partir do cadastro (fricção saudável, nunca um bloqueio
  * silencioso — a UI deve sempre explicar o motivo e mostrar a contagem).
  */
-export async function createWishAction(input: unknown): Promise<ActionResult> {
+export async function createWishAction(input: unknown): Promise<CreateWishResult> {
   const userId = await requireUserId();
   const parsed = createWishSchema.safeParse(input);
 
@@ -84,7 +91,7 @@ export async function createWishAction(input: unknown): Promise<ActionResult> {
 
   const coolingOffUntil = estimatedAmount >= COOLING_OFF_THRESHOLD ? addDays(new Date(), COOLING_OFF_DAYS) : null;
 
-  await prisma.wish.create({
+  const created = await prisma.wish.create({
     data: {
       userId,
       name,
@@ -98,7 +105,7 @@ export async function createWishAction(input: unknown): Promise<ActionResult> {
   });
 
   revalidatePath("/desejos");
-  return { success: true, message: "Desejo cadastrado com sucesso" };
+  return { success: true, message: "Desejo cadastrado com sucesso", wishId: created.id };
 }
 
 /**
