@@ -66,7 +66,6 @@ export default async function DashboardPage() {
         income={dashboardData.totals.income}
         expense={dashboardData.totals.expense}
         balance={dashboardData.totals.balance}
-        fixedExpense={dashboardData.totals.fixedExpense}
         installments={dashboardData.totals.installments}
         fixedExpenseTemplates={dashboardData.totals.fixedExpenseTemplates}
       />

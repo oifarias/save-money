@@ -53,7 +53,6 @@ export type DashboardData = {
     income: number;
     expense: number;
     balance: number;
-    fixedExpense: number;
     fixedExpenseTemplates: FixedExpenseTemplatesTotals;
     installments: InstallmentTotals;
   };
@@ -94,7 +93,7 @@ async function getDashboardDataUncached(userId: string): Promise<DashboardData> 
     fixedExpenseChecklist,
   ] = await Promise.all([
     prisma.transaction.groupBy({
-      by: ["type", "isFixed"],
+      by: ["type"],
       where: { userId, date: { gte: monthStart, lt: nextMonthStart } },
       _sum: { amount: true },
     }),
@@ -130,20 +129,19 @@ async function getDashboardDataUncached(userId: string): Promise<DashboardData> 
 
   let income = 0;
   let expense = 0;
-  let fixedExpense = 0;
   for (const row of typeTotals) {
     const sum = Number(row._sum.amount ?? 0);
     if (row.type === "INCOME") {
       income += sum;
     } else {
       expense += sum;
-      if (row.isFixed) fixedExpense += sum;
     }
   }
 
-  // Breakdown pendente/pago das despesas fixas COM TEMPLATE (FixedExpenseTemplate), distinto do
-  // `fixedExpense` acima (que é só a soma simples por `Transaction.isFixed`). Pago usa o valor
-  // real pago (paidAmount, vindo da Transaction criada), pendente usa o expectedAmount do template.
+  // Breakdown pendente/pago das despesas fixas com base no `FixedExpenseTemplate`, fonte única
+  // de verdade para despesas fixas (substitui a antiga soma simples por `Transaction.isFixed`).
+  // Pago usa o valor real pago (paidAmount, vindo da Transaction criada), pendente usa o
+  // expectedAmount do template.
   let fixedExpenseTemplatesPendingTotal = 0;
   let fixedExpenseTemplatesPaidTotal = 0;
   let fixedExpenseTemplatesPendingCount = 0;
@@ -225,14 +223,15 @@ async function getDashboardDataUncached(userId: string): Promise<DashboardData> 
   }
 
   const insights = buildInsights({
-    totals: { income, expense, balance, fixedExpense },
+    totals: { income, expense, balance },
+    fixedExpenseTemplates,
     categoryDistribution,
     monthlyTrend,
     tagTotals,
   });
 
   return {
-    totals: { income, expense, balance, fixedExpense, fixedExpenseTemplates, installments },
+    totals: { income, expense, balance, fixedExpenseTemplates, installments },
     categoryDistribution,
     monthlyTrend,
     insights,
@@ -241,11 +240,13 @@ async function getDashboardDataUncached(userId: string): Promise<DashboardData> 
 
 function buildInsights({
   totals,
+  fixedExpenseTemplates,
   categoryDistribution,
   monthlyTrend,
   tagTotals,
 }: {
-  totals: { income: number; expense: number; balance: number; fixedExpense: number };
+  totals: { income: number; expense: number; balance: number };
+  fixedExpenseTemplates: FixedExpenseTemplatesTotals;
   categoryDistribution: CategorySlice[];
   monthlyTrend: MonthlyTrendPoint[];
   tagTotals: Map<string, { total: number; count: number }>;
@@ -302,14 +303,15 @@ function buildInsights({
   }
 
   // 4. Alerta de despesas fixas acima de 50%
+  const fixedExpenseTotal = fixedExpenseTemplates.pendingTotal + fixedExpenseTemplates.paidTotal;
   if (totals.expense > 0) {
-    const fixedShare = (totals.fixedExpense / totals.expense) * 100;
+    const fixedShare = (fixedExpenseTotal / totals.expense) * 100;
     if (fixedShare > 50) {
       insights.push({
         id: "fixed-expenses-alert",
         tone: "warning",
         title: "Despesas fixas ultrapassam metade do seu orçamento",
-        description: `${fixedShare.toFixed(0)}% das suas despesas neste mês são fixas (${formatBRL(totals.fixedExpense)}). Avalie renegociar contratos recorrentes.`,
+        description: `${fixedShare.toFixed(0)}% das suas despesas neste mês são fixas (${formatBRL(fixedExpenseTotal)}). Avalie renegociar contratos recorrentes.`,
       });
     }
   }

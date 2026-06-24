@@ -4,6 +4,7 @@ import { parseTransactionFilters } from "@/lib/validations/transaction-filters";
 import { buildTransactionWhere, getEffectivePeriod, TRANSACTIONS_PAGE_SIZE } from "@/lib/transaction-filters";
 import { getTransactionsPage } from "@/lib/transactions-query";
 import { getFixedExpensesChecklist } from "@/lib/fixed-expenses-data";
+import type { FixedExpenseTemplatesTotals } from "@/lib/dashboard-data";
 import { TransactionIntake } from "@/components/transactions/transaction-intake";
 import { TransactionsManager } from "@/components/transactions/transactions-manager";
 import { FixedExpensesChecklist } from "@/components/transactions/fixed-expenses-checklist";
@@ -29,7 +30,7 @@ export default async function LancamentosPage({ searchParams }: LancamentosPageP
   const effectivePeriod = getEffectivePeriod(filters);
   const periodLabel = effectivePeriod ? PERIOD_SUMMARY_LABELS[effectivePeriod] : "na data selecionada";
 
-  const [total, items, categories, tags, incomeAgg, expenseAgg, fixedExpenseAgg, fixedExpensesChecklist] =
+  const [total, items, categories, tags, incomeAgg, expenseAgg, fixedExpensesChecklist] =
     await Promise.all([
       prisma.transaction.count({ where }),
       getTransactionsPage(where, 1),
@@ -41,13 +42,26 @@ export default async function LancamentosPage({ searchParams }: LancamentosPageP
       prisma.tag.findMany({ where: { userId }, orderBy: { name: "asc" }, select: { name: true } }),
       prisma.transaction.aggregate({ where: { ...where, type: "INCOME" }, _sum: { amount: true } }),
       prisma.transaction.aggregate({ where: { ...where, type: "EXPENSE" }, _sum: { amount: true } }),
-      prisma.transaction.aggregate({ where: { ...where, type: "EXPENSE", isFixed: true }, _sum: { amount: true } }),
       getFixedExpensesChecklist(userId),
     ]);
 
   const income = incomeAgg._sum.amount ?? 0;
   const expense = expenseAgg._sum.amount ?? 0;
-  const fixedExpense = fixedExpenseAgg._sum.amount ?? 0;
+  // Breakdown pendente/pago das despesas fixas com base no `FixedExpenseTemplate` — fonte única
+  // de verdade para despesas fixas (substitui a antiga soma simples via `Transaction.isFixed`).
+  const fixedExpenseTemplates: FixedExpenseTemplatesTotals = fixedExpensesChecklist.reduce(
+    (acc, item) => {
+      if (item.status === "paid") {
+        acc.paidTotal += item.paidAmount ?? 0;
+        acc.paidCount += 1;
+      } else {
+        acc.pendingTotal += item.expectedAmount;
+        acc.pendingCount += 1;
+      }
+      return acc;
+    },
+    { pendingTotal: 0, paidTotal: 0, pendingCount: 0, paidCount: 0 }
+  );
 
   const formCategories = categories.map((category) => ({
     id: category.id,
@@ -73,7 +87,7 @@ export default async function LancamentosPage({ searchParams }: LancamentosPageP
         tagSuggestions={tagSuggestions}
         totalCount={total}
         pageSize={TRANSACTIONS_PAGE_SIZE}
-        summary={{ income, expense, balance: income - expense, fixedExpense, periodLabel }}
+        summary={{ income, expense, balance: income - expense, fixedExpenseTemplates, periodLabel }}
       />
     </div>
   );
