@@ -343,9 +343,29 @@ export async function acceptFixedExpenseInsightAction(groupKey: string, transact
   const canonical = pickCanonicalCategory(transactions);
   const snapshot = snapshotDescriptionAndAmount(transactions);
 
-  await prisma.transaction.updateMany({
-    where: { id: { in: transactionIds }, userId },
-    data: { isFixed: true, categoryId: canonical.categoryId, subcategoryId: canonical.subcategoryId },
+  await prisma.$transaction(async (tx) => {
+    for (const transaction of transactions) {
+      const fixedExpenseInfo = await resolveFixedExpenseTemplate(tx, userId, {
+        isFixed: true,
+        description: transaction.description,
+        date: transaction.date,
+        amount: transaction.amount,
+        categoryId: canonical.categoryId,
+        subcategoryId: canonical.subcategoryId,
+        excludeTransactionId: transaction.id,
+        previousTemplateId: null,
+      });
+
+      await tx.transaction.update({
+        where: { id: transaction.id },
+        data: {
+          isFixed: true,
+          categoryId: canonical.categoryId,
+          subcategoryId: canonical.subcategoryId,
+          fixedExpenseTemplateId: fixedExpenseInfo.fixedExpenseTemplateId,
+        },
+      });
+    }
   });
 
   await prisma.fixedExpenseInsightDecision.upsert({
