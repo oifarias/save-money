@@ -92,12 +92,12 @@ export function SummaryCards({
             <CalendarCheck className="h-5 w-5" aria-hidden="true" />
           </span>
         </div>
-        <div className="flex items-baseline justify-center gap-1.5">
+        <div className="flex items-baseline gap-1.5">
           <span className="font-numeric text-2xl font-semibold text-(--color-text)">{formatCurrency(fixedExpenseTotal)}</span>
           <span className="text-xs text-(--color-text-muted)">(Total)</span>
         </div>
         <div className="border-t border-(--color-border)" />
-        <div className="grid grid-cols-2 gap-3 text-center">
+        <div className="grid grid-cols-2 gap-3">
           <div>
             <p className="text-xs font-medium text-(--color-text)">Pendente ({fixedExpenseTemplates.pendingCount})</p>
             <p className="font-numeric text-sm font-semibold text-(--color-accent)">
@@ -111,9 +111,6 @@ export function SummaryCards({
             </p>
           </div>
         </div>
-        <p className="text-xs text-(--color-text-muted)">
-          {expense > 0 ? `${((fixedExpenseTotal / expense) * 100).toFixed(0)}% das despesas ${periodLabel}` : "Nenhuma despesa fixa registrada"}
-        </p>
       </Card>
     </div>
   );
