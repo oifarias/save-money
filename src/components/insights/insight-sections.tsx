@@ -2,7 +2,7 @@ import { AlertTriangle, CalendarClock, Hash, Sprout, TrendingDown, TrendingUp } 
 import { clsx } from "clsx";
 import { Card } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/format";
-import { FixedExpenseCandidateCard, FixedExpenseResolvedCard } from "@/components/insights/fixed-expense-candidate-card";
+import { FixedExpenseCandidatesList, FixedExpenseResolvedList } from "@/components/insights/fixed-expense-candidate-card";
 import type {
   CategoryAverageComparison,
   CategoryGrowth,
@@ -268,22 +268,14 @@ export function FixedExpenseAlertCard({
       <p className="mt-0.5 text-xs text-(--color-text-muted)">
         Lançamentos que se repetem mês a mês e ainda não estão marcados como fixos
       </p>
-      <ul className="mt-3 flex flex-col gap-2.5">
-        {candidates.map((candidate) => (
-          <FixedExpenseCandidateCard key={candidate.groupKey} candidate={candidate} />
-        ))}
-      </ul>
+      <FixedExpenseCandidatesList candidates={candidates} />
     </div>
   );
 
   const resolvedSection = resolved.length > 0 && (
     <div className="mt-5 border-t border-(--color-border) pt-4">
       <h4 className="text-sm font-medium text-(--color-text)">Já resolvidos</h4>
-      <ul className="mt-3 flex flex-col gap-2.5">
-        {resolved.map((insight) => (
-          <FixedExpenseResolvedCard key={insight.groupKey} insight={insight} />
-        ))}
-      </ul>
+      <FixedExpenseResolvedList resolved={resolved} />
     </div>
   );
 

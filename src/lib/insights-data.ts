@@ -62,7 +62,16 @@ export type FixedExpenseCandidate = {
   amount: number | null;
   monthsCount: number;
   dayOfMonthRange: { min: number; max: number };
-  transactions: { id: string; date: string; amount: number }[];
+  transactions: FixedExpenseTransactionDetail[];
+};
+
+export type FixedExpenseTransactionDetail = {
+  id: string;
+  date: string;
+  amount: number;
+  description: string;
+  categoryName: string | null;
+  subcategoryName: string | null;
 };
 
 export type FixedExpenseResolvedInsight = {
@@ -71,7 +80,7 @@ export type FixedExpenseResolvedInsight = {
   amount: number | null;
   categoryName: string | null;
   subcategoryName: string | null;
-  transactions: { id: string; date: string; amount: number }[];
+  transactions: FixedExpenseTransactionDetail[];
   decidedAt: string;
 };
 
@@ -128,6 +137,7 @@ async function getInsightsPageDataUncached(userId: string): Promise<InsightsPage
         date: true,
         isFixed: true,
         category: { select: { id: true, name: true, color: true } },
+        subcategory: { select: { id: true, name: true } },
         tags: { select: { tag: { select: { name: true } } } },
       },
     }),
@@ -241,7 +251,16 @@ async function getInsightsPageDataUncached(userId: string): Promise<InsightsPage
   // excluindo qualquer grupo que o usuário já aceitou ou descartou anteriormente (decisão permanente por groupKey).
   const decidedGroupKeys = new Set(decisions.map((d) => d.groupKey));
   const fixedExpenseCandidates = detectFixedExpenseCandidates(
-    transactions.filter((tx) => !tx.isFixed).map((tx) => ({ id: tx.id, description: tx.description, amount: tx.amount, date: tx.date })),
+    transactions
+      .filter((tx) => !tx.isFixed)
+      .map((tx) => ({
+        id: tx.id,
+        description: tx.description,
+        amount: tx.amount,
+        date: tx.date,
+        categoryName: tx.category?.name ?? null,
+        subcategoryName: tx.subcategory?.name ?? null,
+      })),
     decidedGroupKeys
   );
 
@@ -260,7 +279,14 @@ async function getInsightsPageDataUncached(userId: string): Promise<InsightsPage
     allResolvedTransactionIds.length > 0
       ? prisma.transaction.findMany({
           where: { id: { in: allResolvedTransactionIds }, userId },
-          select: { id: true, date: true, amount: true },
+          select: {
+            id: true,
+            date: true,
+            amount: true,
+            description: true,
+            category: { select: { name: true } },
+            subcategory: { select: { name: true } },
+          },
         })
       : Promise.resolve([]),
   ]);
@@ -277,8 +303,15 @@ async function getInsightsPageDataUncached(userId: string): Promise<InsightsPage
       subcategoryName: d.subcategoryId ? categoryNamesById.get(d.subcategoryId) ?? null : null,
       transactions: d.transactionIds
         .map((id) => resolvedTransactionsById.get(id))
-        .filter((tx): tx is { id: string; date: Date; amount: number } => Boolean(tx))
-        .map((tx) => ({ id: tx.id, date: tx.date.toISOString(), amount: tx.amount })),
+        .filter((tx): tx is (typeof resolvedTransactionRows)[number] => Boolean(tx))
+        .map((tx) => ({
+          id: tx.id,
+          date: tx.date.toISOString(),
+          amount: tx.amount,
+          description: tx.description,
+          categoryName: tx.category?.name ?? null,
+          subcategoryName: tx.subcategory?.name ?? null,
+        })),
       decidedAt: d.createdAt.toISOString(),
     }))
     .sort((a, b) => b.decidedAt.localeCompare(a.decidedAt));
@@ -332,7 +365,14 @@ async function getInsightsPageDataUncached(userId: string): Promise<InsightsPage
   };
 }
 
-type CandidateTx = { id: string; description: string; amount: number; date: Date };
+type CandidateTx = {
+  id: string;
+  description: string;
+  amount: number;
+  date: Date;
+  categoryName: string | null;
+  subcategoryName: string | null;
+};
 
 function normalizeDescription(value: string) {
   return value.trim().toLowerCase();
@@ -352,11 +392,18 @@ function toCandidate(txs: CandidateTx[], groupKey: string, amount: number | null
     amount,
     monthsCount: new Set(sorted.map((tx) => monthKey(tx.date))).size,
     dayOfMonthRange: dayOfMonthRangeOf(sorted),
-    transactions: sorted.map((tx) => ({ id: tx.id, date: tx.date.toISOString(), amount: tx.amount })),
+    transactions: sorted.map((tx) => ({
+      id: tx.id,
+      date: tx.date.toISOString(),
+      amount: tx.amount,
+      description: tx.description,
+      categoryName: tx.categoryName,
+      subcategoryName: tx.subcategoryName,
+    })),
   };
 }
 
-const MAX_FIXED_EXPENSE_CANDIDATES = 8;
+const MAX_FIXED_EXPENSE_CANDIDATES = 30;
 
 /**
  * Chave estável do grupo (sobrevive a recálculos): liga um candidato recorrente
