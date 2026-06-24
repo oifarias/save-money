@@ -8,9 +8,10 @@ type ModalProps = {
   title: string;
   onClose: () => void;
   children: React.ReactNode;
+  size?: "md" | "lg";
 };
 
-export function Modal({ open, title, onClose, children }: ModalProps) {
+export function Modal({ open, title, onClose, children, size = "md" }: ModalProps) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -37,7 +38,9 @@ export function Modal({ open, title, onClose, children }: ModalProps) {
         aria-modal="true"
         aria-labelledby="modal-title"
         tabIndex={-1}
-        className="my-auto max-h-[100dvh] w-full max-w-lg overflow-y-auto rounded-none border-(--color-border) bg-(--color-surface) p-6 shadow-xl outline-none animate-fade-grow sm:max-h-[90dvh] sm:rounded-2xl sm:border"
+        className={`my-auto max-h-[100dvh] w-full overflow-y-auto rounded-none border-(--color-border) bg-(--color-surface) p-6 shadow-xl outline-none animate-fade-grow sm:max-h-[90dvh] sm:rounded-2xl sm:border ${
+          size === "lg" ? "max-w-3xl" : "max-w-lg"
+        }`}
       >
         <div className="mb-4 flex items-center justify-between">
           <h2 id="modal-title" className="font-display text-lg font-semibold text-(--color-text)">

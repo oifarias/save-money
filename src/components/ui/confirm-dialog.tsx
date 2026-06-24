@@ -9,6 +9,8 @@ type ConfirmDialogProps = {
   description: string;
   confirmLabel?: string;
   isLoading?: boolean;
+  variant?: "danger" | "primary";
+  children?: React.ReactNode;
   onConfirm: () => void;
   onCancel: () => void;
 };
@@ -19,6 +21,8 @@ export function ConfirmDialog({
   description,
   confirmLabel = "Confirmar exclusão",
   isLoading,
+  variant = "danger",
+  children,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
@@ -57,11 +61,12 @@ export function ConfirmDialog({
         <p id="confirm-dialog-description" className="mt-2 text-sm text-(--color-text-muted)">
           {description}
         </p>
+        {children && <div className="mt-4">{children}</div>}
         <div className="mt-6 flex justify-end gap-2">
           <Button type="button" variant="ghost" onClick={onCancel}>
             Cancelar
           </Button>
-          <Button type="button" variant="danger" onClick={onConfirm} isLoading={isLoading}>
+          <Button type="button" variant={variant} onClick={onConfirm} isLoading={isLoading}>
             {confirmLabel}
           </Button>
         </div>

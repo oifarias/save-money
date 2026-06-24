@@ -2,6 +2,7 @@ import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { monthLabel } from "@/lib/format";
 import { getFixedExpensesChecklist } from "@/lib/fixed-expenses-data";
+import { computeInstallmentForecasts } from "@/lib/installment-forecast";
 
 const NO_CATEGORY_ID = "sem-grupo";
 const NO_CATEGORY_COLOR = "#6B7A72";
@@ -333,27 +334,16 @@ async function getInsightsPageDataUncached(userId: string): Promise<InsightsPage
       : [];
   const installmentPlanCategoryNamesById = new Map(installmentPlanCategories.map((c) => [c.id, c.name]));
 
-  const installmentForecasts: InstallmentForecast[] = installmentPlans
-    .map((plan) => {
-      const lastLaunchedInstallment =
-        plan.transactions.length > 0 ? Math.max(...plan.transactions.map((t) => t.installmentNumber ?? 0)) : 0;
-      const remainingInstallments = plan.totalInstallments - lastLaunchedInstallment;
-      const endDate = addMonths(plan.startDate, plan.totalInstallments - 1);
-      const forecast: InstallmentForecast = {
-        planId: plan.id,
-        baseDescription: plan.baseDescription,
-        categoryName: plan.categoryId ? installmentPlanCategoryNamesById.get(plan.categoryId) ?? null : null,
-        remainingInstallments,
-        totalInstallments: plan.totalInstallments,
-        estimatedAmount: plan.estimatedAmount,
-        remainingAmount: remainingInstallments * plan.estimatedAmount,
-        endMonthLabel: monthLabel(endDate),
-      };
-      return { forecast, endDate };
-    })
-    .filter((entry) => entry.forecast.remainingInstallments > 0)
-    .sort((a, b) => a.endDate.getTime() - b.endDate.getTime())
-    .map((entry) => entry.forecast);
+  const installmentForecasts: InstallmentForecast[] = computeInstallmentForecasts(installmentPlans).map((core) => ({
+    planId: core.planId,
+    baseDescription: core.baseDescription,
+    categoryName: core.categoryId ? installmentPlanCategoryNamesById.get(core.categoryId) ?? null : null,
+    remainingInstallments: core.remainingInstallments,
+    totalInstallments: core.totalInstallments,
+    estimatedAmount: core.estimatedAmount,
+    remainingAmount: core.remainingAmount,
+    endMonthLabel: monthLabel(core.endDate),
+  }));
 
   return {
     windowLabel: `${monthLabel(historyStart)} – ${monthLabel(monthStart)}`,
