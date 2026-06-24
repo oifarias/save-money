@@ -3,13 +3,13 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import toast from "react-hot-toast";
-import { ArrowLeft, CalendarClock, CheckCircle2, Info, Sparkles, Target, XCircle } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Info, PiggyBank, Sparkles, Target, XCircle } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { getCategoryIcon } from "@/lib/category-icons";
-import { formatCurrency, formatDate } from "@/lib/format";
+import { formatCurrency, formatDate, monthLabel } from "@/lib/format";
 import type { WishSummary } from "@/lib/wish-data";
 import { WishPurchaseModal } from "@/components/wishes/wish-purchase-modal";
 import { WishAbandonDialog } from "@/components/wishes/wish-abandon-dialog";
@@ -17,16 +17,22 @@ import { WishStrategyStep, type AvailableGoal } from "@/components/wishes/wish-s
 import { WishMilestoneToast } from "@/components/wishes/wish-milestone-toast";
 import { addWishContributionAction } from "@/app/(app)/desejos/actions";
 
-const READINESS_REASON_LABEL: Record<string, string> = {
-  savings: "Você já economizou o suficiente para esse desejo",
-  installment_freed: "Uma parcela da mesma categoria está terminando e libera espaço no orçamento",
-  not_yet: "Ainda não há economia suficiente nem espaço liberado no orçamento",
-};
-
-function daysUntil(dateIso: string): number {
-  const target = new Date(dateIso);
-  const now = new Date();
-  return Math.max(1, Math.ceil((target.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)));
+function cashTimelineMessage(wish: WishSummary): string | null {
+  const readiness = wish.readiness;
+  if (!readiness) return null;
+  if (readiness.cashTimeline === "now") {
+    return "Pode comprar à vista este mês — o orçamento da categoria comporta esse valor agora.";
+  }
+  if (readiness.cashTimeline === "future" && readiness.cashAvailableMonthKey) {
+    const label = monthLabel(new Date(`${readiness.cashAvailableMonthKey}-01`));
+    return readiness.freedByInstallmentEnding
+      ? `Pode comprar à vista a partir de ${label}, quando uma parcela em andamento dessa categoria termina e libera espaço no orçamento.`
+      : `Pode comprar à vista a partir de ${label}, quando o orçamento da categoria comportar esse valor.`;
+  }
+  if (readiness.cashTimeline === "beyond_horizon") {
+    return "No ritmo atual de parcelas, não há previsão de espaço no orçamento da categoria nos próximos 12 meses.";
+  }
+  return null;
 }
 
 function renderSubcategoryIcon(icon: string) {
@@ -47,8 +53,7 @@ export function WishDetailView({ wish, availableGoals }: WishDetailViewProps) {
   const [isPending, startTransition] = useTransition();
 
   const progressPercent = wish.goal?.progressPercent ?? 0;
-  const inCoolingOff = Boolean(wish.coolingOffUntil) && new Date(wish.coolingOffUntil as string) > new Date();
-  const canAfford = wish.readiness?.canAfford && !inCoolingOff;
+  const timelineMessage = cashTimelineMessage(wish);
   const remaining = wish.goal ? Math.max(0, wish.estimatedAmount - wish.goal.currentAmount) : wish.estimatedAmount;
   const accumulated = wish.goal?.currentAmount ?? 0;
   const gapFocus = progressPercent < 60;
@@ -163,34 +168,54 @@ export function WishDetailView({ wish, availableGoals }: WishDetailViewProps) {
               </div>
             )}
 
-            {inCoolingOff && (
-              <div className="flex items-start gap-2 rounded-xl bg-(--color-accent)/10 px-4 py-3 text-sm text-(--color-text)">
-                <CalendarClock className="mt-0.5 h-4 w-4 shrink-0 text-(--color-accent)" aria-hidden="true" />
-                <p>
-                  Disponível para comprar em {daysUntil(wish.coolingOffUntil as string)} dia
-                  {daysUntil(wish.coolingOffUntil as string) > 1 ? "s" : ""}. Como esse desejo passa de R$ 300, deixamos
-                  um tempo de espera antes de liberar a compra — é uma fricção saudável para evitar decisões por
-                  impulso, não um bloqueio definitivo.
-                </p>
-              </div>
-            )}
-
-            {canAfford && (
-              <div className="flex items-start gap-2 rounded-xl bg-(--color-success)/10 px-4 py-3 text-sm text-(--color-success)">
+            {timelineMessage && (
+              <div
+                className={`flex items-start gap-2 rounded-xl px-4 py-3 text-sm ${
+                  wish.readiness?.cashTimeline === "now"
+                    ? "bg-(--color-success)/10 text-(--color-success)"
+                    : "bg-(--color-accent)/10 text-(--color-text)"
+                }`}
+              >
                 <Sparkles className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-                <p>
-                  Pode comprar! {wish.readiness && READINESS_REASON_LABEL[wish.readiness.reason]}
-                </p>
+                <p>{timelineMessage}</p>
               </div>
             )}
 
-            {wish.readiness?.budgetCheck === "indeterminate" && (
+            {wish.readiness?.cashTimeline === "indeterminate" && (
               <div className="flex items-start gap-2 rounded-xl bg-(--color-bg) px-4 py-3 text-sm text-(--color-text-muted)">
                 <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
                 <p>
-                  Orçamento do grupo &ldquo;{wish.category.name}&rdquo; ainda não configurado — configure em Metas para também
-                  saber se você pode comprar este desejo via parcela nova.
+                  Orçamento do grupo &ldquo;{wish.category.name}&rdquo; ainda não configurado — configure em Metas para sabermos
+                  quando o orçamento dessa categoria comporta a compra à vista.
                 </p>
+              </div>
+            )}
+
+            {wish.readiness && !wish.readiness.savings.alreadyEnough && (
+              <div className="flex items-start gap-2 rounded-xl border border-(--color-border) px-4 py-3 text-sm text-(--color-text)">
+                <PiggyBank className="mt-0.5 h-4 w-4 shrink-0 text-(--color-primary)" aria-hidden="true" />
+                <div className="flex flex-col gap-0.5">
+                  <p className="font-medium">Quer guardar em vez de esperar?</p>
+                  <p className="text-(--color-text-muted)">
+                    Faltam {formatCurrency(wish.readiness.savings.remainingAmount)} para comprar à vista.
+                    {wish.readiness.savings.monthlyNeededForDeadline !== null &&
+                      ` Para chegar lá até o prazo da meta, guarde ${formatCurrency(
+                        wish.readiness.savings.monthlyNeededForDeadline
+                      )}/mês.`}
+                    {wish.readiness.savings.monthlyNeededForDeadline === null &&
+                      wish.readiness.savings.suggestedMonthly !== null &&
+                      wish.readiness.savings.monthsAtSuggestedRate !== null &&
+                      (wish.readiness.savings.suggestedMonthly > 0
+                        ? ` Na sua sobra mensal estimada de orçamento (${formatCurrency(
+                            wish.readiness.savings.suggestedMonthly
+                          )}/mês), você completa em ${wish.readiness.savings.monthsAtSuggestedRate} ${
+                            wish.readiness.savings.monthsAtSuggestedRate === 1 ? "mês" : "meses"
+                          }.`
+                        : " Seu orçamento atual não deixa sobra mensal estimada — ajuste os limites em Metas ou guarde um valor manualmente.")}
+                    {wish.readiness.savings.suggestedMonthly === null &&
+                      " Configure o orçamento em Metas para estimarmos quanto você pode guardar por mês."}
+                  </p>
+                </div>
               </div>
             )}
 
@@ -219,11 +244,7 @@ export function WishDetailView({ wish, availableGoals }: WishDetailViewProps) {
               <Button type="button" variant="ghost" onClick={() => setAbandonOpen(true)}>
                 Mudar de prioridade
               </Button>
-              <Button
-                type="button"
-                onClick={() => setPurchaseOpen(true)}
-                title={inCoolingOff ? "Ainda em cooling-off, mas você pode prosseguir se quiser" : undefined}
-              >
+              <Button type="button" onClick={() => setPurchaseOpen(true)}>
                 Marcar como comprado
               </Button>
             </div>

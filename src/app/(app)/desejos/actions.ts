@@ -21,11 +21,6 @@ import { Prisma } from "@/generated/prisma/client";
 const NOT_FOUND_MESSAGE = "Desejo não encontrado";
 const GOAL_NOT_FOUND_MESSAGE = "Meta não encontrada";
 
-/** Desejos com valor estimado a partir deste limite entram em cooling-off automático. */
-const COOLING_OFF_THRESHOLD = 300;
-/** Duração do cooling-off, em dias corridos, a partir do cadastro. */
-const COOLING_OFF_DAYS = 3;
-
 export type ActionResult = {
   success: boolean;
   message?: string;
@@ -64,15 +59,9 @@ function invalidateAggregateCaches(userId: string) {
   revalidateTag(insightsCacheTag(userId), { expire: 0 });
 }
 
-function addDays(date: Date, amount: number) {
-  return new Date(date.getTime() + amount * 24 * 60 * 60 * 1000);
-}
-
 /**
  * Cria um novo desejo. Categoria e sub-grupo são obrigatórios (requisito de produto) e validados
- * via `resolveCategoryAndSubcategory`. Desejos com `estimatedAmount >= 300` entram automaticamente
- * em cooling-off de 3 dias corridos a partir do cadastro (fricção saudável, nunca um bloqueio
- * silencioso — a UI deve sempre explicar o motivo e mostrar a contagem).
+ * via `resolveCategoryAndSubcategory`.
  */
 export async function createWishAction(input: unknown): Promise<CreateWishResult> {
   const userId = await requireUserId();
@@ -89,8 +78,6 @@ export async function createWishAction(input: unknown): Promise<CreateWishResult
     return { success: false, fieldErrors: error };
   }
 
-  const coolingOffUntil = estimatedAmount >= COOLING_OFF_THRESHOLD ? addDays(new Date(), COOLING_OFF_DAYS) : null;
-
   const created = await prisma.wish.create({
     data: {
       userId,
@@ -100,7 +87,6 @@ export async function createWishAction(input: unknown): Promise<CreateWishResult
       subcategoryId,
       notes: notes || null,
       imageUrl: imageUrl || null,
-      coolingOffUntil,
     },
   });
 

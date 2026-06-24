@@ -4,28 +4,31 @@ import Link from "next/link";
 import { Sparkles, Target } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { getCategoryIcon } from "@/lib/category-icons";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, monthLabel } from "@/lib/format";
 import type { WishSummary } from "@/lib/wish-data";
 import { WishMilestoneToast } from "@/components/wishes/wish-milestone-toast";
 
 const MILESTONES = [25, 50, 75];
-
-function daysUntil(dateIso: string): number {
-  const target = new Date(dateIso);
-  const now = new Date();
-  const diffMs = target.getTime() - now.getTime();
-  return Math.max(1, Math.ceil(diffMs / (24 * 60 * 60 * 1000)));
-}
 
 function renderSubcategoryIcon(icon: string) {
   const Icon = getCategoryIcon(icon);
   return <Icon className="h-5 w-5" aria-hidden="true" />;
 }
 
+function cashTimelineLabel(wish: WishSummary): string | null {
+  const readiness = wish.readiness;
+  if (!readiness) return null;
+  if (readiness.cashTimeline === "now") return "Pode comprar à vista este mês";
+  if (readiness.cashTimeline === "future" && readiness.cashAvailableMonthKey) {
+    const date = new Date(`${readiness.cashAvailableMonthKey}-01`);
+    return `Pode comprar à vista em ${monthLabel(date)}`;
+  }
+  return null;
+}
+
 export function WishCard({ wish }: { wish: WishSummary }) {
   const progressPercent = wish.goal?.progressPercent ?? 0;
-  const inCoolingOff = Boolean(wish.coolingOffUntil) && new Date(wish.coolingOffUntil as string) > new Date();
-  const canAfford = wish.readiness?.canAfford && !inCoolingOff;
+  const timelineLabel = cashTimelineLabel(wish);
 
   const remaining = wish.goal ? Math.max(0, wish.estimatedAmount - wish.goal.currentAmount) : wish.estimatedAmount;
   const accumulated = wish.goal?.currentAmount ?? 0;
@@ -94,20 +97,14 @@ export function WishCard({ wish }: { wish: WishSummary }) {
             </div>
           )}
 
-          <div className="flex flex-wrap gap-2">
-            {canAfford && (
+          {timelineLabel && (
+            <div className="flex flex-wrap gap-2">
               <span className="inline-flex items-center gap-1 rounded-full bg-(--color-success)/10 px-2.5 py-1 text-xs font-medium text-(--color-success)">
                 <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-                Pode comprar!
+                {timelineLabel}
               </span>
-            )}
-            {inCoolingOff && (
-              <span className="inline-flex items-center rounded-full bg-(--color-accent)/10 px-2.5 py-1 text-xs font-medium text-(--color-accent)">
-                Disponível em {daysUntil(wish.coolingOffUntil as string)} dia
-                {daysUntil(wish.coolingOffUntil as string) > 1 ? "s" : ""}
-              </span>
-            )}
-          </div>
+            </div>
+          )}
         </Card>
       </Link>
     </>

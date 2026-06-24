@@ -212,7 +212,6 @@ model Wish {
   status          WishStatus @default(ACTIVE)
   notes           String?
   imageUrl        String?
-  coolingOffUntil DateTime?           // null quando o valor está abaixo do threshold de fricção
   purchasedAt     DateTime?
   purchasedTransactionId String? @unique
   abandonedAt     DateTime?
