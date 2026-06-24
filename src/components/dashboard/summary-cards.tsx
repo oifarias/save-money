@@ -92,24 +92,21 @@ export function SummaryCards({
             <CalendarCheck className="h-5 w-5" aria-hidden="true" />
           </span>
         </div>
-        <div className="flex items-baseline justify-center gap-1.5">
-          <span className="font-numeric text-2xl font-semibold text-(--color-text)">{formatCurrency(fixedExpenseTotal)}</span>
-          <span className="text-xs text-(--color-text-muted)">(Total)</span>
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-(--color-text-muted)">Total</span>
+          <span className="font-numeric text-sm font-semibold text-(--color-text)">{formatCurrency(fixedExpenseTotal)}</span>
         </div>
-        <div className="border-t border-(--color-border)" />
-        <div className="grid grid-cols-2 gap-3 text-center">
-          <div>
-            <p className="text-xs font-medium text-(--color-text)">Pendente ({fixedExpenseTemplates.pendingCount})</p>
-            <p className="font-numeric text-sm font-semibold text-(--color-accent)">
-              {formatCurrency(fixedExpenseTemplates.pendingTotal)}
-            </p>
-          </div>
-          <div>
-            <p className="text-xs font-medium text-(--color-text)">Pago ({fixedExpenseTemplates.paidCount})</p>
-            <p className="font-numeric text-sm font-semibold text-(--color-success)">
-              {formatCurrency(fixedExpenseTemplates.paidTotal)}
-            </p>
-          </div>
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-(--color-text-muted)">Pendente ({fixedExpenseTemplates.pendingCount})</span>
+          <span className="font-numeric text-sm font-semibold text-(--color-accent)">
+            {formatCurrency(fixedExpenseTemplates.pendingTotal)}
+          </span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-(--color-text-muted)">Pago ({fixedExpenseTemplates.paidCount})</span>
+          <span className="font-numeric text-sm font-semibold text-(--color-success)">
+            {formatCurrency(fixedExpenseTemplates.paidTotal)}
+          </span>
         </div>
         <p className="text-xs text-(--color-text-muted)">
           {expense > 0 ? `${((fixedExpenseTotal / expense) * 100).toFixed(0)}% das despesas ${periodLabel}` : "Nenhuma despesa fixa registrada"}
