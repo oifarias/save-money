@@ -11,7 +11,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/lancamentos", label: "Lançamentos", icon: ArrowLeftRight },
   { href: "/metas", label: "Metas", icon: Target },
-  { href: "/desejos", label: "Desejos", icon: Sparkles },
+  { href: "/desejos", label: "Compras", icon: Sparkles },
   { href: "/comparativo", label: "Comparativo", icon: BarChart3 },
   { href: "/insights", label: "Insights", icon: Lightbulb },
   { href: "/grupos", label: "Grupos", icon: Tags },

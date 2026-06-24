@@ -20,10 +20,16 @@ export function Modal({ open, title, onClose, children, size = "md" }: ModalProp
     }
     if (open) {
       document.addEventListener("keydown", handleKey);
-      ref.current?.focus();
     }
     return () => document.removeEventListener("keydown", handleKey);
   }, [open, onClose]);
+
+  useEffect(() => {
+    if (open) ref.current?.focus();
+    // Foca o container apenas na transição de fechado -> aberto; refazer isso em todo
+    // re-render (ex.: a cada tecla digitada num input do modal) rouba o foco do campo ativo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   if (!open) return null;
 
