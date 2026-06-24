@@ -18,6 +18,8 @@ export type MockPurchaseTiming = "this_month" | "next_month" | "later";
 
 export type MockPaymentMethod = "cash" | "installments";
 
+export type MockWishKind = "need" | "want";
+
 export type MockWish = {
   id: string;
   name: string;
@@ -34,12 +36,18 @@ export type MockWish = {
   paymentMethod: MockPaymentMethod;
   installmentsCount: number | null;
   installmentAmount: number | null;
+  kind: MockWishKind;
 };
 
 export const PURCHASE_TIMING_LABELS: Record<MockPurchaseTiming, string> = {
   this_month: "Este mês",
   next_month: "Mês que vem",
   later: "Mais pra frente (sem data)",
+};
+
+export const WISH_KIND_LABELS: Record<MockWishKind, string> = {
+  need: "Necessidade",
+  want: "Desejo",
 };
 
 export const MOCK_CATEGORIES: MockCategory[] = [
@@ -97,6 +105,7 @@ export const MOCK_WISHES: MockWish[] = [
     paymentMethod: "cash",
     installmentsCount: null,
     installmentAmount: null,
+    kind: "want",
   },
   {
     id: "wish-2",
@@ -114,6 +123,7 @@ export const MOCK_WISHES: MockWish[] = [
     paymentMethod: "installments",
     installmentsCount: 12,
     installmentAmount: 375,
+    kind: "need",
   },
   {
     id: "wish-3",
@@ -131,6 +141,7 @@ export const MOCK_WISHES: MockWish[] = [
     paymentMethod: "cash",
     installmentsCount: null,
     installmentAmount: null,
+    kind: "need",
   },
   {
     id: "wish-4",
@@ -148,6 +159,7 @@ export const MOCK_WISHES: MockWish[] = [
     paymentMethod: "installments",
     installmentsCount: 6,
     installmentAmount: 200,
+    kind: "want",
   },
   {
     id: "wish-5",
@@ -165,6 +177,7 @@ export const MOCK_WISHES: MockWish[] = [
     paymentMethod: "cash",
     installmentsCount: null,
     installmentAmount: null,
+    kind: "need",
   },
   {
     id: "wish-6",
@@ -182,6 +195,7 @@ export const MOCK_WISHES: MockWish[] = [
     paymentMethod: "cash",
     installmentsCount: null,
     installmentAmount: null,
+    kind: "want",
   },
   {
     id: "wish-7",
@@ -199,6 +213,7 @@ export const MOCK_WISHES: MockWish[] = [
     paymentMethod: "cash",
     installmentsCount: null,
     installmentAmount: null,
+    kind: "need",
   },
   {
     id: "wish-8",
@@ -216,5 +231,6 @@ export const MOCK_WISHES: MockWish[] = [
     paymentMethod: "cash",
     installmentsCount: null,
     installmentAmount: null,
+    kind: "want",
   },
 ];

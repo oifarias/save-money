@@ -8,9 +8,11 @@ import { Input } from "@/components/ui/input";
 import { formatCurrency } from "@/lib/format";
 import {
   PURCHASE_TIMING_LABELS,
+  WISH_KIND_LABELS,
   type MockCategory,
   type MockPaymentMethod,
   type MockPurchaseTiming,
+  type MockWishKind,
 } from "@/lib/wish-mock-data";
 
 export type WishPreviewAddInput = {
@@ -23,6 +25,7 @@ export type WishPreviewAddInput = {
   paymentMethod: MockPaymentMethod;
   installmentsCount: number | null;
   installmentAmount: number | null;
+  kind: MockWishKind;
 };
 
 type ItemDraft = {
@@ -33,6 +36,7 @@ type ItemDraft = {
   purchaseTiming: MockPurchaseTiming;
   paymentMethod: MockPaymentMethod;
   installmentsCount: string;
+  kind: MockWishKind;
 };
 
 type WishPreviewAddModalProps = {
@@ -52,6 +56,8 @@ function radioCardClass(active: boolean) {
   }`;
 }
 
+const KIND_OPTIONS: MockWishKind[] = ["need", "want"];
+
 function createItem(): ItemDraft {
   return {
     key: `item-${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -61,6 +67,7 @@ function createItem(): ItemDraft {
     purchaseTiming: "this_month",
     paymentMethod: "cash",
     installmentsCount: "1",
+    kind: "want",
   };
 }
 
@@ -128,6 +135,7 @@ export function WishPreviewAddModal({ open, categories, onClose, onAdd }: WishPr
           paymentMethod: item.paymentMethod,
           installmentsCount: item.paymentMethod === "installments" ? installments : null,
           installmentAmount: item.paymentMethod === "installments" ? installmentAmount : null,
+          kind: item.kind,
         };
       })
     );
@@ -217,7 +225,7 @@ export function WishPreviewAddModal({ open, categories, onClose, onAdd }: WishPr
                   </div>
                   {selectedCategory && selectedSubcategory && (
                     <p className="text-xs text-(--color-text-muted)">
-                      {selectedCategory.name} · {selectedSubcategory.name}
+                      {selectedCategory.name} · {selectedSubcategory.name} · {WISH_KIND_LABELS[item.kind]}
                     </p>
                   )}
                 </button>
@@ -267,6 +275,22 @@ export function WishPreviewAddModal({ open, categories, onClose, onAdd }: WishPr
                   value={item.link}
                   onChange={(e) => updateItem(item.key, { link: e.target.value })}
                 />
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-sm font-medium text-(--color-text)">Tipo</label>
+                  <div className="flex gap-2">
+                    {KIND_OPTIONS.map((kind) => (
+                      <button
+                        key={kind}
+                        type="button"
+                        onClick={() => updateItem(item.key, { kind })}
+                        className={radioCardClass(item.kind === kind)}
+                      >
+                        {WISH_KIND_LABELS[kind]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
                 <div className="flex flex-col gap-3 rounded-xl border border-(--color-border) bg-(--color-bg) p-3.5">
                   <p className="text-sm font-medium text-(--color-text)">Como você planeja comprar?</p>

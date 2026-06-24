@@ -3,11 +3,11 @@
 import Link from "next/link";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ExternalLink, GripVertical, Sparkles, Target, Wallet } from "lucide-react";
+import { ExternalLink, GripVertical, Heart, ShieldCheck, Sparkles, Target, Wallet } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { getCategoryIcon } from "@/lib/category-icons";
 import { formatCurrency } from "@/lib/format";
-import { PURCHASE_TIMING_LABELS, type MockCategory, type MockWish } from "@/lib/wish-mock-data";
+import { PURCHASE_TIMING_LABELS, WISH_KIND_LABELS, type MockCategory, type MockWish } from "@/lib/wish-mock-data";
 
 type WishPreviewCardProps = {
   wish: MockWish;
@@ -89,6 +89,21 @@ export function WishPreviewCard({ wish, position, category, subcategory, draggab
       )}
 
       <div className="flex flex-wrap items-center gap-2 pl-[3.25rem]">
+        <span
+          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${
+            wish.kind === "need"
+              ? "bg-(--color-danger)/10 text-(--color-danger)"
+              : "bg-(--color-primary)/10 text-(--color-primary)"
+          }`}
+        >
+          {wish.kind === "need" ? (
+            <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
+          ) : (
+            <Heart className="h-3.5 w-3.5" aria-hidden="true" />
+          )}
+          {WISH_KIND_LABELS[wish.kind]}
+        </span>
+
         {wish.cashTimelineLabel && (
           <span className="inline-flex items-center gap-1 rounded-full bg-(--color-success)/10 px-2.5 py-1 text-xs font-medium text-(--color-success)">
             <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />

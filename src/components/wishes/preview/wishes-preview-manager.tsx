@@ -3,9 +3,10 @@
 import { useId, useMemo, useState } from "react";
 import { DndContext, type DragEndEvent, closestCenter, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { SortableContext, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { ChevronDown, Layers, ListOrdered } from "lucide-react";
+import { ChevronDown, Heart, Layers, ListOrdered, ShieldCheck } from "lucide-react";
 import { Card } from "@/components/ui/card";
-import { MOCK_CATEGORIES, MOCK_WISHES, type MockWish } from "@/lib/wish-mock-data";
+import { formatCurrency } from "@/lib/format";
+import { MOCK_CATEGORIES, MOCK_WISHES, type MockWish, type MockWishKind } from "@/lib/wish-mock-data";
 import { WishPreviewCard } from "@/components/wishes/preview/wish-preview-card";
 import { WishPreviewAddModal, type WishPreviewAddInput } from "@/components/wishes/preview/wish-preview-add-modal";
 import { WishPreviewBulkModal } from "@/components/wishes/preview/wish-preview-bulk-modal";
@@ -16,6 +17,7 @@ type GroupMode = "priority" | "category";
 export function WishesPreviewManager() {
   const [wishes, setWishes] = useState<MockWish[]>(MOCK_WISHES);
   const [categoryFilter, setCategoryFilter] = useState("");
+  const [kindFilter, setKindFilter] = useState<MockWishKind | null>(null);
   const [groupMode, setGroupMode] = useState<GroupMode>("priority");
   const [addOpen, setAddOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -23,13 +25,29 @@ export function WishesPreviewManager() {
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
-  const active = useMemo(
+  const categoryFiltered = useMemo(
     () =>
       wishes
         .filter((wish) => wish.status === "ACTIVE")
-        .filter((wish) => !categoryFilter || wish.categoryId === categoryFilter)
-        .sort((a, b) => a.priority - b.priority),
+        .filter((wish) => !categoryFilter || wish.categoryId === categoryFilter),
     [wishes, categoryFilter]
+  );
+
+  const kindSummary = useMemo(() => {
+    const needs = categoryFiltered.filter((wish) => wish.kind === "need");
+    const wants = categoryFiltered.filter((wish) => wish.kind === "want");
+    return {
+      need: { count: needs.length, total: needs.reduce((sum, wish) => sum + wish.estimatedAmount, 0) },
+      want: { count: wants.length, total: wants.reduce((sum, wish) => sum + wish.estimatedAmount, 0) },
+    };
+  }, [categoryFiltered]);
+
+  const active = useMemo(
+    () =>
+      categoryFiltered
+        .filter((wish) => !kindFilter || wish.kind === kindFilter)
+        .sort((a, b) => a.priority - b.priority),
+    [categoryFiltered, kindFilter]
   );
 
   const categoryOf = (id: string) => MOCK_CATEGORIES.find((category) => category.id === id)!;
@@ -72,6 +90,7 @@ export function WishesPreviewManager() {
         paymentMethod: input.paymentMethod,
         installmentsCount: input.installmentsCount,
         installmentAmount: input.installmentAmount,
+        kind: input.kind,
       })),
     ]);
   }
@@ -96,6 +115,7 @@ export function WishesPreviewManager() {
         paymentMethod: "cash" as const,
         installmentsCount: null,
         installmentAmount: null,
+        kind: "want" as const,
       })),
     ]);
   }
@@ -120,6 +140,50 @@ export function WishesPreviewManager() {
       </div>
 
       <WishPreviewIntake onIndividual={() => setAddOpen(true)} onBulk={() => setBulkOpen(true)} />
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <button
+          type="button"
+          onClick={() => setKindFilter((current) => (current === "need" ? null : "need"))}
+          className={`flex items-center gap-3 rounded-2xl border p-4 text-left transition-colors ${
+            kindFilter === "need"
+              ? "border-(--color-primary) bg-(--color-primary)/10"
+              : "border-(--color-border) bg-(--color-surface) hover:border-(--color-primary)/40"
+          }`}
+        >
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-(--color-danger)/10 text-(--color-danger)">
+            <ShieldCheck className="h-5 w-5" aria-hidden="true" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium text-(--color-text)">Necessidades</p>
+            <p className="text-xs text-(--color-text-muted)">{kindSummary.need.count} item{kindSummary.need.count === 1 ? "" : "s"}</p>
+          </div>
+          <p className="shrink-0 font-numeric text-base font-semibold text-(--color-text)">
+            {formatCurrency(kindSummary.need.total)}
+          </p>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setKindFilter((current) => (current === "want" ? null : "want"))}
+          className={`flex items-center gap-3 rounded-2xl border p-4 text-left transition-colors ${
+            kindFilter === "want"
+              ? "border-(--color-primary) bg-(--color-primary)/10"
+              : "border-(--color-border) bg-(--color-surface) hover:border-(--color-primary)/40"
+          }`}
+        >
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-(--color-primary)/10 text-(--color-primary)">
+            <Heart className="h-5 w-5" aria-hidden="true" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium text-(--color-text)">Desejos</p>
+            <p className="text-xs text-(--color-text-muted)">{kindSummary.want.count} item{kindSummary.want.count === 1 ? "" : "s"}</p>
+          </div>
+          <p className="shrink-0 font-numeric text-base font-semibold text-(--color-text)">
+            {formatCurrency(kindSummary.want.total)}
+          </p>
+        </button>
+      </div>
 
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex flex-col gap-1.5">
