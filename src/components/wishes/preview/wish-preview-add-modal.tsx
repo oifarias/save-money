@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, Heart, Plus, ShieldCheck, Trash2 } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -56,7 +56,16 @@ function radioCardClass(active: boolean) {
   }`;
 }
 
-const KIND_OPTIONS: MockWishKind[] = ["need", "want"];
+const KIND_OPTIONS = [
+  { value: "need" as const, icon: ShieldCheck, color: "var(--color-primary)" },
+  { value: "want" as const, icon: Heart, color: "var(--color-danger)" },
+];
+
+function kindButtonClass(active: boolean) {
+  return `flex-1 flex items-center justify-center gap-1.5 cursor-pointer rounded-xl border px-3.5 py-2.5 text-center text-sm font-medium transition-colors ${
+    active ? "border-transparent text-white" : "border-(--color-border) text-(--color-text-muted) hover:border-(--color-primary)/40"
+  }`;
+}
 
 function createItem(): ItemDraft {
   return {
@@ -279,16 +288,22 @@ export function WishPreviewAddModal({ open, categories, onClose, onAdd }: WishPr
                 <div className="flex flex-col gap-1.5">
                   <label className="text-sm font-medium text-(--color-text)">Tipo</label>
                   <div className="flex gap-2">
-                    {KIND_OPTIONS.map((kind) => (
-                      <button
-                        key={kind}
-                        type="button"
-                        onClick={() => updateItem(item.key, { kind })}
-                        className={radioCardClass(item.kind === kind)}
-                      >
-                        {WISH_KIND_LABELS[kind]}
-                      </button>
-                    ))}
+                    {KIND_OPTIONS.map((option) => {
+                      const Icon = option.icon;
+                      const isActive = item.kind === option.value;
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => updateItem(item.key, { kind: option.value })}
+                          className={kindButtonClass(isActive)}
+                          style={isActive ? { backgroundColor: option.color } : undefined}
+                        >
+                          <Icon className="h-4 w-4" aria-hidden="true" />
+                          {WISH_KIND_LABELS[option.value]}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 

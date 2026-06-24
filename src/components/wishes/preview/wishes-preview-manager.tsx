@@ -133,8 +133,12 @@ export function WishesPreviewManager() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="font-display text-2xl font-semibold text-(--color-text)">Desejos (protótipo)</h1>
+        <h1 className="font-display text-2xl font-semibold text-(--color-text)">Lista de compras (protótipo)</h1>
         <p className="mt-1 text-sm text-(--color-text-muted)">
+          Cadastre os itens que você deseja comprar para se organizar financeiramente da melhor forma — acompanhe
+          prioridades, valores e quando cada compra cabe no seu orçamento.
+        </p>
+        <p className="mt-1 text-xs text-(--color-text-muted)">
           Tela de validação de UX com dados mockados — nada aqui é persistido.
         </p>
       </div>
@@ -151,7 +155,7 @@ export function WishesPreviewManager() {
               : "border-(--color-border) bg-(--color-surface) hover:border-(--color-primary)/40"
           }`}
         >
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-(--color-danger)/10 text-(--color-danger)">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-(--color-primary)/10 text-(--color-primary)">
             <ShieldCheck className="h-5 w-5" aria-hidden="true" />
           </span>
           <div className="min-w-0 flex-1">
@@ -172,7 +176,7 @@ export function WishesPreviewManager() {
               : "border-(--color-border) bg-(--color-surface) hover:border-(--color-primary)/40"
           }`}
         >
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-(--color-primary)/10 text-(--color-primary)">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-(--color-danger)/10 text-(--color-danger)">
             <Heart className="h-5 w-5" aria-hidden="true" />
           </span>
           <div className="min-w-0 flex-1">

@@ -92,8 +92,8 @@ export function WishPreviewCard({ wish, position, category, subcategory, draggab
         <span
           className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${
             wish.kind === "need"
-              ? "bg-(--color-danger)/10 text-(--color-danger)"
-              : "bg-(--color-primary)/10 text-(--color-primary)"
+              ? "bg-(--color-primary)/10 text-(--color-primary)"
+              : "bg-(--color-danger)/10 text-(--color-danger)"
           }`}
         >
           {wish.kind === "need" ? (
