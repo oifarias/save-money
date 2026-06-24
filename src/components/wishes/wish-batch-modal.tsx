@@ -1,52 +1,19 @@
 "use client";
 
-import { useState } from "react";
-import { ChevronDown, Heart, Plus, ShieldCheck, Trash2 } from "lucide-react";
+import { useState, useTransition } from "react";
+import toast from "react-hot-toast";
+import { ChevronDown, Plus, Trash2 } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatCurrency } from "@/lib/format";
-import {
-  PURCHASE_TIMING_LABELS,
-  WISH_KIND_LABELS,
-  type MockCategory,
-  type MockPaymentMethod,
-  type MockPurchaseTiming,
-  type MockWishKind,
-} from "@/lib/wish-mock-data";
+import { createWishBatchAction } from "@/app/(app)/desejos/actions";
+import { PAYMENT_METHOD_LABELS, PURCHASE_TIMING_LABELS, WISH_KIND_LABELS, WISH_KIND_OPTIONS } from "@/lib/wish-labels";
+import type { WishKind, WishPaymentMethod, WishPurchaseTiming } from "@/generated/prisma/client";
 
-export type WishPreviewAddInput = {
-  name: string;
-  estimatedAmount: number;
-  link: string | null;
-  categoryId: string;
-  subcategoryId: string;
-  purchaseTiming: MockPurchaseTiming;
-  paymentMethod: MockPaymentMethod;
-  installmentsCount: number | null;
-  installmentAmount: number | null;
-  kind: MockWishKind;
-};
+export type WishFormCategory = { id: string; name: string; children: { id: string; name: string }[] };
 
-type ItemDraft = {
-  key: string;
-  name: string;
-  amount: string;
-  link: string;
-  purchaseTiming: MockPurchaseTiming;
-  paymentMethod: MockPaymentMethod;
-  installmentsCount: string;
-  kind: MockWishKind;
-};
-
-type WishPreviewAddModalProps = {
-  open: boolean;
-  categories: MockCategory[];
-  onClose: () => void;
-  onAdd: (inputs: WishPreviewAddInput[]) => void;
-};
-
-const TIMING_OPTIONS: MockPurchaseTiming[] = ["this_month", "next_month", "later"];
+const TIMING_OPTIONS: WishPurchaseTiming[] = ["THIS_MONTH", "NEXT_MONTH", "LATER"];
 
 function radioCardClass(active: boolean) {
   return `flex-1 cursor-pointer rounded-xl border px-3.5 py-2.5 text-center text-sm font-medium transition-colors ${
@@ -56,16 +23,29 @@ function radioCardClass(active: boolean) {
   }`;
 }
 
-const KIND_OPTIONS = [
-  { value: "need" as const, icon: ShieldCheck, color: "var(--color-primary)" },
-  { value: "want" as const, icon: Heart, color: "var(--color-danger)" },
-];
-
 function kindButtonClass(active: boolean) {
   return `flex-1 flex items-center justify-center gap-1.5 cursor-pointer rounded-xl border px-3.5 py-2.5 text-center text-sm font-medium transition-colors ${
     active ? "border-transparent text-white" : "border-(--color-border) text-(--color-text-muted) hover:border-(--color-primary)/40"
   }`;
 }
+
+type ItemDraft = {
+  key: string;
+  name: string;
+  amount: string;
+  link: string;
+  purchaseTiming: WishPurchaseTiming;
+  paymentMethod: WishPaymentMethod;
+  installmentsCount: string;
+  kind: WishKind;
+};
+
+type WishBatchModalProps = {
+  open: boolean;
+  categories: WishFormCategory[];
+  onClose: () => void;
+  onAdded: () => void;
+};
 
 function createItem(): ItemDraft {
   return {
@@ -73,18 +53,19 @@ function createItem(): ItemDraft {
     name: "",
     amount: "",
     link: "",
-    purchaseTiming: "this_month",
-    paymentMethod: "cash",
+    purchaseTiming: "THIS_MONTH",
+    paymentMethod: "CASH",
     installmentsCount: "1",
-    kind: "want",
+    kind: "WANT",
   };
 }
 
-export function WishPreviewAddModal({ open, categories, onClose, onAdd }: WishPreviewAddModalProps) {
+export function WishBatchModal({ open, categories, onClose, onAdded }: WishBatchModalProps) {
   const [categoryId, setCategoryId] = useState("");
   const [subcategoryId, setSubcategoryId] = useState("");
   const [items, setItems] = useState<ItemDraft[]>([createItem()]);
   const [expandedKey, setExpandedKey] = useState<string | null>(items[0]?.key ?? null);
+  const [isPending, startTransition] = useTransition();
 
   const subcategoryOptions = categories.find((category) => category.id === categoryId)?.children ?? [];
   const selectedCategory = categories.find((category) => category.id === categoryId);
@@ -128,34 +109,42 @@ export function WishPreviewAddModal({ open, categories, onClose, onAdd }: WishPr
     event.preventDefault();
     if (!canSubmit) return;
 
-    onAdd(
-      validItems.map((item) => {
-        const amountValue = Number(item.amount.replace(",", ".")) || 0;
-        const installments = Math.max(1, Number(item.installmentsCount) || 1);
-        const installmentAmount = item.paymentMethod === "installments" && amountValue > 0 ? amountValue / installments : null;
+    startTransition(async () => {
+      const result = await createWishBatchAction({
+        categoryId,
+        subcategoryId,
+        items: validItems.map((item) => {
+          const amountValue = Number(item.amount.replace(",", ".")) || 0;
+          const installments = Math.max(1, Number(item.installmentsCount) || 1);
 
-        return {
-          name: item.name.trim(),
-          estimatedAmount: amountValue,
-          link: item.link.trim() ? item.link.trim() : null,
-          categoryId,
-          subcategoryId,
-          purchaseTiming: item.purchaseTiming,
-          paymentMethod: item.paymentMethod,
-          installmentsCount: item.paymentMethod === "installments" ? installments : null,
-          installmentAmount: item.paymentMethod === "installments" ? installmentAmount : null,
-          kind: item.kind,
-        };
-      })
-    );
-    reset();
-    onClose();
+          return {
+            name: item.name.trim(),
+            estimatedAmount: amountValue,
+            link: item.link.trim() ? item.link.trim() : undefined,
+            purchaseTiming: item.purchaseTiming,
+            paymentMethod: item.paymentMethod,
+            installmentsCount: item.paymentMethod === "INSTALLMENTS" ? installments : undefined,
+            kind: item.kind,
+          };
+        }),
+      });
+
+      if (!result.success) {
+        toast.error(result.message ?? "Não foi possível cadastrar os itens");
+        return;
+      }
+
+      toast.success(result.message ?? "Itens cadastrados");
+      reset();
+      onAdded();
+      onClose();
+    });
   }
 
   return (
     <Modal
       open={open}
-      title="Novo desejo"
+      title="Novo item"
       size="lg"
       onClose={() => {
         reset();
@@ -212,7 +201,7 @@ export function WishPreviewAddModal({ open, categories, onClose, onAdd }: WishPr
           {items.map((item, index) => {
             const amountValue = Number(item.amount.replace(",", ".")) || 0;
             const installments = Math.max(1, Number(item.installmentsCount) || 1);
-            const installmentAmount = item.paymentMethod === "installments" && amountValue > 0 ? amountValue / installments : null;
+            const installmentAmount = item.paymentMethod === "INSTALLMENTS" && amountValue > 0 ? amountValue / installments : null;
             const isExpanded = expandedKey === item.key;
 
             if (!isExpanded) {
@@ -259,7 +248,7 @@ export function WishPreviewAddModal({ open, categories, onClose, onAdd }: WishPr
                 </div>
 
                 <Input
-                  label="Nome do desejo"
+                  label="Nome do item"
                   placeholder="Ex.: Geladeira nova"
                   value={item.name}
                   onChange={(e) => updateItem(item.key, { name: e.target.value })}
@@ -288,7 +277,7 @@ export function WishPreviewAddModal({ open, categories, onClose, onAdd }: WishPr
                 <div className="flex flex-col gap-1.5">
                   <label className="text-sm font-medium text-(--color-text)">Tipo</label>
                   <div className="flex gap-2">
-                    {KIND_OPTIONS.map((option) => {
+                    {WISH_KIND_OPTIONS.map((option) => {
                       const Icon = option.icon;
                       const isActive = item.kind === option.value;
                       return (
@@ -300,7 +289,7 @@ export function WishPreviewAddModal({ open, categories, onClose, onAdd }: WishPr
                           style={isActive ? { backgroundColor: option.color } : undefined}
                         >
                           <Icon className="h-4 w-4" aria-hidden="true" />
-                          {WISH_KIND_LABELS[option.value]}
+                          {option.label}
                         </button>
                       );
                     })}
@@ -331,22 +320,22 @@ export function WishPreviewAddModal({ open, categories, onClose, onAdd }: WishPr
                     <div className="flex gap-2">
                       <button
                         type="button"
-                        onClick={() => updateItem(item.key, { paymentMethod: "cash" })}
-                        className={radioCardClass(item.paymentMethod === "cash")}
+                        onClick={() => updateItem(item.key, { paymentMethod: "CASH" })}
+                        className={radioCardClass(item.paymentMethod === "CASH")}
                       >
-                        À vista
+                        {PAYMENT_METHOD_LABELS.CASH}
                       </button>
                       <button
                         type="button"
-                        onClick={() => updateItem(item.key, { paymentMethod: "installments" })}
-                        className={radioCardClass(item.paymentMethod === "installments")}
+                        onClick={() => updateItem(item.key, { paymentMethod: "INSTALLMENTS" })}
+                        className={radioCardClass(item.paymentMethod === "INSTALLMENTS")}
                       >
-                        Parcelado
+                        {PAYMENT_METHOD_LABELS.INSTALLMENTS}
                       </button>
                     </div>
                   </div>
 
-                  {item.paymentMethod === "installments" && (
+                  {item.paymentMethod === "INSTALLMENTS" && (
                     <div className="flex flex-col gap-1.5">
                       <label className="text-xs font-medium text-(--color-text-muted)">Em quantas parcelas (sem juros)</label>
                       <Input
@@ -361,8 +350,8 @@ export function WishPreviewAddModal({ open, categories, onClose, onAdd }: WishPr
                       {installmentAmount !== null && installmentAmount > 0 && (
                         <p className="text-xs text-(--color-text-muted)">
                           {installments}x de{" "}
-                          <span className="font-numeric font-medium text-(--color-text)">{formatCurrency(installmentAmount)}</span> · esse
-                          é o valor considerado no orçamento e na meta do grupo a cada mês
+                          <span className="font-numeric font-medium text-(--color-text)">{formatCurrency(installmentAmount)}</span> ·
+                          esse valor só passa a comprometer seu orçamento quando você marcar a compra como realizada
                         </p>
                       )}
                     </div>
@@ -382,8 +371,8 @@ export function WishPreviewAddModal({ open, categories, onClose, onAdd }: WishPr
           <Button type="button" variant="ghost" onClick={onClose}>
             Cancelar
           </Button>
-          <Button type="submit" disabled={!canSubmit}>
-            Cadastrar {validItems.length} desejo{validItems.length === 1 ? "" : "s"}
+          <Button type="submit" disabled={!canSubmit} isLoading={isPending}>
+            Cadastrar {validItems.length} item{validItems.length === 1 ? "" : "s"}
           </Button>
         </div>
       </form>

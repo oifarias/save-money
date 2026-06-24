@@ -1,13 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowLeft, ArrowRight, Heart, PiggyBank, ShieldCheck } from "lucide-react";
+import { ArrowLeft, ArrowRight, PiggyBank } from "lucide-react";
 import { clsx } from "clsx";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { getCategoryIcon } from "@/lib/category-icons";
 import { formatCurrency } from "@/lib/format";
-import { getDefaultBucket, type Bucket } from "@/lib/budget-buckets";
+import { getDefaultBucket, BUCKET_OPTIONS, type Bucket } from "@/lib/budget-buckets";
 
 type AllocationStepProps = {
   income: number;
@@ -16,11 +16,6 @@ type AllocationStepProps = {
   onConfirmed: (buckets: Record<string, Bucket>) => void;
   onBack: () => void;
 };
-
-const BUCKET_OPTIONS = [
-  { value: "necessidade" as const, label: "Necessidade", icon: ShieldCheck, color: "var(--color-primary)" },
-  { value: "desejo" as const, label: "Desejo", icon: Heart, color: "var(--color-danger)" },
-];
 
 export function AllocationStep({ income, categories, initialBuckets, onConfirmed, onBack }: AllocationStepProps) {
   const [buckets, setBuckets] = useState<Record<string, Bucket>>(() => {
@@ -34,6 +29,8 @@ export function AllocationStep({ income, categories, initialBuckets, onConfirmed
   const necessidadeValue = income * 0.5;
   const desejoValue = income * 0.3;
   const poupancaValue = income * 0.2;
+  const NecessidadeIcon = BUCKET_OPTIONS[0].icon;
+  const DesejoIcon = BUCKET_OPTIONS[1].icon;
 
   function toggleBucket(categoryId: string, bucket: Bucket) {
     setBuckets((current) => ({ ...current, [categoryId]: bucket }));
@@ -52,14 +49,14 @@ export function AllocationStep({ income, categories, initialBuckets, onConfirmed
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <Card className="flex flex-col gap-1">
           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-(--color-primary)/10 text-(--color-primary)">
-            <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+            <NecessidadeIcon className="h-4 w-4" aria-hidden="true" />
           </span>
           <p className="mt-1 text-xs font-medium uppercase tracking-wide text-(--color-text-muted)">Necessidades · 50%</p>
           <p className="font-numeric text-lg font-semibold text-(--color-text)">{formatCurrency(necessidadeValue)}</p>
         </Card>
         <Card className="flex flex-col gap-1">
           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-(--color-danger)/10 text-(--color-danger)">
-            <Heart className="h-4 w-4" aria-hidden="true" />
+            <DesejoIcon className="h-4 w-4" aria-hidden="true" />
           </span>
           <p className="mt-1 text-xs font-medium uppercase tracking-wide text-(--color-text-muted)">Desejos · 30%</p>
           <p className="font-numeric text-lg font-semibold text-(--color-text)">{formatCurrency(desejoValue)}</p>
