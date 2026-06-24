@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Sora, Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import { Toaster } from "react-hot-toast";
 import { ThemeProvider } from "@/components/theme/theme-provider";
 import "./globals.css";
@@ -41,6 +42,7 @@ export default function RootLayout({
           {children}
           <Toaster position="bottom-right" />
         </ThemeProvider>
+        <Analytics />
       </body>
     </html>
   );

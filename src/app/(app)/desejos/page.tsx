@@ -1,11 +1,24 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { currentMonthKey, ensureCurrentMonthBudgets, getBudgetProgress } from "@/lib/budget-data";
 import { getWishesPageData } from "@/lib/wish-data";
 import { WishesManager } from "@/components/wishes/wishes-manager";
+import { WishesBudgetRequired } from "@/components/wishes/wishes-budget-required";
 
 export default async function DesejosPage() {
   const session = await auth();
   const userId = session!.user.id;
+  const month = currentMonthKey();
+
+  // ensureCurrentMonthBudgets precisa terminar antes de getBudgetProgress (mesma ordem usada na
+  // tela de Metas), senão a leitura pode acontecer antes da cópia do mês anterior e mostrar a
+  // sugestão indevidamente para quem já tem metas configuradas.
+  await ensureCurrentMonthBudgets(userId, month);
+  const progress = await getBudgetProgress(userId, month);
+
+  if (!progress) {
+    return <WishesBudgetRequired />;
+  }
 
   const [{ active, purchased, abandoned }, categories] = await Promise.all([
     getWishesPageData(userId),

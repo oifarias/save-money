@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarClock, ChevronDown, CheckCircle2, ClipboardList } from "lucide-react";
+import { CalendarClock, ChevronDown, CheckCircle2, ClipboardList, Pencil } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
@@ -33,6 +33,11 @@ export function FixedExpensesChecklist({ items }: FixedExpensesChecklistProps) {
   function closePayModal() {
     setPayModalOpen(false);
     setSelectedIds(new Set());
+  }
+
+  function editAndPay(templateId: string) {
+    setSelectedIds(new Set([templateId]));
+    setPayModalOpen(true);
   }
 
   if (items.length === 0) {
@@ -125,10 +130,21 @@ export function FixedExpensesChecklist({ items }: FixedExpensesChecklistProps) {
                       Pago
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-(--color-accent)/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-(--color-accent)">
-                      <CalendarClock className="h-3 w-3" aria-hidden="true" />
-                      Pendente
-                    </span>
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => editAndPay(item.templateId)}
+                        title="Editar valor e marcar como pago"
+                        aria-label={`Editar valor e marcar ${item.description} como pago`}
+                        className="inline-flex items-center justify-center rounded-lg p-1.5 text-(--color-text-muted) transition-colors hover:bg-(--color-primary)/10 hover:text-(--color-primary) cursor-pointer"
+                      >
+                        <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                      </button>
+                      <span className="inline-flex items-center gap-1 rounded-full bg-(--color-accent)/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-(--color-accent)">
+                        <CalendarClock className="h-3 w-3" aria-hidden="true" />
+                        Pendente
+                      </span>
+                    </>
                   )}
                 </div>
               </div>
