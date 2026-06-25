@@ -51,6 +51,7 @@ export function TransactionForm({ categories, tagSuggestions, transaction, onDon
   const [type, setType] = useState<"EXPENSE" | "INCOME">(transaction?.type ?? "EXPENSE");
   const [categoryModalOpen, setCategoryModalOpen] = useState(false);
   const [categoryId, setCategoryId] = useState(transaction?.categoryId ?? "");
+  const [isInstallment, setIsInstallment] = useState(false);
 
   const selectedCategory = categories.find((category) => category.id === categoryId);
   const subcategoryOptions = selectedCategory?.children ?? [];
@@ -222,6 +223,42 @@ export function TransactionForm({ categories, tagSuggestions, transaction, onDon
             <p className="text-xs text-(--color-text-muted)">Marque para gastos recorrentes como aluguel ou assinaturas</p>
           </div>
         </div>
+
+        {!transaction && (
+          <div className="flex flex-col gap-1.5 rounded-xl border border-(--color-border) bg-(--color-bg) p-3.5">
+            <label className="flex items-center gap-2.5 text-sm font-medium text-(--color-text)">
+              <input
+                type="checkbox"
+                name="isInstallment"
+                checked={isInstallment}
+                onChange={(event) => setIsInstallment(event.target.checked)}
+                className="h-4 w-4 rounded border-(--color-border) accent-(--color-primary)"
+              />
+              Esta despesa é parcelada?
+            </label>
+            {isInstallment ? (
+              <>
+                <Input
+                  label="Quantidade de parcelas"
+                  name="totalInstallments"
+                  type="number"
+                  min="2"
+                  max="360"
+                  step="1"
+                  placeholder="Ex.: 4"
+                  error={state.fieldErrors?.totalInstallments}
+                  required
+                />
+                <p className="text-xs text-(--color-text-muted)">
+                  A numeração da parcela será adicionada automaticamente à descrição. As demais parcelas serão
+                  lançadas automaticamente nos meses seguintes, com a mesma categoria, sub-grupo e hashtags.
+                </p>
+              </>
+            ) : (
+              <p className="text-xs text-(--color-text-muted)">Marque se esta despesa será paga em mais de uma parcela</p>
+            )}
+          </div>
+        )}
 
         <TagInput
           name="tags"

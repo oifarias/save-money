@@ -8,7 +8,13 @@ import { syncTransactionTags } from "@/lib/tags";
 import { transactionSchema } from "@/lib/validations/transaction";
 import { bulkUpdateTransactionSchema } from "@/lib/validations/bulk-transaction";
 import { resolveCategoryAndSubcategory } from "@/lib/category-resolver";
-import { resolveInstallmentPlan } from "@/lib/installment-resolver";
+import {
+  resolveInstallmentPlan,
+  parseInstallmentDescription,
+  createInstallmentPlanWithTransactions,
+  deleteInstallmentPlanCascade,
+  propagateInstallmentEdit,
+} from "@/lib/installment-resolver";
 import { resolveFixedExpenseTemplate } from "@/lib/fixed-expense-resolver";
 import { payFixedExpensesSchema } from "@/lib/validations/fixed-expense";
 import { parseTransactionFilters } from "@/lib/validations/transaction-filters";
@@ -65,6 +71,8 @@ function parseFormData(formData: FormData) {
     isFixed: formData.get("isFixed") === "on",
     recurrence: String(formData.get("recurrence") ?? "NONE"),
     tags,
+    isInstallment: formData.get("isInstallment") === "on",
+    totalInstallments: String(formData.get("totalInstallments") ?? ""),
   });
 }
 
@@ -76,7 +84,8 @@ export async function createTransactionAction(_prev: ActionResult, formData: For
     return { success: false, fieldErrors: flattenZodErrors(parsed.error) };
   }
 
-  const { type, date, description, amount, categoryId, subcategoryId, isFixed, recurrence, tags } = parsed.data;
+  const { type, date, description, amount, categoryId, subcategoryId, isFixed, recurrence, tags, isInstallment, totalInstallments } =
+    parsed.data;
 
   const accountId = await getDefaultAccountId(userId);
   if (!accountId) {
@@ -86,6 +95,32 @@ export async function createTransactionAction(_prev: ActionResult, formData: For
   const { error } = await resolveCategoryAndSubcategory(userId, categoryId ?? "", subcategoryId ?? "");
   if (error) {
     return { success: false, fieldErrors: error };
+  }
+
+  if (isInstallment && totalInstallments) {
+    // Despesa parcelada via flag do formulário: gera o plano e já materializa as N parcelas
+    // (meses seguintes), todas vinculadas ao mesmo plano e replicando categoria/subcategoria.
+    await prisma.$transaction(async (tx) => {
+      const { transactions } = await createInstallmentPlanWithTransactions(tx, userId, {
+        baseDescription: description,
+        totalInstallments: Number(totalInstallments),
+        amount: Number(amount),
+        startDate: new Date(date),
+        type: type as TransactionType,
+        accountId,
+        categoryId,
+        subcategoryId,
+      });
+
+      for (const created of transactions) {
+        await syncTransactionTags(tx, userId, created.id, tags);
+      }
+    });
+
+    revalidatePath("/dashboard");
+    revalidatePath("/lancamentos");
+    invalidateAggregateCaches(userId);
+    return { success: true, message: `Lançamento registrado com sucesso (${totalInstallments} parcelas geradas)` };
   }
 
   await prisma.$transaction(async (tx) => {
@@ -156,14 +191,19 @@ export async function updateTransactionAction(_prev: ActionResult, formData: For
   }
 
   await prisma.$transaction(async (tx) => {
-    const installmentInfo = await resolveInstallmentPlan(tx, userId, {
-      description,
-      date: new Date(date),
-      amount: Number(amount),
-      categoryId,
-      subcategoryId,
-      excludeTransactionId: id,
-    });
+    // Transação já vinculada a um plano (criado pela flag ou por um vínculo regex anterior):
+    // mantém o vínculo estrutural via FK, sem tentar re-detectar pelo texto da nova descrição —
+    // senão editar só o nome-base (removendo o "(x/y)") desvincularia a transação do plano.
+    const installmentInfo = existing.installmentPlanId
+      ? { installmentPlanId: existing.installmentPlanId, installmentNumber: existing.installmentNumber }
+      : await resolveInstallmentPlan(tx, userId, {
+          description,
+          date: new Date(date),
+          amount: Number(amount),
+          categoryId,
+          subcategoryId,
+          excludeTransactionId: id,
+        });
 
     const fixedExpenseInfo = await resolveFixedExpenseTemplate(tx, userId, {
       isFixed: Boolean(isFixed),
@@ -194,6 +234,21 @@ export async function updateTransactionAction(_prev: ActionResult, formData: For
     });
 
     await syncTransactionTags(tx, userId, id, tags);
+
+    // Editar a parcela 1/N propaga valor/categoria/descrição-base para as demais parcelas já
+    // geradas do mesmo plano — mantém as N transações coerentes entre si.
+    if (installmentInfo?.installmentNumber === 1 && installmentInfo.installmentPlanId) {
+      const baseDescription = parseInstallmentDescription(description)?.baseDescription ?? description;
+      const siblingIds = await propagateInstallmentEdit(tx, userId, installmentInfo.installmentPlanId, {
+        baseDescription,
+        amount: Number(amount),
+        categoryId,
+        subcategoryId,
+      });
+      for (const siblingId of siblingIds) {
+        await syncTransactionTags(tx, userId, siblingId, tags);
+      }
+    }
   });
 
   revalidatePath("/dashboard");
@@ -439,7 +494,13 @@ export async function deleteTransactionAction(id: string): Promise<ActionResult>
     return { success: false, message: "Lançamento não encontrado" };
   }
 
-  await prisma.transaction.delete({ where: { id } });
+  if (existing.installmentPlanId) {
+    // Excluir qualquer parcela de um plano remove o plano inteiro e todas as suas transações —
+    // elas foram geradas juntas como uma unidade, não faz sentido deixar parcelas órfãs.
+    await prisma.$transaction((tx) => deleteInstallmentPlanCascade(tx, userId, existing.installmentPlanId!));
+  } else {
+    await prisma.transaction.delete({ where: { id } });
+  }
 
   revalidatePath("/dashboard");
   revalidatePath("/lancamentos");

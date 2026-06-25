@@ -50,13 +50,16 @@ export async function buildTransactionWhere(
     const year = Number(yearStr);
     const month = Number(monthStr);
 
+    // Fuso local, igual ao usado em `dashboard-data.ts` (`startOfMonth`/`addMonths`) — mesmo mês
+    // calendário precisa produzir os mesmos limites de data nos dois lugares, senão os totais
+    // exibidos no Dashboard e em /lancamentos divergem para o mesmo período.
     if (filters.day) {
-      const start = new Date(Date.UTC(year, month - 1, filters.day));
-      const end = new Date(Date.UTC(year, month - 1, filters.day + 1));
+      const start = new Date(year, month - 1, filters.day);
+      const end = new Date(year, month - 1, filters.day + 1);
       where.date = { gte: start, lt: end };
     } else {
-      const start = new Date(Date.UTC(year, month - 1, 1));
-      const end = new Date(Date.UTC(year, month, 1));
+      const start = new Date(year, month - 1, 1);
+      const end = new Date(year, month, 1);
       where.date = { gte: start, lt: end };
     }
   } else {

@@ -17,6 +17,7 @@ export async function getTransactionsPage(
       category: { select: { id: true, name: true, color: true, icon: true } },
       subcategory: { select: { id: true, name: true, color: true, icon: true } },
       tags: { include: { tag: { select: { name: true } } } },
+      installmentPlan: { select: { totalInstallments: true } },
     },
   });
 
@@ -31,5 +32,9 @@ export async function getTransactionsPage(
     category: transaction.category,
     subcategory: transaction.subcategory,
     tags: transaction.tags.map((t) => t.tag.name),
+    installment:
+      transaction.installmentNumber && transaction.installmentPlan
+        ? { number: transaction.installmentNumber, total: transaction.installmentPlan.totalInstallments }
+        : null,
   }));
 }

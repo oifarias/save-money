@@ -17,6 +17,8 @@ Duas abordagens foram avaliadas:
 
 **Escolhida: Opção A.** A premissa da Opção B não se sustenta: hoje `recurrence`/`isFixed` (`prisma/schema.prisma`, `src/app/(app)/lancamentos/actions.ts`) são apenas flags decorativas numa única `Transaction` — não existe nenhum gerador de lançamentos futuros para reaproveitar. Construir isso do zero só para parcelamento seria mais trabalho e mais arriscado (poluiria comparativos/relatórios com transações de meses futuros que ainda não aconteceram) do que criar uma entidade de plano dedicada — que é o mesmo padrão já usado no projeto para "decisão persistida sobre um grupo de lançamentos" (`FixedExpenseInsightDecision`).
 
+> **Atualização (2026-06-24): decisão revertida para Opção B, a pedido explícito do usuário.** O usuário pediu uma nova flag no formulário de criação de despesa ("esta despesa é parcelada?" + quantidade de parcelas) que já materializa as N transações de uma vez, replicando categoria/sub-categoria/hashtags da parcela 1, com exclusão e edição em cascata entre todas as parcelas do mesmo plano. A detecção automática via regex `(x/y)` descrita nesta seção foi mantida como fallback (continua funcionando para quem digitar a descrição manualmente), mas o caminho principal de criação passou a ser a flag explícita. Ver `src/lib/installment-resolver.ts` (`createInstallmentPlanWithTransactions`, `deleteInstallmentPlanCascade`, `propagateInstallmentEdit`) e `src/app/(app)/lancamentos/actions.ts`.
+
 ## Decisões de produto confirmadas
 
 1. **Vínculo manual ao plano**: não terá campo manual no formulário na v1 — só detecção automática via regex. Se a descrição não bater o padrão, o lançamento fica sem plano (o usuário pode reeditar a descrição depois).

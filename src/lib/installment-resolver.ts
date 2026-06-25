@@ -1,4 +1,4 @@
-import type { Prisma } from "@/generated/prisma/client";
+import type { Prisma, TransactionType } from "@/generated/prisma/client";
 
 /** Casa "(x/y)" no final da descrição, ex.: "Notebook (3/4)" -> x=3, y=4. */
 const INSTALLMENT_PATTERN = /\((\d+)\/(\d+)\)\s*$/;
@@ -36,7 +36,7 @@ export function parseInstallmentDescription(description: string): ParsedInstallm
   return { baseDescription, installmentNumber, totalInstallments };
 }
 
-function addMonths(date: Date, amount: number) {
+export function addMonths(date: Date, amount: number) {
   return new Date(date.getFullYear(), date.getMonth() + amount, date.getDate());
 }
 
@@ -104,4 +104,126 @@ export async function resolveInstallmentPlan(
   });
 
   return { installmentPlanId: created.id, installmentNumber };
+}
+
+export type CreateInstallmentPlanInput = {
+  baseDescription: string;
+  totalInstallments: number;
+  amount: number;
+  startDate: Date;
+  type: TransactionType;
+  accountId: string;
+  categoryId?: string | null;
+  subcategoryId?: string | null;
+};
+
+export type CreatedInstallmentTransaction = {
+  id: string;
+  installmentNumber: number;
+};
+
+/**
+ * Cria o `InstallmentPlan` e já materializa as `Transaction` de todas as parcelas (1..N) nos
+ * meses seguintes, todas vinculadas ao mesmo plano e replicando categoria/subcategoria da parcela 1.
+ * Usado quando o usuário marca a flag "despesa parcelada" no formulário (em vez de digitar "(x/y)"
+ * manualmente na descrição).
+ */
+export async function createInstallmentPlanWithTransactions(
+  tx: Db,
+  userId: string,
+  input: CreateInstallmentPlanInput
+): Promise<{ installmentPlanId: string; transactions: CreatedInstallmentTransaction[] }> {
+  const categoryId = input.categoryId || null;
+  const subcategoryId = input.subcategoryId || null;
+
+  const plan = await tx.installmentPlan.create({
+    data: {
+      userId,
+      baseDescription: input.baseDescription,
+      totalInstallments: input.totalInstallments,
+      estimatedAmount: input.amount,
+      startDate: input.startDate,
+      categoryId,
+      subcategoryId,
+    },
+  });
+
+  const transactions: CreatedInstallmentTransaction[] = [];
+  for (let installmentNumber = 1; installmentNumber <= input.totalInstallments; installmentNumber += 1) {
+    const created = await tx.transaction.create({
+      data: {
+        userId,
+        accountId: input.accountId,
+        categoryId,
+        subcategoryId,
+        type: input.type,
+        amount: input.amount,
+        date: addMonths(input.startDate, installmentNumber - 1),
+        description: `${input.baseDescription} (${installmentNumber}/${input.totalInstallments})`,
+        installmentPlanId: plan.id,
+        installmentNumber,
+      },
+      select: { id: true },
+    });
+    transactions.push({ id: created.id, installmentNumber });
+  }
+
+  return { installmentPlanId: plan.id, transactions };
+}
+
+/** Exclui em cascata todas as transações de um plano de parcelamento, junto com o próprio plano. */
+export async function deleteInstallmentPlanCascade(tx: Db, userId: string, installmentPlanId: string) {
+  await tx.transaction.deleteMany({ where: { userId, installmentPlanId } });
+  await tx.installmentPlan.delete({ where: { id: installmentPlanId } });
+}
+
+export type PropagateInstallmentEditInput = {
+  baseDescription: string;
+  amount: number;
+  categoryId?: string | null;
+  subcategoryId?: string | null;
+};
+
+/**
+ * Propaga edição feita na parcela 1/N (descrição base, valor, categoria/subcategoria) para as
+ * demais parcelas já geradas do mesmo plano (2..N). Datas de cada parcela não são alteradas.
+ */
+export async function propagateInstallmentEdit(
+  tx: Db,
+  userId: string,
+  installmentPlanId: string,
+  changes: PropagateInstallmentEditInput
+): Promise<string[]> {
+  const plan = await tx.installmentPlan.findFirst({
+    where: { id: installmentPlanId, userId },
+    select: { totalInstallments: true },
+  });
+  if (!plan) return [];
+
+  const categoryId = changes.categoryId || null;
+  const subcategoryId = changes.subcategoryId || null;
+
+  const siblings = await tx.transaction.findMany({
+    where: { userId, installmentPlanId, installmentNumber: { gt: 1 } },
+    select: { id: true, installmentNumber: true },
+  });
+
+  for (const sibling of siblings) {
+    await tx.transaction.update({
+      where: { id: sibling.id },
+      data: {
+        amount: changes.amount,
+        categoryId,
+        subcategoryId,
+        description: `${changes.baseDescription} (${sibling.installmentNumber}/${plan.totalInstallments})`,
+      },
+    });
+  }
+
+  await tx.installmentPlan.update({
+    where: { id: installmentPlanId },
+    data: { baseDescription: changes.baseDescription, estimatedAmount: changes.amount, categoryId, subcategoryId },
+  });
+
+  return siblings.map((s) => s.id);
 }
