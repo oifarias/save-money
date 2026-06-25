@@ -8,7 +8,7 @@ type Db = PrismaClient | Prisma.TransactionClient;
  * Aceita opcionalmente um client de transação para ser reaproveitado dentro de `$transaction`.
  */
 export async function getDefaultAccountId(userId: string, db: Db = prisma): Promise<string | null> {
-  const account = await db.account.findFirst({
+  const account = await db.financialAccount.findFirst({
     where: { userId },
     orderBy: { createdAt: "asc" },
     select: { id: true },
@@ -24,7 +24,7 @@ export async function ensureDefaultAccountId(userId: string, db: Db = prisma): P
   const existing = await getDefaultAccountId(userId, db);
   if (existing) return existing;
 
-  const created = await db.account.create({
+  const created = await db.financialAccount.create({
     data: { userId, name: "Conta principal", type: "wallet" },
     select: { id: true },
   });

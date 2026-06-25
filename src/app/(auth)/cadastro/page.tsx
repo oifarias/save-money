@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { registerAction, type ActionResult } from "@/app/(auth)/actions";
+import { registerAction, signInWithGoogleAction, type ActionResult } from "@/app/(auth)/actions";
+import { GoogleIcon } from "@/components/icons/google-icon";
 
 const initialState: ActionResult = { success: false };
 
@@ -65,6 +66,19 @@ export default function CadastroPage() {
 
         <Button type="submit" isLoading={isPending} className="mt-1 w-full">
           Criar conta
+        </Button>
+      </form>
+
+      <div className="flex items-center gap-3 text-xs text-(--color-text-muted)">
+        <span className="h-px flex-1 bg-(--color-border)" />
+        ou
+        <span className="h-px flex-1 bg-(--color-border)" />
+      </div>
+
+      <form action={signInWithGoogleAction}>
+        <Button type="submit" variant="secondary" className="w-full">
+          <GoogleIcon className="h-4 w-4" />
+          Criar conta com Google
         </Button>
       </form>
 

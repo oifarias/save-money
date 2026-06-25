@@ -8,9 +8,10 @@ import { ThemeToggle } from "@/components/theme/theme-toggle";
 type HeaderProps = {
   userName: string;
   onMenuClick: () => void;
+  linkedLoginMethods: string[];
 };
 
-export function Header({ userName, onMenuClick }: HeaderProps) {
+export function Header({ userName, onMenuClick, linkedLoginMethods }: HeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const initials = userName
     .split(" ")
@@ -57,8 +58,13 @@ export function Header({ userName, onMenuClick }: HeaderProps) {
           {menuOpen && (
             <div
               role="menu"
-              className="absolute right-0 mt-2 w-44 overflow-hidden rounded-xl border border-(--color-border) bg-(--color-surface) shadow-lg animate-fade-grow"
+              className="absolute right-0 mt-2 w-56 overflow-hidden rounded-xl border border-(--color-border) bg-(--color-surface) shadow-lg animate-fade-grow"
             >
+              {linkedLoginMethods.length > 0 && (
+                <p className="border-b border-(--color-border) px-4 py-2.5 text-xs text-(--color-text-muted)">
+                  Login ativo: {linkedLoginMethods.join(" + ")}
+                </p>
+              )}
               <button
                 type="button"
                 role="menuitem"

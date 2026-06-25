@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 import { AuthError } from "next-auth";
 import { prisma } from "@/lib/prisma";
 import { signIn } from "@/lib/auth";
-import { DEFAULT_CATEGORIES } from "@/lib/default-categories";
+import { setupNewUserDefaults } from "@/lib/onboarding";
 import { loginSchema, recoverSchema, registerSchema } from "@/lib/validations/auth";
 
 export type ActionResult = {
@@ -43,19 +43,7 @@ export async function registerAction(_prev: ActionResult, formData: FormData): P
         data: { name, email, passwordHash },
       });
 
-      await tx.account.create({
-        data: { userId: user.id, name: "Carteira principal", type: "wallet", balance: 0 },
-      });
-
-      await tx.category.createMany({
-        data: DEFAULT_CATEGORIES.map((category) => ({
-          userId: user.id,
-          name: category.name,
-          color: category.color,
-          icon: category.icon,
-          isDefault: true,
-        })),
-      });
+      await setupNewUserDefaults(tx, user.id);
     });
 
   } catch (error) {
@@ -101,6 +89,10 @@ export async function loginAction(_prev: ActionResult, formData: FormData): Prom
   }
 
   return { success: true };
+}
+
+export async function signInWithGoogleAction(): Promise<void> {
+  await signIn("google", { redirectTo: "/dashboard" });
 }
 
 export async function recoverPasswordAction(_prev: ActionResult, formData: FormData): Promise<ActionResult> {
