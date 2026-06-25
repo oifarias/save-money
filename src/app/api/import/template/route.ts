@@ -8,10 +8,11 @@ export async function GET() {
   }
 
   const worksheet = XLSX.utils.aoa_to_sheet([
-    ["Data", "Tipo", "Transação", "Categoria", "Sub-categoria", "Valor", "Tags"],
-    ["10/06/2026", "despesa", "Supermercado", "Alimentação", "Mercado", "350,90", "casa,mensal"],
-    ["05/06/2026", "entrada", "Salário", "Renda", "", "5000,00", ""],
-    ["12/06/2026", "despesa", "Assinatura streaming", "Lazer", "Streaming", "39,90", "assinatura"],
+    ["Data", "Tipo", "Transação", "Categoria", "Sub-categoria", "Valor", "Tags", "Parcelas (x/y)", "Despesa fixa"],
+    ["10/06/2026", "despesa", "Supermercado", "Alimentação", "Mercado", "350,90", "casa,mensal", "", ""],
+    ["05/06/2026", "entrada", "Salário", "Renda", "", "5000,00", "", "", ""],
+    ["12/06/2026", "despesa", "Notebook", "Eletrônicos", "", "250,00", "", "3/12", ""],
+    ["01/06/2026", "despesa", "Aluguel", "Moradia", "", "1800,00", "", "", "sim"],
   ]);
   worksheet["!cols"] = [
     { wch: 14 },
@@ -21,6 +22,8 @@ export async function GET() {
     { wch: 16 },
     { wch: 12 },
     { wch: 18 },
+    { wch: 16 },
+    { wch: 14 },
   ];
 
   const workbook = XLSX.utils.book_new();
