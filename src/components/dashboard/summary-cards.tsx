@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { ArrowDownLeft, ArrowUpRight, CalendarCheck, CreditCard, PiggyBank } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/format";
@@ -9,6 +10,8 @@ type SummaryCardsProps = {
   expense: number;
   balance: number;
   installments: { currentMonth: number; remaining: number };
+  /** Mês atual no formato "YYYY-MM", usado para linkar o card de parcelamentos ao mesmo período exibido no card. */
+  currentMonthKey?: string;
   periodLabel?: string;
   fixedExpenseTemplates: FixedExpenseTemplatesTotals;
 };
@@ -18,10 +21,29 @@ export function SummaryCards({
   expense,
   balance,
   installments,
+  currentMonthKey,
   periodLabel = "do mês",
   fixedExpenseTemplates,
 }: SummaryCardsProps) {
   const fixedExpenseTotal = fixedExpenseTemplates.pendingTotal + fixedExpenseTemplates.paidTotal;
+  const installmentsCard = (
+    <Card className="flex items-start justify-between border-(--color-primary)/30 bg-gradient-to-br from-(--color-primary)/10 to-transparent transition-shadow hover:shadow-md">
+      <div>
+        <p className="text-xs font-medium uppercase tracking-wide text-(--color-primary)">Total de parcelamentos</p>
+        <p className="mt-2 font-numeric text-xl font-semibold text-(--color-text) sm:text-2xl">
+          {formatCurrency(installments.currentMonth)}
+        </p>
+        <p className="mt-1 text-xs text-(--color-text-muted)">
+          {installments.remaining > 0
+            ? `Faltam ${formatCurrency(installments.remaining)} em parcelas futuras`
+            : "Nenhuma parcela pendente"}
+        </p>
+      </div>
+      <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-(--color-primary)/15 text-(--color-primary)">
+        <CreditCard className="h-5 w-5" aria-hidden="true" />
+      </span>
+    </Card>
+  );
   const cards = [
     {
       id: "income",
@@ -68,22 +90,13 @@ export function SummaryCards({
         );
       })}
 
-      <Card className="flex items-start justify-between border-(--color-primary)/30 bg-gradient-to-br from-(--color-primary)/10 to-transparent">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-(--color-primary)">Total de parcelamentos</p>
-          <p className="mt-2 font-numeric text-xl font-semibold text-(--color-text) sm:text-2xl">
-            {formatCurrency(installments.currentMonth)}
-          </p>
-          <p className="mt-1 text-xs text-(--color-text-muted)">
-            {installments.remaining > 0
-              ? `Faltam ${formatCurrency(installments.remaining)} em parcelas futuras`
-              : "Nenhuma parcela pendente"}
-          </p>
-        </div>
-        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-(--color-primary)/15 text-(--color-primary)">
-          <CreditCard className="h-5 w-5" aria-hidden="true" />
-        </span>
-      </Card>
+      {currentMonthKey ? (
+        <Link href={`/lancamentos?month=${currentMonthKey}`} className="block">
+          {installmentsCard}
+        </Link>
+      ) : (
+        installmentsCard
+      )}
 
       <Card className="flex flex-col gap-3">
         <div className="flex items-center justify-between">

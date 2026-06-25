@@ -25,6 +25,7 @@ export default async function DashboardPage() {
           category: { select: { id: true, name: true, color: true, icon: true } },
           subcategory: { select: { id: true, name: true, color: true, icon: true } },
           tags: { include: { tag: { select: { name: true } } } },
+          installmentPlan: { select: { totalInstallments: true } },
         },
       }),
       prisma.category.findMany({
@@ -40,6 +41,9 @@ export default async function DashboardPage() {
   }
   const [dashboardData, recentTransactions, categories, tags] = queryResult;
 
+  const now = new Date();
+  const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
   const feedItems: TransactionListItem[] = recentTransactions.map((transaction) => ({
     id: transaction.id,
     type: transaction.type,
@@ -51,6 +55,10 @@ export default async function DashboardPage() {
     category: transaction.category,
     subcategory: transaction.subcategory,
     tags: transaction.tags.map((t) => t.tag.name),
+    installment:
+      transaction.installmentNumber && transaction.installmentPlan
+        ? { number: transaction.installmentNumber, total: transaction.installmentPlan.totalInstallments }
+        : null,
   }));
 
   return (
@@ -67,6 +75,7 @@ export default async function DashboardPage() {
         expense={dashboardData.totals.expense}
         balance={dashboardData.totals.balance}
         installments={dashboardData.totals.installments}
+        currentMonthKey={currentMonthKey}
         fixedExpenseTemplates={dashboardData.totals.fixedExpenseTemplates}
       />
 

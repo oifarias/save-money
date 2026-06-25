@@ -56,6 +56,11 @@ export function TransactionRow({ transaction, onEdit, onDelete, selectable, sele
               Fixa
             </span>
           )}
+          {transaction.installment && (
+            <span className="shrink-0 rounded-full bg-(--color-primary)/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-(--color-primary)">
+              Parcela {transaction.installment.number}/{transaction.installment.total}
+            </span>
+          )}
           {transaction.recurrence !== "NONE" && (
             <Repeat className="h-3.5 w-3.5 shrink-0 text-(--color-text-muted)" aria-label="Lançamento recorrente" />
           )}

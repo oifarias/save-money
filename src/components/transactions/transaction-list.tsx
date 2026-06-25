@@ -28,6 +28,8 @@ export type TransactionListItem = {
   category: { id: string; name: string; color: string; icon: string } | null;
   subcategory: { id: string; name: string; color: string; icon: string } | null;
   tags: string[];
+  /** Identifica a que parcelamento esta transação pertence, para exibir o badge "Parcela X/N". */
+  installment: { number: number; total: number } | null;
 };
 
 type TransactionListProps = {
