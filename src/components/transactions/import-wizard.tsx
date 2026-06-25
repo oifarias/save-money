@@ -16,17 +16,22 @@ import {
   ClipboardList,
   Trash2,
   Pencil,
+  Repeat,
+  Lock,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { importRowSchema, IMPORT_FIELDS, type ImportFieldKey } from "@/lib/validations/import";
+import type { MappedRow } from "@/lib/import-helpers";
 import {
-  normalizeAmount,
-  normalizeDate,
-  normalizeType,
+  normalizeInstallments,
+  normalizeFixedFlag,
   summarizeMappedRows,
+  buildMappedRows,
+  guessColumnMapping,
+  NONE_COLUMN,
   type ParsedSheet,
   type ExistingCategoryRef,
 } from "@/lib/import-helpers";
@@ -35,23 +40,11 @@ import { importTransactionsAction } from "@/app/(app)/lancamentos/import-actions
 
 type Step = "upload" | "map" | "result";
 
-type MappedRow = {
-  index: number;
-  date: string;
-  description: string;
-  amount: string;
-  type: string;
-  category: string;
-  subcategory: string;
-  tags: string;
-  error?: string;
-};
-
-const NONE = "__none__";
+const NONE = NONE_COLUMN;
 const REQUIRED_FIELDS = IMPORT_FIELDS.filter((field) => field.required);
 const PAGE_SIZE = 25;
 
-type EditableField = "category" | "subcategory" | "tags";
+type EditableField = "category" | "subcategory" | "tags" | "installments" | "isFixed";
 type RowFilter = "all" | "valid" | "invalid";
 
 function selectClass() {
@@ -165,52 +158,6 @@ function EditableCell({
   );
 }
 
-function buildMappedRows(sheet: ParsedSheet, mapping: Record<ImportFieldKey, string>): MappedRow[] {
-  const columnIndex = Object.fromEntries(
-    IMPORT_FIELDS.map((field) => [
-      field.key,
-      mapping[field.key] === NONE ? -1 : sheet.headers.indexOf(mapping[field.key]),
-    ])
-  ) as Record<ImportFieldKey, number>;
-
-  return sheet.rows.map((row, index) => {
-    const rawDate = columnIndex.date >= 0 ? row[columnIndex.date] : "";
-    const rawDescription = columnIndex.description >= 0 ? row[columnIndex.description] : "";
-    const rawAmount = columnIndex.amount >= 0 ? row[columnIndex.amount] : "";
-    const rawType = columnIndex.type >= 0 ? row[columnIndex.type] : "";
-    const rawCategory = columnIndex.category >= 0 ? row[columnIndex.category] : "";
-    const rawSubcategory = columnIndex.subcategory >= 0 ? row[columnIndex.subcategory] : "";
-    const rawTags = columnIndex.tags >= 0 ? row[columnIndex.tags] : "";
-
-    const date = normalizeDate(rawDate) ?? "";
-    const amount = normalizeAmount(rawAmount) ?? "";
-    let type = normalizeType(rawType) ?? "";
-
-    let amountValue = amount;
-    if (type === "" && amountValue) {
-      type = Number(amountValue) < 0 ? "EXPENSE" : "";
-    }
-    if (amountValue.startsWith("-")) {
-      amountValue = amountValue.slice(1);
-    }
-
-    const candidate = {
-      date,
-      description: rawDescription.trim(),
-      amount: amountValue,
-      type,
-      category: rawCategory.trim(),
-      subcategory: rawSubcategory.trim(),
-      tags: rawTags.trim(),
-    };
-
-    const parsed = importRowSchema.safeParse(candidate);
-    const error = parsed.success ? undefined : parsed.error.issues[0]?.message;
-
-    return { index, ...candidate, error };
-  });
-}
-
 type ImportWizardProps = {
   existingCategories: ExistingCategoryRef[];
 };
@@ -228,6 +175,8 @@ export function ImportWizard({ existingCategories }: ImportWizardProps) {
     category: NONE,
     subcategory: NONE,
     tags: NONE,
+    installments: NONE,
+    isFixed: NONE,
   });
   const [isParsing, setIsParsing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -331,29 +280,7 @@ export function ImportWizard({ existingCategories }: ImportWizardProps) {
         toast.error(`A planilha tem mais de 1000 linhas. Apenas as primeiras 1000 serão importadas.`);
       }
 
-      const guessedMapping: Record<ImportFieldKey, string> = {
-        date: NONE,
-        description: NONE,
-        amount: NONE,
-        type: NONE,
-        category: NONE,
-        subcategory: NONE,
-        tags: NONE,
-      };
-      const guesses: Record<ImportFieldKey, string[]> = {
-        date: ["data", "date", "dia"],
-        description: ["transação", "transacao", "descrição", "descricao", "description", "histórico", "historico"],
-        amount: ["valor", "amount", "preço", "preco", "total"],
-        type: ["tipo", "type", "natureza"],
-        category: ["categoria", "category", "grupo"],
-        subcategory: ["sub-categoria", "subcategoria", "sub categoria", "subcategory", "sub-grupo", "subgrupo"],
-        tags: ["tags", "hashtags", "etiquetas"],
-      };
-      for (const field of IMPORT_FIELDS) {
-        const match = parsed.headers.find((header) => guesses[field.key].includes(header.trim().toLowerCase()));
-        if (match) guessedMapping[field.key] = match;
-      }
-
+      const guessedMapping = guessColumnMapping(parsed.headers);
       const allFieldsGuessed = IMPORT_FIELDS.every((field) => guessedMapping[field.key] !== NONE);
 
       setSheet(parsed);
@@ -383,7 +310,7 @@ export function ImportWizard({ existingCategories }: ImportWizardProps) {
     setIsSubmitting(true);
     try {
       const response = await importTransactionsAction(
-        validRows.map(({ date, description, amount, type, category, subcategory, tags }) => ({
+        validRows.map(({ date, description, amount, type, category, subcategory, tags, installments, isFixed }) => ({
           date,
           description,
           amount,
@@ -391,6 +318,8 @@ export function ImportWizard({ existingCategories }: ImportWizardProps) {
           category,
           subcategory,
           tags,
+          installments,
+          isFixed,
         }))
       );
 
@@ -411,7 +340,17 @@ export function ImportWizard({ existingCategories }: ImportWizardProps) {
     setStep("upload");
     setSheet(null);
     setFileName("");
-    setMapping({ date: NONE, description: NONE, amount: NONE, type: NONE, category: NONE, subcategory: NONE, tags: NONE });
+    setMapping({
+      date: NONE,
+      description: NONE,
+      amount: NONE,
+      type: NONE,
+      category: NONE,
+      subcategory: NONE,
+      tags: NONE,
+      installments: NONE,
+      isFixed: NONE,
+    });
     setResult(null);
     setIsMappingExpanded(false);
     setOverrides({});
@@ -427,7 +366,7 @@ export function ImportWizard({ existingCategories }: ImportWizardProps) {
         <div>
           <h2 className="font-display text-base font-semibold text-(--color-text)">Arquivo modelo</h2>
           <p className="mt-0.5 text-sm text-(--color-text-muted)">
-            Baixe a planilha de exemplo com as colunas esperadas: Data, Tipo, Transação, Categoria, Sub-categoria, Valor e Tags
+            Baixe a planilha de exemplo com as colunas esperadas: Data, Tipo, Transação, Categoria, Sub-categoria, Valor, Tags, Parcelas (x/y) e Despesa fixa
           </p>
         </div>
         <a href="/api/import/template" download>
@@ -524,6 +463,26 @@ export function ImportWizard({ existingCategories }: ImportWizardProps) {
                 ))}
               </div>
             )}
+
+            {(isMappingExpanded || !isMappingComplete) && (
+              <div className="flex flex-col gap-1.5 rounded-xl border border-(--color-border) bg-(--color-bg) px-3.5 py-3 text-xs text-(--color-text-muted)">
+                <p className="flex items-start gap-1.5">
+                  <Repeat size={14} className="mt-0.5 shrink-0 text-(--color-primary)" aria-hidden="true" />
+                  <span>
+                    <strong className="text-(--color-text)">Parcelas (x/y):</strong> preencha como x/y (ex.: 3/12)
+                    para indicar que essa linha é a parcela x de um total de y — o sistema gera automaticamente as
+                    parcelas restantes (x+1 até y) nos meses seguintes, com o mesmo valor da linha.
+                  </span>
+                </p>
+                <p className="flex items-start gap-1.5">
+                  <Lock size={14} className="mt-0.5 shrink-0 text-(--color-primary)" aria-hidden="true" />
+                  <span>
+                    <strong className="text-(--color-text)">Despesa fixa:</strong> marque como sim/x/true para
+                    indicar que é uma despesa fixa recorrente (mesmo conceito do lançamento individual).
+                  </span>
+                </p>
+              </div>
+            )}
           </Card>
 
           {isMappingComplete && (
@@ -563,6 +522,7 @@ export function ImportWizard({ existingCategories }: ImportWizardProps) {
                 <SummaryStat label="Categorias existentes" value={String(summary.existingCategoriesCount)} />
                 <SummaryStat label="Sub-categorias novas" value={String(summary.newSubcategoriesCount)} />
                 <SummaryStat label="Tags" value={String(summary.tagsCount)} />
+                <SummaryStat label="Parcelas futuras geradas" value={String(summary.futureInstallmentsCount)} />
               </div>
             </Card>
           )}
@@ -646,6 +606,8 @@ export function ImportWizard({ existingCategories }: ImportWizardProps) {
                           <th scope="col" className="px-3 py-2">Categoria</th>
                           <th scope="col" className="px-3 py-2">Sub-categoria</th>
                           <th scope="col" className="px-3 py-2">Tags</th>
+                          <th scope="col" className="px-3 py-2">Parcelas</th>
+                          <th scope="col" className="px-3 py-2">Fixa</th>
                           <th scope="col" className="px-3 py-2">
                             <span className="sr-only">Ações</span>
                           </th>
@@ -710,6 +672,51 @@ export function ImportWizard({ existingCategories }: ImportWizardProps) {
                                 }}
                                 onCancel={() => setEditingCell(null)}
                               />
+                            </td>
+                            <td className="px-3 py-2 text-(--color-text)">
+                              <div className="flex items-center gap-1.5">
+                                <EditableCell
+                                  value={row.installments}
+                                  isEditing={editingCell?.index === row.index && editingCell?.field === "installments"}
+                                  onStartEdit={() => setEditingCell({ index: row.index, field: "installments" })}
+                                  onConfirm={(value) => {
+                                    handleEditField(row.index, "installments", value);
+                                    setEditingCell(null);
+                                  }}
+                                  onCancel={() => setEditingCell(null)}
+                                />
+                                {(() => {
+                                  const parsedInstallments = normalizeInstallments(row.installments);
+                                  if (!parsedInstallments) return null;
+                                  const future = parsedInstallments.total - parsedInstallments.current;
+                                  if (future <= 0) return null;
+                                  return (
+                                    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-(--color-primary)/10 px-2 py-0.5 text-xs font-medium text-(--color-primary)">
+                                      <Repeat size={11} aria-hidden="true" />+{future}
+                                    </span>
+                                  );
+                                })()}
+                              </div>
+                            </td>
+                            <td className="px-3 py-2 text-(--color-text)">
+                              <div className="flex items-center gap-1.5">
+                                <EditableCell
+                                  value={row.isFixed}
+                                  isEditing={editingCell?.index === row.index && editingCell?.field === "isFixed"}
+                                  onStartEdit={() => setEditingCell({ index: row.index, field: "isFixed" })}
+                                  onConfirm={(value) => {
+                                    handleEditField(row.index, "isFixed", value);
+                                    setEditingCell(null);
+                                  }}
+                                  onCancel={() => setEditingCell(null)}
+                                />
+                                {normalizeFixedFlag(row.isFixed) && (
+                                  <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-(--color-primary)/10 px-2 py-0.5 text-xs font-medium text-(--color-primary)">
+                                    <Lock size={11} aria-hidden="true" />
+                                    Fixa
+                                  </span>
+                                )}
+                              </div>
                             </td>
                             <td className="px-3 py-2">
                               <button

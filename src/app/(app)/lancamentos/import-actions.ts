@@ -6,8 +6,10 @@ import { prisma } from "@/lib/prisma";
 import { ensureDefaultAccountId } from "@/lib/accounts";
 import { syncTransactionTags } from "@/lib/tags";
 import { findOrCreateRootCategory, findOrCreateSubcategory } from "@/lib/category-resolver";
-import { normalizeTags } from "@/lib/import-helpers";
+import { normalizeTags, normalizeInstallments, normalizeFixedFlag } from "@/lib/import-helpers";
 import { importRowSchema } from "@/lib/validations/import";
+import { createInstallmentPlanWithTransactions, addMonths } from "@/lib/installment-resolver";
+import { resolveFixedExpenseTemplate } from "@/lib/fixed-expense-resolver";
 import { dashboardCacheTag } from "@/lib/dashboard-data";
 import { comparativeCacheTag } from "@/lib/comparative-data";
 import { insightsCacheTag } from "@/lib/insights-data";
@@ -36,6 +38,8 @@ export type ImportRowPayload = {
   category: string;
   subcategory: string;
   tags: string;
+  installments: string;
+  isFixed: string;
 };
 
 const IMPORT_TRANSACTION_TIMEOUT_MS = 60_000;
@@ -123,7 +127,7 @@ export async function importTransactionsAction(rows: ImportRowPayload[]): Promis
           continue;
         }
 
-        const { date, description, amount, type, category, subcategory, tags } = parsed.data;
+        const { date, description, amount, type, category, subcategory, tags, installments, isFixed } = parsed.data;
 
         let categoryId: string | null = null;
         let subcategoryId: string | null = null;
@@ -138,26 +142,73 @@ export async function importTransactionsAction(rows: ImportRowPayload[]): Promis
           subcategoryId = subcategoryRecord?.id ?? null;
         }
 
-        const transaction = await tx.transaction.create({
-          data: {
-            userId,
+        const rowDate = new Date(date);
+        const parsedInstallments = normalizeInstallments(installments ?? "");
+        const parsedTagNames = tags ? normalizeTags(tags) : [];
+
+        if (parsedInstallments) {
+          // A própria linha representa a parcela `current` — a data projetada da parcela 1
+          // é obtida andando `current - 1` meses para trás a partir da data informada na linha.
+          const planStartDate = addMonths(rowDate, -(parsedInstallments.current - 1));
+
+          const { transactions } = await createInstallmentPlanWithTransactions(tx, userId, {
+            baseDescription: description,
+            totalInstallments: parsedInstallments.total,
+            amount: Number(amount),
+            startDate: planStartDate,
+            type: type as TransactionType,
             accountId,
             categoryId,
             subcategoryId,
-            type: type as TransactionType,
-            amount: Number(amount),
-            date: new Date(date),
-            description,
-            isFixed: false,
-            recurrence: "NONE",
-          },
-        });
+            startInstallmentNumber: parsedInstallments.current,
+          });
 
-        if (tags) {
-          await syncTransactionTags(tx, userId, transaction.id, normalizeTags(tags));
+          if (parsedTagNames.length > 0) {
+            for (const created of transactions) {
+              await syncTransactionTags(tx, userId, created.id, parsedTagNames);
+            }
+          }
+
+          imported += transactions.length;
+        } else {
+          const isFixedFlag = normalizeFixedFlag(isFixed ?? "");
+
+          let fixedExpenseTemplateId: string | null = null;
+          if (isFixedFlag) {
+            const result = await resolveFixedExpenseTemplate(tx, userId, {
+              isFixed: true,
+              description,
+              date: rowDate,
+              amount: Number(amount),
+              categoryId,
+              subcategoryId,
+              previousTemplateId: null,
+            });
+            fixedExpenseTemplateId = result.fixedExpenseTemplateId;
+          }
+
+          const transaction = await tx.transaction.create({
+            data: {
+              userId,
+              accountId,
+              categoryId,
+              subcategoryId,
+              type: type as TransactionType,
+              amount: Number(amount),
+              date: rowDate,
+              description,
+              isFixed: isFixedFlag,
+              fixedExpenseTemplateId,
+              recurrence: "NONE",
+            },
+          });
+
+          if (parsedTagNames.length > 0) {
+            await syncTransactionTags(tx, userId, transaction.id, parsedTagNames);
+          }
+
+          imported += 1;
         }
-
-        imported += 1;
       }
     },
     { timeout: IMPORT_TRANSACTION_TIMEOUT_MS, maxWait: IMPORT_TRANSACTION_MAX_WAIT_MS }

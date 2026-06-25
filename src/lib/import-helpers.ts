@@ -1,5 +1,6 @@
 import * as XLSX from "xlsx";
 import { cleanTagName } from "@/lib/tags";
+import { FIXED_TRUE_WORDS, IMPORT_FIELDS, importRowSchema, type ImportFieldKey } from "@/lib/validations/import";
 
 export type ParsedSheet = {
   headers: string[];
@@ -99,12 +100,41 @@ export function normalizeTags(raw: string): string[] {
   return Array.from(new Set(names));
 }
 
+export type NormalizedInstallments = { current: number; total: number };
+
+/** Parse de "x/y" (ex.: "3/12") para a coluna de parcelas. Retorna `null` se vazio ou inválido. */
+export function normalizeInstallments(raw: string): NormalizedInstallments | null {
+  const value = raw.trim();
+  if (!value) return null;
+
+  const match = value.match(/^(\d+)\/(\d+)$/);
+  if (!match) return null;
+
+  const current = Number(match[1]);
+  const total = Number(match[2]);
+
+  if (!Number.isInteger(current) || !Number.isInteger(total)) return null;
+  if (total <= 1) return null;
+  if (current < 1 || current > total) return null;
+
+  return { current, total };
+}
+
+/** Normaliza a coluna "Despesa fixa" (sim/não, true/false, 1/0, x...) para boolean. */
+export function normalizeFixedFlag(raw: string): boolean {
+  const value = raw.trim().toLowerCase();
+  if (!value) return false;
+  return FIXED_TRUE_WORDS.includes(value);
+}
+
 export type SummarizableRow = {
   amount: string;
   type: string;
   category: string;
   subcategory: string;
   tags: string;
+  installments?: string;
+  isFixed?: string;
   error?: string;
 };
 
@@ -126,7 +156,108 @@ export type ImportSummary = {
   newSubcategoriesCount: number;
   existingSubcategoriesCount: number;
   tagsCount: number;
+  /** Quantidade de parcelas futuras (além da própria linha) que serão geradas pela importação. */
+  futureInstallmentsCount: number;
 };
+
+export const NONE_COLUMN = "__none__";
+
+export type MappedRow = {
+  index: number;
+  date: string;
+  description: string;
+  amount: string;
+  type: string;
+  category: string;
+  subcategory: string;
+  tags: string;
+  installments: string;
+  isFixed: string;
+  error?: string;
+};
+
+/**
+ * Aplica o mapeamento de colunas (header da planilha -> campo do sistema) às linhas já
+ * parseadas, normaliza cada valor (data, valor, tipo) e valida com `importRowSchema`,
+ * devolvendo a lista de linhas já no formato usado pela prévia/import do wizard.
+ * Lógica pura (sem DOM), extraída do `ImportWizard` para ser testável com Vitest puro.
+ */
+export function buildMappedRows(sheet: ParsedSheet, mapping: Record<ImportFieldKey, string>): MappedRow[] {
+  const columnIndex = Object.fromEntries(
+    IMPORT_FIELDS.map((field) => [
+      field.key,
+      mapping[field.key] === NONE_COLUMN ? -1 : sheet.headers.indexOf(mapping[field.key]),
+    ])
+  ) as Record<ImportFieldKey, number>;
+
+  return sheet.rows.map((row, index) => {
+    const rawDate = columnIndex.date >= 0 ? row[columnIndex.date] : "";
+    const rawDescription = columnIndex.description >= 0 ? row[columnIndex.description] : "";
+    const rawAmount = columnIndex.amount >= 0 ? row[columnIndex.amount] : "";
+    const rawType = columnIndex.type >= 0 ? row[columnIndex.type] : "";
+    const rawCategory = columnIndex.category >= 0 ? row[columnIndex.category] : "";
+    const rawSubcategory = columnIndex.subcategory >= 0 ? row[columnIndex.subcategory] : "";
+    const rawTags = columnIndex.tags >= 0 ? row[columnIndex.tags] : "";
+    const rawInstallments = columnIndex.installments >= 0 ? row[columnIndex.installments] : "";
+    const rawIsFixed = columnIndex.isFixed >= 0 ? row[columnIndex.isFixed] : "";
+
+    const date = normalizeDate(rawDate) ?? "";
+    const amount = normalizeAmount(rawAmount) ?? "";
+    let type = normalizeType(rawType) ?? "";
+
+    let amountValue = amount;
+    if (type === "" && amountValue) {
+      type = Number(amountValue) < 0 ? "EXPENSE" : "";
+    }
+    if (amountValue.startsWith("-")) {
+      amountValue = amountValue.slice(1);
+    }
+
+    const candidate = {
+      date,
+      description: rawDescription.trim(),
+      amount: amountValue,
+      type,
+      category: rawCategory.trim(),
+      subcategory: rawSubcategory.trim(),
+      tags: rawTags.trim(),
+      installments: rawInstallments.trim(),
+      isFixed: rawIsFixed.trim(),
+    };
+
+    const parsed = importRowSchema.safeParse(candidate);
+    const error = parsed.success ? undefined : parsed.error.issues[0]?.message;
+
+    return { index, ...candidate, error };
+  });
+}
+
+const COLUMN_GUESSES: Record<ImportFieldKey, string[]> = {
+  date: ["data", "date", "dia"],
+  description: ["transação", "transacao", "descrição", "descricao", "description", "histórico", "historico"],
+  amount: ["valor", "amount", "preço", "preco", "total"],
+  type: ["tipo", "type", "natureza"],
+  category: ["categoria", "category", "grupo"],
+  subcategory: ["sub-categoria", "subcategoria", "sub categoria", "subcategory", "sub-grupo", "subgrupo"],
+  tags: ["tags", "hashtags", "etiquetas"],
+  installments: ["parcelas (x/y)", "parcelas", "parcela", "installments", "parcelamento"],
+  isFixed: ["despesa fixa", "fixa", "fixed", "is fixed", "recorrente"],
+};
+
+/** Tenta adivinhar o mapeamento de colunas a partir dos headers da planilha (mesmos nomes do modelo). */
+export function guessColumnMapping(headers: string[]): Record<ImportFieldKey, string> {
+  const guessedMapping = Object.fromEntries(IMPORT_FIELDS.map((field) => [field.key, NONE_COLUMN])) as Record<
+    ImportFieldKey,
+    string
+  >;
+
+  for (const field of IMPORT_FIELDS) {
+    const match = headers.find((header) => COLUMN_GUESSES[field.key].includes(header.trim().toLowerCase()));
+    if (match) guessedMapping[field.key] = match;
+  }
+
+  return guessedMapping;
+}
 
 /** Agrega as linhas já mapeadas/validadas da prévia de importação em métricas de resumo. */
 export function summarizeMappedRows(
@@ -149,6 +280,7 @@ export function summarizeMappedRows(
   const categoryNames = new Set<string>();
   const subcategoryKeys = new Set<string>();
   const tagNames = new Set<string>();
+  let futureInstallmentsCount = 0;
 
   for (const row of rows) {
     if (!row.error) {
@@ -157,6 +289,11 @@ export function summarizeMappedRows(
       if (!Number.isNaN(amount)) {
         if (row.type === "INCOME") totalIncome += amount;
         if (row.type === "EXPENSE") totalExpense += amount;
+      }
+
+      const installments = normalizeInstallments(row.installments ?? "");
+      if (installments) {
+        futureInstallmentsCount += installments.total - installments.current;
       }
     }
 
@@ -194,5 +331,6 @@ export function summarizeMappedRows(
     newSubcategoriesCount,
     existingSubcategoriesCount,
     tagsCount: tagNames.size,
+    futureInstallmentsCount,
   };
 }

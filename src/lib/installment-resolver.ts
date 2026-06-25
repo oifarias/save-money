@@ -115,6 +115,12 @@ export type CreateInstallmentPlanInput = {
   accountId: string;
   categoryId?: string | null;
   subcategoryId?: string | null;
+  /**
+   * Primeira parcela a materializar como `Transaction` (default 1, ou seja, gera 1..N).
+   * Usado pela importação em lote: a própria linha da planilha já representa a parcela `x`,
+   * então só precisamos materializar `x..N` (as anteriores, se existirem, não são recriadas).
+   */
+  startInstallmentNumber?: number;
 };
 
 export type CreatedInstallmentTransaction = {
@@ -123,10 +129,13 @@ export type CreatedInstallmentTransaction = {
 };
 
 /**
- * Cria o `InstallmentPlan` e já materializa as `Transaction` de todas as parcelas (1..N) nos
- * meses seguintes, todas vinculadas ao mesmo plano e replicando categoria/subcategoria da parcela 1.
+ * Cria o `InstallmentPlan` e materializa as `Transaction` das parcelas no intervalo
+ * `[startInstallmentNumber, totalInstallments]` (default 1..N) nos meses seguintes, todas
+ * vinculadas ao mesmo plano e replicando categoria/subcategoria. `startDate` é sempre a data
+ * projetada da parcela 1 (mesmo quando `startInstallmentNumber > 1`), para manter a mesma
+ * convenção de `InstallmentPlan.startDate` usada por `resolveInstallmentPlan`.
  * Usado quando o usuário marca a flag "despesa parcelada" no formulário (em vez de digitar "(x/y)"
- * manualmente na descrição).
+ * manualmente na descrição) e pela importação em lote via planilha.
  */
 export async function createInstallmentPlanWithTransactions(
   tx: Db,
@@ -135,6 +144,7 @@ export async function createInstallmentPlanWithTransactions(
 ): Promise<{ installmentPlanId: string; transactions: CreatedInstallmentTransaction[] }> {
   const categoryId = input.categoryId || null;
   const subcategoryId = input.subcategoryId || null;
+  const startInstallmentNumber = input.startInstallmentNumber ?? 1;
 
   const plan = await tx.installmentPlan.create({
     data: {
@@ -149,7 +159,11 @@ export async function createInstallmentPlanWithTransactions(
   });
 
   const transactions: CreatedInstallmentTransaction[] = [];
-  for (let installmentNumber = 1; installmentNumber <= input.totalInstallments; installmentNumber += 1) {
+  for (
+    let installmentNumber = startInstallmentNumber;
+    installmentNumber <= input.totalInstallments;
+    installmentNumber += 1
+  ) {
     const created = await tx.transaction.create({
       data: {
         userId,
