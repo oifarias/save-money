@@ -191,14 +191,19 @@ export async function updateTransactionAction(_prev: ActionResult, formData: For
   }
 
   await prisma.$transaction(async (tx) => {
-    const installmentInfo = await resolveInstallmentPlan(tx, userId, {
-      description,
-      date: new Date(date),
-      amount: Number(amount),
-      categoryId,
-      subcategoryId,
-      excludeTransactionId: id,
-    });
+    // Transação já vinculada a um plano (criado pela flag ou por um vínculo regex anterior):
+    // mantém o vínculo estrutural via FK, sem tentar re-detectar pelo texto da nova descrição —
+    // senão editar só o nome-base (removendo o "(x/y)") desvincularia a transação do plano.
+    const installmentInfo = existing.installmentPlanId
+      ? { installmentPlanId: existing.installmentPlanId, installmentNumber: existing.installmentNumber }
+      : await resolveInstallmentPlan(tx, userId, {
+          description,
+          date: new Date(date),
+          amount: Number(amount),
+          categoryId,
+          subcategoryId,
+          excludeTransactionId: id,
+        });
 
     const fixedExpenseInfo = await resolveFixedExpenseTemplate(tx, userId, {
       isFixed: Boolean(isFixed),
