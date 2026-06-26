@@ -4,13 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { AppShell } from "@/components/layout/app-shell";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  let session;
-  try {
-    session = await auth();
-  } catch (err) {
-    console.error("[app/layout] erro ao verificar sessão:", err);
-    redirect("/login");
-  }
+  const session = await auth();
 
   if (!session?.user?.id) {
     console.warn("[app/layout] sessão ausente ou inválida, redirecionando para login");
