@@ -32,7 +32,7 @@ async function createUserWithCategory(emailSuffix: string) {
   });
   const category = await prisma.category.create({ data: { userId: user.id, name: "Grupo" } });
   const subcategory = await prisma.category.create({ data: { userId: user.id, name: "Sub-grupo", parentId: category.id } });
-  const account = await prisma.account.create({ data: { userId: user.id, name: "Conta", type: "wallet" } });
+  const account = await prisma.financialAccount.create({ data: { userId: user.id, name: "Conta", type: "wallet" } });
   return { user, category, subcategory, account };
 }
 

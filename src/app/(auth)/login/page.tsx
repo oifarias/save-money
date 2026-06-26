@@ -6,7 +6,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import toast from "react-hot-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { loginAction, type ActionResult } from "@/app/(auth)/actions";
+import { loginAction, signInWithGoogleAction, type ActionResult } from "@/app/(auth)/actions";
+import { GoogleIcon } from "@/components/icons/google-icon";
 
 const initialState: ActionResult = { success: false };
 
@@ -32,6 +33,15 @@ function LoginForm() {
       toast.error(state.message);
     }
   }, [state, router, searchParams]);
+
+  useEffect(() => {
+    const error = searchParams.get("error");
+    if (error === "OAuthAccountNotLinked") {
+      toast.error("Esse e-mail já está em uso com outro método de login.");
+    } else if (error) {
+      toast.error("Não foi possível entrar com Google. Tente novamente.");
+    }
+  }, [searchParams]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -72,6 +82,19 @@ function LoginForm() {
 
         <Button type="submit" isLoading={isPending} className="mt-1 w-full">
           Entrar
+        </Button>
+      </form>
+
+      <div className="flex items-center gap-3 text-xs text-(--color-text-muted)">
+        <span className="h-px flex-1 bg-(--color-border)" />
+        ou
+        <span className="h-px flex-1 bg-(--color-border)" />
+      </div>
+
+      <form action={signInWithGoogleAction}>
+        <Button type="submit" variant="secondary" className="w-full">
+          <GoogleIcon className="h-4 w-4" />
+          Entrar com Google
         </Button>
       </form>
 
