@@ -226,6 +226,7 @@ export function TransactionsManager({
           fixedExpenseTemplates={summary.fixedExpenseTemplates}
           installments={{ currentMonth: 0, remaining: 0 }}
           periodLabel={summary.periodLabel}
+          filterParams={searchParams}
         />
       </div>
 

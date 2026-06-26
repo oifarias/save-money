@@ -31,6 +31,18 @@ export async function buildTransactionWhere(
     }
   }
 
+  if (filters.type) {
+    where.type = filters.type;
+  }
+
+  if (filters.isFixed) {
+    where.isFixed = filters.isFixed === "true";
+  }
+
+  if (filters.installment) {
+    where.installmentPlanId = { not: null };
+  }
+
   if (filters.description) {
     where.description = { contains: filters.description, mode: "insensitive" };
   }

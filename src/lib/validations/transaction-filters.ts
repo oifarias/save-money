@@ -36,6 +36,9 @@ export const transactionFiltersSchema = z.object({
       .optional()
   ),
   period: z.preprocess(firstValue, z.enum(["30", "45", "60", "all"]).optional()),
+  type: z.preprocess(firstValue, z.enum(["EXPENSE", "INCOME"]).optional()),
+  isFixed: z.preprocess(firstValue, z.enum(["true", "false"]).optional()),
+  installment: z.preprocess(firstValue, z.enum(["true"]).optional()),
 });
 
 export type TransactionFilters = z.infer<typeof transactionFiltersSchema>;
