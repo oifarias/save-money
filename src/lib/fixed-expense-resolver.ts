@@ -1,6 +1,7 @@
-import type { Prisma } from "@/generated/prisma/client";
+import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 
 type Db = Prisma.TransactionClient;
+type BatchDb = PrismaClient | Prisma.TransactionClient;
 
 export type ResolveFixedExpenseTemplateInput = {
   isFixed: boolean;
@@ -111,6 +112,79 @@ export async function resolveFixedExpenseTemplate(
   });
 
   return { fixedExpenseTemplateId: created.id };
+}
+
+export type BatchFixedExpenseTemplateItem = {
+  description: string;
+  categoryId: string | null;
+  subcategoryId?: string | null;
+  amount: number;
+  date: Date;
+};
+
+/** Monta a chave de match de um template fixo: mesma categoria + descrição normalizada (trim + lowercase). */
+export function fixedExpenseTemplateKey(categoryId: string | null, description: string): string {
+  return `${categoryId ?? "null"}:${normalizeDescription(description)}`;
+}
+
+/**
+ * Resolve em lote a vinculação de várias transações fixas a `FixedExpenseTemplate`s,
+ * replicando a mesma lógica de match de `resolveFixedExpenseTemplate` (descrição normalizada
+ * + categoria, dentre os templates ATIVOS do usuário) mas em apenas 1 SELECT + 1 INSERT totais,
+ * em vez de 1-3 queries por linha. Templates já existentes nunca são sobrescritos.
+ * Retorna `Map<chave → templateId>` onde a chave é `fixedExpenseTemplateKey(categoryId, descriçãoNormalizada)`.
+ */
+export async function batchResolveFixedExpenseTemplates(
+  db: BatchDb,
+  userId: string,
+  items: BatchFixedExpenseTemplateItem[]
+): Promise<Map<string, string>> {
+  if (items.length === 0) return new Map();
+
+  const existingTemplates = await db.fixedExpenseTemplate.findMany({
+    where: { userId, isActive: true },
+    select: { id: true, description: true, categoryId: true },
+  });
+
+  const map = new Map<string, string>();
+  for (const template of existingTemplates) {
+    map.set(fixedExpenseTemplateKey(template.categoryId, template.description), template.id);
+  }
+
+  const toCreate: { key: string; data: Prisma.FixedExpenseTemplateCreateManyInput }[] = [];
+  const seenNewKeys = new Set<string>();
+
+  for (const item of items) {
+    const categoryId = item.categoryId || null;
+    const key = fixedExpenseTemplateKey(categoryId, item.description);
+
+    if (map.has(key) || seenNewKeys.has(key)) continue;
+    seenNewKeys.add(key);
+
+    toCreate.push({
+      key,
+      data: {
+        userId,
+        description: item.description,
+        expectedAmount: item.amount,
+        dueDay: item.date.getDate(),
+        categoryId,
+        subcategoryId: item.subcategoryId || null,
+        isActive: true,
+      },
+    });
+  }
+
+  if (toCreate.length > 0) {
+    const created = await db.fixedExpenseTemplate.createManyAndReturn({
+      data: toCreate.map((entry) => entry.data),
+    });
+    created.forEach((template, index) => {
+      map.set(toCreate[index].key, template.id);
+    });
+  }
+
+  return map;
 }
 
 /**
