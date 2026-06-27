@@ -205,14 +205,112 @@ Esse escopo resolve ~90 % do problema de performance (a maioria das linhas em im
 
 ### Testes
 
-- [ ] **T08** Atualizar / adicionar testes unitários para `batchResolveCategories`, `batchResolveSubcategories`, `batchResolveTags`, `batchResolveFixedExpenseTemplates` em `tests/lib/`
+> **Padrão obrigatório para todos os testes de integração desta seção**
+>
+> Cada `it` deve:
+> 1. Abrir uma `$transaction` do Prisma antes de qualquer escrita
+> 2. Executar a função sendo testada **dentro** dessa transação (passando o `tx` como cliente)
+> 3. Fazer `SELECT` direto no banco via `tx` para verificar o estado real persistido
+> 4. Executar todos os `expect()`
+> 5. Lançar um sentinel de rollback (`throw ROLLBACK`) ao final — o banco volta ao estado anterior e nenhum dado de teste fica gravado
+>
+> ```typescript
+> const ROLLBACK = Symbol("rollback");
+>
+> async function withRollback(fn: (tx: Prisma.TransactionClient) => Promise<void>) {
+>   await prisma.$transaction(async (tx) => {
+>     await fn(tx);
+>     throw ROLLBACK; // força rollback incondicional
+>   }).catch((e) => {
+>     if (e !== ROLLBACK) throw e; // re-lança erros reais
+>   });
+> }
+> ```
+>
+> Isso elimina a necessidade de `beforeEach` com `deleteMany` e garante isolamento total entre testes, mesmo que rodem em paralelo contra o mesmo banco.
 
-- [ ] **T09** Rodar a suite completa de integração (`import-actions.test.ts` + `import-actions.scenarios.test.ts`) e garantir que todos os testes continuam passando sem alteração
+---
 
-- [ ] **T10** Adicionar teste de carga manual com planilha de 300+ linhas para confirmar que o tempo total fica abaixo de 10 s
+- [ ] **T08** Testes para `batchResolveCategories` em `tests/lib/batch-resolve-categories.test.ts`
+
+  Cenários (todos usando `withRollback`):
+  - **1 categoria nova** — verifica que foi criada no banco e o Map retorna o id correto
+  - **1 categoria já existente** — verifica que não duplicou (SELECT COUNT = 1) e retorna o id existente
+  - **10 categorias, 5 novas e 5 existentes** — verifica count final = soma de existentes + novas; Map tem todas as 10 entradas
+  - **50 categorias todas novas** — verifica count = 50, tempo de execução dentro do tx < 2 s
+  - **Nomes duplicados no input** — ex.: `["Alimentação", "Alimentação", "Transporte"]` deve criar apenas 2 registros distintos
+  - **Nome vazio ou só espaços** — deve ser ignorado e não inserido no banco
+
+---
+
+- [ ] **T09** Testes para `batchResolveSubcategories` em `tests/lib/batch-resolve-subcategories.test.ts`
+
+  Cenários (todos usando `withRollback`):
+  - **1 sub-categoria nova sob pai existente** — verifica criação e vínculo correto de `parentId`
+  - **1 sub-categoria já existente** — verifica que não duplicou
+  - **Mesma sub-categoria sob pais diferentes** — ex.: "Outros" sob "Alimentação" e "Outros" sob "Transporte" devem ser dois registros distintos; Map deve diferenciar pela chave `"parentId:nome"`
+  - **20 sub-categorias mistas (10 novas, 10 existentes)** — count correto, Map completo
+  - **Sub-categoria com `parentId` inexistente** — deve lançar erro de FK ou retornar null, sem quebrar as demais
+
+---
+
+- [ ] **T10** Testes para `batchResolveTags` em `tests/lib/batch-resolve-tags.test.ts`
+
+  Cenários (todos usando `withRollback`):
+  - **5 tags novas** — verifica que todas foram criadas (`SELECT COUNT = 5`) e Map retorna todos os ids
+  - **5 tags já existentes** — verifica que não duplicou (`COUNT` permanece o mesmo) e ids batem com os existentes
+  - **Mix: 3 novas + 3 existentes** — COUNT cresce só 3; Map tem todas as 6 entradas
+  - **100 tags todas novas** — verifica COUNT = 100 e todos os ids no Map; tempo < 1 s
+  - **Tags com `#` no início** — `#lazer` deve ser normalizado para `lazer` antes de persistir
+  - **Tags duplicadas no input** — `["lazer", "lazer", "comida"]` deve criar 2 registros, não 3
+
+---
+
+- [ ] **T11** Testes para `batchResolveFixedExpenseTemplates` em `tests/lib/batch-resolve-fixed-expense-templates.test.ts`
+
+  Cenários (todos usando `withRollback`):
+  - **1 template novo** — verifica criação com `description`, `expectedAmount`, `dueDay` e `categoryId` corretos
+  - **1 template já existente (mesma descrição normalizada)** — verifica que não duplicou e retorna o id existente
+  - **Descrição com capitalização diferente** — `"aluguel"` deve match com `"Aluguel"` existente
+  - **Mesma descrição, categoria diferente** — deve criar template separado (não é o mesmo)
+  - **10 templates, 4 existentes e 6 novos** — verifica COUNT final e que existentes não foram sobrescritos (`expectedAmount` original preservado)
+  - **Template inativo existente** — não deve ser reutilizado; deve criar um novo template ativo
+
+---
+
+- [ ] **T12** Testes de integração para o pipeline completo em `tests/actions/lancamentos/import-batch.test.ts`
+
+  Cada cenário usa `withRollback`; ao final faz SELECT em todas as tabelas afetadas antes do rollback:
+
+  **Cenários de volume:**
+  - **10 linhas simples, sem categoria, sem tags** — verifica 10 transactions criadas, `categoryId = null`
+  - **50 linhas simples com 3 categorias distintas e 5 tags** — verifica 50 transactions; SELECT em `categories` mostra 3 registros; SELECT em `tags` mostra 5 registros; SELECT em `transaction_tags` mostra 50×(tags por linha) registros
+  - **100 linhas simples todas com `isFixed = true`** — verifica 100 transactions com `isFixed = true`; verifica que templates fixos foram criados (quantidade correta de templates únicos)
+  - **300 linhas simples** — verifica 300 transactions no banco; tempo de execução do pipeline (medido via `Date.now()`) < 10 s
+  - **500 linhas simples** — verifica 500 transactions; tempo < 15 s
+
+  **Cenários de parcelamento:**
+  - **1 linha `3/12`** — verifica 10 transactions (parcelas 3..12), 1 `InstallmentPlan` com `totalInstallments = 12`
+  - **3 linhas do mesmo plano na mesma planilha (`2/6`, `3/6`, `4/6`)** — verifica apenas 1 `InstallmentPlan` criado, com todas as parcelas 2..6 geradas (sem duplicar as parcelas já representadas)
+  - **Mix: 50 simples + 5 parceladas (2/12 cada)** — verifica 50 + 5×11 = 105 transactions; 5 planos; tempo < 5 s
+
+  **Cenários de erro e resiliência:**
+  - **Linha inválida no meio do lote** — linha com `amount = ""` no meio de 10 linhas válidas; verifica que 9 transactions foram criadas e `skipped = 1`
+  - **Categoria que viola constraint (nome vazio)** — não deve criar categoria inválida; linha marcada como `skipped`
+  - **Lote vazio** — retorna `success: false` sem nenhuma escrita no banco
+
+  **Cenários de idempotência:**
+  - **Mesma categoria importada em duas linhas diferentes** — SELECT em `categories` mostra 1 registro, não 2
+  - **Mesma tag em 20 linhas diferentes** — SELECT em `tags` mostra 1 registro; `transaction_tags` mostra 20 vínculos
+
+---
+
+- [ ] **T13** Regressão: rodar `import-actions.test.ts` e `import-actions.scenarios.test.ts` existentes sem alteração e garantir que todos os testes continuam passando
+
+- [ ] **T14** Teste de carga real: executar via script o pipeline com planilha de 307 linhas (o caso que estourou o timeout original) e confirmar tempo < 10 s e `imported = 307`
 
 ### Opcional / futuro
 
-- [ ] **T11** Avaliar envolver Fases 3–8 numa única `$transaction` (custo baixo com poucas queries grandes) para garantir atomicidade total da importação se isso for um requisito de negócio
+- [ ] **T15** Avaliar envolver Fases 3–8 numa única `$transaction` (custo baixo com poucas queries grandes) para garantir atomicidade total da importação se isso for um requisito de negócio
 
-- [ ] **T12** Explorar `createInstallmentPlanWithTransactions` em versão batch para grupos de parcelamento com o mesmo plano (ex.: múltiplas linhas "Notebook (x/12)" na mesma planilha)
+- [ ] **T16** Explorar `createInstallmentPlanWithTransactions` em versão batch para grupos de parcelamento com o mesmo plano (ex.: múltiplas linhas "Notebook (x/12)" na mesma planilha)
