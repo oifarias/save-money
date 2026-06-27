@@ -174,7 +174,7 @@ export async function importTransactionsAction(rows: ImportRowPayload[]): Promis
           const isFixedFlag = normalizeFixedFlag(isFixed ?? "");
 
           let fixedExpenseTemplateId: string | null = null;
-          if (isFixedFlag) {
+          if (isFixedFlag && type === "EXPENSE") {
             const result = await resolveFixedExpenseTemplate(tx, userId, {
               isFixed: true,
               description,

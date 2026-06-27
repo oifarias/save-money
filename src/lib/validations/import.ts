@@ -2,7 +2,7 @@ import { z } from "zod";
 
 const MAX_TAGS_PER_ROW = 15;
 
-/** Palavras reconhecidas como "verdadeiro" para a coluna de despesa fixa (case-insensitive). */
+/** Palavras reconhecidas como "verdadeiro" para a coluna de lançamento fixo (case-insensitive). */
 export const FIXED_TRUE_WORDS = ["sim", "s", "true", "1", "x", "yes", "y"];
 
 /** Regex de "x/y" para a coluna de parcelas, ex.: "3/12". */
@@ -79,7 +79,7 @@ export const IMPORT_FIELDS = [
   { key: "subcategory", label: "Sub-categoria", required: false },
   { key: "tags", label: "Tags", required: false },
   { key: "installments", label: "Parcelas (x/y)", required: false },
-  { key: "isFixed", label: "Despesa fixa", required: false },
+  { key: "isFixed", label: "Fixa", required: false },
 ] as const;
 
 export type ImportFieldKey = (typeof IMPORT_FIELDS)[number]["key"];

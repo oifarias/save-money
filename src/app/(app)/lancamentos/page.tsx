@@ -114,7 +114,7 @@ export default async function LancamentosPage({ searchParams }: LancamentosPageP
         <p className="mt-1 text-sm text-(--color-text-muted)">Registre um lançamento individual ou importe várias linhas de uma planilha</p>
       </div>
 
-      <TransactionIntake categories={formCategories} tagSuggestions={tagSuggestions} />
+      <TransactionIntake />
 
       <FixedExpensesChecklist items={fixedExpensesChecklist} />
 

@@ -36,6 +36,22 @@ export const transactionSchema = z
         message: "Informe a quantidade de parcelas",
       });
     }
+    if (data.isInstallment && data.type === "INCOME") {
+      ctx.addIssue({
+        code: "custom",
+        path: ["isInstallment"],
+        message: "Parcelamento não se aplica a entradas",
+      });
+    }
   });
 
 export type TransactionInput = z.infer<typeof transactionSchema>;
+
+export const batchCreateTransactionSchema = z.object({
+  items: z
+    .array(transactionSchema)
+    .min(1, "Adicione ao menos um lançamento")
+    .max(50, "Limite de 50 lançamentos por lote"),
+});
+
+export type BatchCreateTransactionInput = z.infer<typeof batchCreateTransactionSchema>;

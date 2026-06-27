@@ -366,7 +366,7 @@ export function ImportWizard({ existingCategories }: ImportWizardProps) {
         <div>
           <h2 className="font-display text-base font-semibold text-(--color-text)">Arquivo modelo</h2>
           <p className="mt-0.5 text-sm text-(--color-text-muted)">
-            Baixe a planilha de exemplo com as colunas esperadas: Data, Tipo, Transação, Categoria, Sub-categoria, Valor, Tags, Parcelas (x/y) e Despesa fixa
+            Baixe a planilha de exemplo com as colunas esperadas: Data, Tipo, Transação, Categoria, Sub-categoria, Valor, Tags, Parcelas (x/y) e Fixa
           </p>
         </div>
         <a href="/api/import/template" download>
@@ -477,8 +477,8 @@ export function ImportWizard({ existingCategories }: ImportWizardProps) {
                 <p className="flex items-start gap-1.5">
                   <Lock size={14} className="mt-0.5 shrink-0 text-(--color-primary)" aria-hidden="true" />
                   <span>
-                    <strong className="text-(--color-text)">Despesa fixa:</strong> marque como sim/x/true para
-                    indicar que é uma despesa fixa recorrente (mesmo conceito do lançamento individual).
+                    <strong className="text-(--color-text)">Fixa:</strong> marque como sim/x/true para indicar
+                    que é um lançamento fixo — despesa fixa (ex.: aluguel) ou entrada fixa (ex.: salário).
                   </span>
                 </p>
               </div>

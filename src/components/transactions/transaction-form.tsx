@@ -52,6 +52,9 @@ export function TransactionForm({ categories, tagSuggestions, transaction, onDon
   const [categoryModalOpen, setCategoryModalOpen] = useState(false);
   const [categoryId, setCategoryId] = useState(transaction?.categoryId ?? "");
   const [isInstallment, setIsInstallment] = useState(false);
+  const [isFixedIncome, setIsFixedIncome] = useState<boolean>(
+    transaction?.type === "INCOME" ? (transaction.isFixed ?? false) : false
+  );
 
   const selectedCategory = categories.find((category) => category.id === categoryId);
   const subcategoryOptions = selectedCategory?.children ?? [];
@@ -89,7 +92,10 @@ export function TransactionForm({ categories, tagSuggestions, transaction, onDon
               <button
                 key={option.value}
                 type="button"
-                onClick={() => setType(option.value)}
+                onClick={() => {
+                  setType(option.value);
+                  if (option.value === "INCOME") setIsInstallment(false);
+                }}
                 aria-pressed={type === option.value}
                 className={clsx(
                   "rounded-lg py-2 text-sm font-medium transition-all duration-200",
@@ -193,38 +199,73 @@ export function TransactionForm({ categories, tagSuggestions, transaction, onDon
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="recurrence" className="text-sm font-medium text-(--color-text)">
-              Repetição
-            </label>
-            <select
-              id="recurrence"
-              name="recurrence"
-              defaultValue={transaction?.recurrence ?? "NONE"}
-              className="rounded-xl border border-(--color-border) bg-(--color-surface) px-3.5 py-2.5 text-sm text-(--color-text) outline-none transition-colors focus:border-(--color-primary) focus:ring-2 focus:ring-(--color-primary)/20"
-            >
-              <option value="NONE">Único</option>
-              <option value="WEEKLY">Semanal</option>
-              <option value="MONTHLY">Mensal</option>
-            </select>
-          </div>
+        {type === "EXPENSE" && (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="recurrence" className="text-sm font-medium text-(--color-text)">
+                Repetição
+              </label>
+              <select
+                id="recurrence"
+                name="recurrence"
+                defaultValue={transaction?.recurrence ?? "NONE"}
+                className="rounded-xl border border-(--color-border) bg-(--color-surface) px-3.5 py-2.5 text-sm text-(--color-text) outline-none transition-colors focus:border-(--color-primary) focus:ring-2 focus:ring-(--color-primary)/20"
+              >
+                <option value="NONE">Único</option>
+                <option value="WEEKLY">Semanal</option>
+                <option value="MONTHLY">Mensal</option>
+              </select>
+            </div>
 
-          <div className="flex flex-col justify-end gap-1.5 pb-1">
-            <label className="flex items-center gap-2.5 text-sm font-medium text-(--color-text)">
-              <input
-                type="checkbox"
-                name="isFixed"
-                defaultChecked={transaction?.isFixed}
-                className="h-4 w-4 rounded border-(--color-border) accent-(--color-primary)"
-              />
-              Despesa fixa
-            </label>
-            <p className="text-xs text-(--color-text-muted)">Marque para gastos recorrentes como aluguel ou assinaturas</p>
+            <div className="flex flex-col justify-end gap-1.5 pb-1">
+              <label className="flex items-center gap-2.5 text-sm font-medium text-(--color-text)">
+                <input
+                  type="checkbox"
+                  name="isFixed"
+                  defaultChecked={transaction?.isFixed}
+                  className="h-4 w-4 rounded border-(--color-border) accent-(--color-primary)"
+                />
+                Despesa fixa
+              </label>
+              {/* <p className="text-xs text-(--color-text-muted)">Marque para gastos recorrentes como aluguel ou assinaturas</p> */}
+            </div>
           </div>
-        </div>
+        )}
 
-        {!transaction && (
+        {type === "INCOME" && (
+          <fieldset className="flex flex-col gap-1.5">
+            <legend className="mb-1.5 text-sm font-medium text-(--color-text)">Tipo de entrada</legend>
+            <div className="grid grid-cols-2 gap-2 rounded-xl border border-(--color-border) bg-(--color-bg) p-1">
+              {(
+                [
+                  { value: false, label: "Variável" },
+                  { value: true, label: "Fixa" },
+                ] as const
+              ).map((option) => (
+                <button
+                  key={String(option.value)}
+                  type="button"
+                  onClick={() => setIsFixedIncome(option.value)}
+                  aria-pressed={isFixedIncome === option.value}
+                  className={clsx(
+                    "rounded-lg py-2 text-sm font-medium transition-all duration-200",
+                    isFixedIncome === option.value
+                      ? "bg-(--color-success) text-white shadow-sm"
+                      : "text-(--color-text-muted) hover:text-(--color-text)"
+                  )}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-(--color-text-muted)">
+              Fixa: salário, aluguel recebido — Variável: pix de amigo, venda pontual
+            </p>
+            {isFixedIncome && <input type="hidden" name="isFixed" value="on" />}
+          </fieldset>
+        )}
+
+        {type === "EXPENSE" && !transaction && (
           <div className="flex flex-col gap-1.5 rounded-xl border border-(--color-border) bg-(--color-bg) p-3.5">
             <label className="flex items-center gap-2.5 text-sm font-medium text-(--color-text)">
               <input

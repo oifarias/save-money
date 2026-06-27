@@ -120,7 +120,7 @@ export function normalizeInstallments(raw: string): NormalizedInstallments | nul
   return { current, total };
 }
 
-/** Normaliza a coluna "Despesa fixa" (sim/não, true/false, 1/0, x...) para boolean. */
+/** Normaliza a coluna "Fixa" (sim/não, true/false, 1/0, x...) para boolean. Válido para despesas e entradas. */
 export function normalizeFixedFlag(raw: string): boolean {
   const value = raw.trim().toLowerCase();
   if (!value) return false;
@@ -241,7 +241,7 @@ const COLUMN_GUESSES: Record<ImportFieldKey, string[]> = {
   subcategory: ["sub-categoria", "subcategoria", "sub categoria", "subcategory", "sub-grupo", "subgrupo"],
   tags: ["tags", "hashtags", "etiquetas"],
   installments: ["parcelas (x/y)", "parcelas", "parcela", "installments", "parcelamento"],
-  isFixed: ["despesa fixa", "fixa", "fixed", "is fixed", "recorrente"],
+  isFixed: ["despesa fixa", "entrada fixa", "fixa", "fixed", "is fixed", "recorrente"],
 };
 
 /** Tenta adivinhar o mapeamento de colunas a partir dos headers da planilha (mesmos nomes do modelo). */

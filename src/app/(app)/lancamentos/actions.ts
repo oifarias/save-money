@@ -5,7 +5,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getDefaultAccountId } from "@/lib/accounts";
 import { syncTransactionTags } from "@/lib/tags";
-import { transactionSchema } from "@/lib/validations/transaction";
+import { transactionSchema, batchCreateTransactionSchema } from "@/lib/validations/transaction";
 import { bulkUpdateTransactionSchema } from "@/lib/validations/bulk-transaction";
 import { resolveCategoryAndSubcategory } from "@/lib/category-resolver";
 import {
@@ -132,15 +132,18 @@ export async function createTransactionAction(_prev: ActionResult, formData: For
       subcategoryId,
     });
 
-    const fixedExpenseInfo = await resolveFixedExpenseTemplate(tx, userId, {
-      isFixed: Boolean(isFixed),
-      description,
-      date: new Date(date),
-      amount: Number(amount),
-      categoryId,
-      subcategoryId,
-      previousTemplateId: null,
-    });
+    const fixedExpenseInfo =
+      type === "EXPENSE"
+        ? await resolveFixedExpenseTemplate(tx, userId, {
+            isFixed: Boolean(isFixed),
+            description,
+            date: new Date(date),
+            amount: Number(amount),
+            categoryId,
+            subcategoryId,
+            previousTemplateId: null,
+          })
+        : { fixedExpenseTemplateId: null };
 
     const created = await tx.transaction.create({
       data: {
@@ -205,16 +208,19 @@ export async function updateTransactionAction(_prev: ActionResult, formData: For
           excludeTransactionId: id,
         });
 
-    const fixedExpenseInfo = await resolveFixedExpenseTemplate(tx, userId, {
-      isFixed: Boolean(isFixed),
-      description,
-      date: new Date(date),
-      amount: Number(amount),
-      categoryId,
-      subcategoryId,
-      excludeTransactionId: id,
-      previousTemplateId: existing.fixedExpenseTemplateId,
-    });
+    const fixedExpenseInfo =
+      type === "EXPENSE"
+        ? await resolveFixedExpenseTemplate(tx, userId, {
+            isFixed: Boolean(isFixed),
+            description,
+            date: new Date(date),
+            amount: Number(amount),
+            categoryId,
+            subcategoryId,
+            excludeTransactionId: id,
+            previousTemplateId: existing.fixedExpenseTemplateId,
+          })
+        : { fixedExpenseTemplateId: null };
 
     await tx.transaction.update({
       where: { id },
@@ -637,6 +643,103 @@ export async function payFixedExpensesAction(items: unknown): Promise<ActionResu
       : `Nenhuma despesa foi processada: ${failureMessage}`;
 
   return { success: false, message };
+}
+
+export async function createTransactionBatchAction(items: unknown): Promise<ActionResult> {
+  const userId = await requireUserId();
+
+  const parsed = batchCreateTransactionSchema.safeParse({ items });
+  if (!parsed.success) {
+    return { success: false, fieldErrors: flattenZodErrors(parsed.error) };
+  }
+
+  const accountId = await getDefaultAccountId(userId);
+  if (!accountId) {
+    return { success: false, message: "Nenhuma conta encontrada para o usuário" };
+  }
+
+  for (const item of parsed.data.items) {
+    const { error } = await resolveCategoryAndSubcategory(userId, item.categoryId ?? "", item.subcategoryId ?? "");
+    if (error) {
+      return { success: false, fieldErrors: error };
+    }
+  }
+
+  let totalCreated = 0;
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      for (const item of parsed.data.items) {
+        const { type, date, description, amount, categoryId, subcategoryId, isFixed, recurrence, tags, isInstallment, totalInstallments } = item;
+
+        if (isInstallment && totalInstallments) {
+          const { transactions } = await createInstallmentPlanWithTransactions(tx, userId, {
+            baseDescription: description,
+            totalInstallments: Number(totalInstallments),
+            amount: Number(amount),
+            startDate: new Date(date),
+            type: type as TransactionType,
+            accountId,
+            categoryId,
+            subcategoryId,
+          });
+          for (const created of transactions) {
+            await syncTransactionTags(tx, userId, created.id, tags);
+          }
+          totalCreated += Number(totalInstallments);
+        } else {
+          const installmentInfo = await resolveInstallmentPlan(tx, userId, {
+            description,
+            date: new Date(date),
+            amount: Number(amount),
+            categoryId,
+            subcategoryId,
+          });
+
+          const fixedExpenseInfo =
+            type === "EXPENSE"
+              ? await resolveFixedExpenseTemplate(tx, userId, {
+                  isFixed: Boolean(isFixed),
+                  description,
+                  date: new Date(date),
+                  amount: Number(amount),
+                  categoryId,
+                  subcategoryId,
+                  previousTemplateId: null,
+                })
+              : { fixedExpenseTemplateId: null };
+
+          const created = await tx.transaction.create({
+            data: {
+              userId,
+              accountId,
+              categoryId: categoryId || null,
+              subcategoryId: subcategoryId || null,
+              type: type as TransactionType,
+              amount: Number(amount),
+              date: new Date(date),
+              description,
+              isFixed: Boolean(isFixed),
+              recurrence: recurrence as Recurrence,
+              installmentPlanId: installmentInfo?.installmentPlanId ?? null,
+              installmentNumber: installmentInfo?.installmentNumber ?? null,
+              fixedExpenseTemplateId: fixedExpenseInfo.fixedExpenseTemplateId,
+            },
+          });
+
+          await syncTransactionTags(tx, userId, created.id, tags);
+          totalCreated += 1;
+        }
+      }
+    });
+  } catch {
+    return { success: false, message: "Não foi possível salvar os lançamentos. Tente novamente." };
+  }
+
+  revalidatePath("/dashboard");
+  revalidatePath("/lancamentos");
+  invalidateAggregateCaches(userId);
+  return { success: true, message: `${totalCreated} lançamento(s) registrado(s) com sucesso` };
 }
 
 function flattenZodErrors(error: { issues: { path: PropertyKey[]; message: string }[] }) {

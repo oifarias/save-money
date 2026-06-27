@@ -5,18 +5,32 @@ import { X } from "lucide-react";
 import { clsx } from "clsx";
 
 type TagInputProps = {
-  name: string;
+  name?: string;
   label?: string;
   defaultTags?: string[];
+  value?: string[];
+  onChange?: (tags: string[]) => void;
   suggestions?: string[];
   error?: string;
 };
 
-export function TagInput({ name, label = "Hashtags", defaultTags = [], suggestions = [], error }: TagInputProps) {
-  const [tags, setTags] = useState<string[]>(defaultTags);
+export function TagInput({ name, label = "Hashtags", defaultTags = [], value, onChange, suggestions = [], error }: TagInputProps) {
+  const isControlled = value !== undefined;
+  const [internalTags, setInternalTags] = useState<string[]>(defaultTags);
   const [draft, setDraft] = useState("");
   const [showSuggestions, setShowSuggestions] = useState(false);
   const inputId = useId();
+
+  const tags = isControlled ? value : internalTags;
+
+  function setTags(next: string[] | ((prev: string[]) => string[])) {
+    if (isControlled) {
+      const resolved = typeof next === "function" ? next(value!) : next;
+      onChange?.(resolved);
+    } else {
+      setInternalTags(next);
+    }
+  }
 
   const filteredSuggestions = useMemo(() => {
     const query = draft.trim().toLowerCase().replace(/^#/, "");
@@ -27,9 +41,9 @@ export function TagInput({ name, label = "Hashtags", defaultTags = [], suggestio
   }, [draft, suggestions, tags]);
 
   function addTag(raw: string) {
-    const value = raw.trim().replace(/^#/, "").replace(/,/g, "");
-    if (!value) return;
-    setTags((current) => (current.includes(value) ? current : [...current, value]));
+    const tagValue = raw.trim().replace(/^#/, "").replace(/,/g, "");
+    if (!tagValue) return;
+    setTags((current) => (current.includes(tagValue) ? current : [...current, tagValue]));
     setDraft("");
     setShowSuggestions(false);
   }
@@ -54,7 +68,7 @@ export function TagInput({ name, label = "Hashtags", defaultTags = [], suggestio
           {label}
         </label>
       )}
-      <input type="hidden" name={name} value={JSON.stringify(tags)} />
+      {name && <input type="hidden" name={name} value={JSON.stringify(tags)} />}
 
       <div
         className={clsx(
