@@ -11,6 +11,7 @@ import {
 import type { Bucket } from "@/lib/budget-buckets";
 import { GoalsWizard } from "@/components/goals/goals-wizard";
 import { BudgetProgressView } from "@/components/goals/budget-progress-view";
+import { PageHeader } from "@/components/ui/page-header";
 
 type MetasPageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -55,12 +56,7 @@ export default async function MetasPage({ searchParams }: MetasPageProps) {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="font-display text-2xl font-semibold text-(--color-text)">Metas de gastos</h1>
-        <p className="mt-1 text-sm text-(--color-text-muted)">
-          Defina quanto pretende gastar por grupo este mês e acompanhe o quanto já usou
-        </p>
-      </div>
+      <PageHeader title="Metas de gastos" description="Defina quanto pretende gastar por grupo este mês e acompanhe o quanto já usou" />
 
       {!showWizard && progress ? (
         <BudgetProgressView progress={progress} />

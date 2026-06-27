@@ -1,47 +1,23 @@
-import Link from "next/link";
-import { ChevronRight, FileSpreadsheet, PenLine } from "lucide-react";
+import { PenLine, FileSpreadsheet } from "lucide-react";
+import { IntakeOption } from "@/components/ui/intake-option";
 
 export function TransactionIntake() {
   return (
     <section className="flex flex-col gap-4">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Link
+        <IntakeOption
           href="/lancamentos/novo"
-          className="group flex items-start gap-3 rounded-2xl border border-(--color-border) bg-(--color-surface) px-4 py-3.5 text-left transition-colors duration-200 hover:border-(--color-primary)/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-primary)/40"
-        >
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-(--color-primary)/10 text-(--color-primary)">
-            <PenLine className="h-5 w-5" aria-hidden="true" />
-          </span>
-          <span className="flex-1">
-            <span className="block font-display text-sm font-semibold text-(--color-text)">Manual</span>
-            <span className="mt-0.5 block text-xs text-(--color-text-muted)">
-              Adicione um ou mais lançamentos com categoria e tags
-            </span>
-          </span>
-          <ChevronRight
-            className="mt-1 h-4 w-4 shrink-0 text-(--color-text-muted) transition-transform group-hover:translate-x-0.5"
-            aria-hidden="true"
-          />
-        </Link>
-
-        <Link
+          icon={PenLine}
+          title="Manual"
+          description="Adicione um ou mais lançamentos com categoria e tags"
+        />
+        <IntakeOption
           href="/lancamentos/importar"
-          className="group flex items-start gap-3 rounded-2xl border border-(--color-border) bg-(--color-surface) px-4 py-3.5 text-left transition-colors duration-200 hover:border-(--color-primary)/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-primary)/40"
-        >
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-(--color-accent)/15 text-(--color-accent)">
-            <FileSpreadsheet className="h-5 w-5" aria-hidden="true" />
-          </span>
-          <span className="flex-1">
-            <span className="block font-display text-sm font-semibold text-(--color-text)">Importar planilha</span>
-            <span className="mt-0.5 block text-xs text-(--color-text-muted)">
-              Várias linhas de uma vez, a partir de um .xlsx ou .xls
-            </span>
-          </span>
-          <ChevronRight
-            className="mt-1 h-4 w-4 shrink-0 text-(--color-text-muted) transition-transform group-hover:translate-x-0.5"
-            aria-hidden="true"
-          />
-        </Link>
+          icon={FileSpreadsheet}
+          title="Importar planilha"
+          description="Várias linhas de uma vez, a partir de um .xlsx ou .xls"
+          colorToken="--color-accent"
+        />
       </div>
     </section>
   );

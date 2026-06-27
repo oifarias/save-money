@@ -7,6 +7,10 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { PageHeader } from "@/components/ui/page-header";
+import { EmptyState } from "@/components/ui/empty-state";
+import { IconBadge } from "@/components/ui/icon-badge";
+import { IconActionButton } from "@/components/ui/icon-action-button";
 import { CategoryForm } from "@/components/groups/category-form";
 import { getCategoryIcon } from "@/lib/category-icons";
 import { deleteCategoryAction } from "@/app/(app)/grupos/actions";
@@ -60,30 +64,28 @@ export function CategoryManager({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="font-display text-2xl font-semibold text-(--color-text)">Grupos</h1>
-          <p className="mt-1 text-sm text-(--color-text-muted)">
-            Organize seus lançamentos por categoria com cores e ícones personalizados
-          </p>
-        </div>
-        <Button onClick={() => setFormMode({ kind: "create" })}>
-          <Plus className="h-4 w-4" aria-hidden="true" />
-          Novo grupo
-        </Button>
-      </div>
+      <PageHeader
+        title="Grupos"
+        description="Organize seus lançamentos por categoria com cores e ícones personalizados"
+        action={
+          <Button onClick={() => setFormMode({ kind: "create" })}>
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            Novo grupo
+          </Button>
+        }
+      />
 
       {categories.length === 0 ? (
-        <Card className="flex flex-col items-center gap-2 py-12 text-center">
-          <p className="font-display text-lg font-semibold text-(--color-text)">Nenhum grupo ainda</p>
-          <p className="max-w-sm text-sm text-(--color-text-muted)">
-            Crie grupos para organizar seus gastos e entradas — por exemplo, Alimentação, Transporte ou Lazer.
-          </p>
-          <Button onClick={() => setFormMode({ kind: "create" })} className="mt-2">
-            <Plus className="h-4 w-4" aria-hidden="true" />
-            Criar primeiro grupo
-          </Button>
-        </Card>
+        <EmptyState
+          title="Nenhum grupo ainda"
+          description="Crie grupos para organizar seus gastos e entradas — por exemplo, Alimentação, Transporte ou Lazer."
+          action={
+            <Button onClick={() => setFormMode({ kind: "create" })}>
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              Criar primeiro grupo
+            </Button>
+          }
+        />
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {categories.map((category) => {
@@ -92,12 +94,7 @@ export function CategoryManager({
               <Card key={category.id} className="flex flex-col gap-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-start gap-3">
-                    <span
-                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
-                      style={{ backgroundColor: `${category.color}1F`, color: category.color }}
-                    >
-                      <Icon className="h-5 w-5" aria-hidden="true" />
-                    </span>
+                    <IconBadge icon={Icon} colorHex={category.color} />
                     <div>
                       <p className="font-medium text-(--color-text)">{category.name}</p>
                       <p className="text-xs text-(--color-text-muted)">
@@ -109,24 +106,21 @@ export function CategoryManager({
                     </div>
                   </div>
                   <div className="flex shrink-0 gap-1">
-                    <button
-                      type="button"
+                    <IconActionButton
+                      icon={Pencil}
+                      label={`Editar grupo ${category.name}`}
+                      hoverVariant="primary"
                       onClick={() => setFormMode({ kind: "edit", category, parentId: null })}
-                      aria-label={`Editar grupo ${category.name}`}
-                      className="flex h-8 w-8 items-center justify-center rounded-lg text-(--color-text-muted) transition-colors hover:bg-(--color-bg) hover:text-(--color-primary)"
-                    >
-                      <Pencil className="h-4 w-4" aria-hidden="true" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDeleting(category)}
+                    />
+                    <IconActionButton
+                      icon={Trash2}
+                      label={`Excluir grupo ${category.name}`}
+                      hoverVariant="danger"
                       disabled={category.transactionCount > 0}
-                      aria-label={`Excluir grupo ${category.name}`}
                       title={category.transactionCount > 0 ? "Só é possível excluir grupos vazios" : undefined}
-                      className="flex h-8 w-8 items-center justify-center rounded-lg text-(--color-text-muted) transition-colors hover:bg-(--color-bg) hover:text-(--color-danger) disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      <Trash2 className="h-4 w-4" aria-hidden="true" />
-                    </button>
+                      onClick={() => setDeleting(category)}
+                      className="disabled:cursor-not-allowed disabled:opacity-40"
+                    />
                   </div>
                 </div>
 
@@ -136,24 +130,23 @@ export function CategoryManager({
                       <li key={child.id} className="flex items-center justify-between gap-2 pl-3 text-sm">
                         <span className="text-(--color-text-muted)">— {child.name}</span>
                         <div className="flex shrink-0 gap-1">
-                          <button
-                            type="button"
+                          <IconActionButton
+                            icon={Pencil}
+                            label={`Editar sub-grupo ${child.name}`}
+                            hoverVariant="primary"
+                            size="sm"
                             onClick={() => setFormMode({ kind: "edit", category: child, parentId: category.id })}
-                            aria-label={`Editar sub-grupo ${child.name}`}
-                            className="flex h-7 w-7 items-center justify-center rounded-lg text-(--color-text-muted) transition-colors hover:bg-(--color-bg) hover:text-(--color-primary)"
-                          >
-                            <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setDeleting(child)}
+                          />
+                          <IconActionButton
+                            icon={Trash2}
+                            label={`Excluir sub-grupo ${child.name}`}
+                            hoverVariant="danger"
+                            size="sm"
                             disabled={child.transactionCount > 0}
-                            aria-label={`Excluir sub-grupo ${child.name}`}
                             title={child.transactionCount > 0 ? "Só é possível excluir grupos vazios" : undefined}
-                            className="flex h-7 w-7 items-center justify-center rounded-lg text-(--color-text-muted) transition-colors hover:bg-(--color-bg) hover:text-(--color-danger) disabled:cursor-not-allowed disabled:opacity-40"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                          </button>
+                            onClick={() => setDeleting(child)}
+                            className="disabled:cursor-not-allowed disabled:opacity-40"
+                          />
                         </div>
                       </li>
                     ))}

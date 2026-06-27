@@ -1,10 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarClock, ChevronDown, CheckCircle2, ClipboardList, Pencil } from "lucide-react";
+import { CalendarClock, CheckCircle2, ClipboardList, Pencil } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
+import { CollapsibleSection } from "@/components/ui/collapsible-section";
+import { SelectionBar } from "@/components/ui/selection-bar";
 import { formatDate } from "@/lib/format";
 import { Money } from "@/components/ui/money";
 import { PayFixedExpensesForm } from "@/components/transactions/pay-fixed-expenses-form";
@@ -17,7 +19,6 @@ type FixedExpensesChecklistProps = {
 export function FixedExpensesChecklist({ items }: FixedExpensesChecklistProps) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [payModalOpen, setPayModalOpen] = useState(false);
-  const [expanded, setExpanded] = useState(true);
 
   function toggleSelect(templateId: string) {
     setSelectedIds((prev) => {
@@ -58,45 +59,18 @@ export function FixedExpensesChecklist({ items }: FixedExpensesChecklistProps) {
 
   return (
     <div className="flex flex-col gap-4">
-      <button
-        type="button"
-        onClick={() => setExpanded((current) => !current)}
-        aria-expanded={expanded}
-        aria-controls="despesas-fixas-content"
-        className="flex w-full items-center justify-between gap-3 text-left"
+      <CollapsibleSection
+        title="Despesas fixas do mês"
+        description="Acompanhe o que já foi pago e marque pendências como pagas"
       >
-        <div>
-          <h2 className="font-display text-xl font-semibold text-(--color-text)">Despesas fixas do mês</h2>
-          <p className="mt-1 text-sm text-(--color-text-muted)">
-            Acompanhe o que já foi pago e marque pendências como pagas
-          </p>
-        </div>
-        <ChevronDown
-          className={`h-5 w-5 shrink-0 text-(--color-text-muted) transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}
-          aria-hidden="true"
-        />
-      </button>
-
-      <div
-        id="despesas-fixas-content"
-        className={`flex flex-col gap-4 overflow-hidden transition-all duration-200 ${expanded ? "max-h-[10000px] opacity-100" : "max-h-0 opacity-0"}`}
-      >
-        {selectedCount > 0 && (
-          <div
-            aria-live="polite"
-            className="sticky top-2 z-10 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-(--color-primary)/30 bg-(--color-primary)/10 px-4 py-3"
-          >
-            <p className="text-sm font-medium text-(--color-text)">{selectedCount} selecionado(s)</p>
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="ghost" onClick={() => setSelectedIds(new Set())}>
-                Limpar seleção
-              </Button>
-              <Button type="button" onClick={() => setPayModalOpen(true)}>
-                Marcar como pago ({selectedCount})
-              </Button>
-            </div>
-          </div>
-        )}
+        <SelectionBar count={selectedCount}>
+          <Button type="button" variant="ghost" onClick={() => setSelectedIds(new Set())}>
+            Limpar seleção
+          </Button>
+          <Button type="button" onClick={() => setPayModalOpen(true)}>
+            Marcar como pago ({selectedCount})
+          </Button>
+        </SelectionBar>
 
         <Card className="divide-y divide-(--color-border) p-0">
           {items.map((item) => {
@@ -152,7 +126,7 @@ export function FixedExpensesChecklist({ items }: FixedExpensesChecklistProps) {
             );
           })}
         </Card>
-      </div>
+      </CollapsibleSection>
 
       <Modal
         open={payModalOpen}

@@ -6,19 +6,15 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { CheckCircle2, ExternalLink, GripVertical, Sparkles, Target } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { IconBadge } from "@/components/ui/icon-badge";
+import { ProgressBar } from "@/components/ui/progress-bar";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { getCategoryIcon } from "@/lib/category-icons";
 import { formatCurrency, monthLabel } from "@/lib/format";
 import type { WishSummary } from "@/lib/wish-data";
 import { WishMilestoneToast } from "@/components/wishes/wish-milestone-toast";
 import { WishPurchaseModal } from "@/components/wishes/wish-purchase-modal";
 import { PAYMENT_METHOD_LABELS, PURCHASE_TIMING_LABELS, WISH_KIND_OPTIONS } from "@/lib/wish-labels";
-
-const MILESTONES = [25, 50, 75];
-
-function renderSubcategoryIcon(icon: string) {
-  const Icon = getCategoryIcon(icon);
-  return <Icon className="h-5 w-5" aria-hidden="true" />;
-}
 
 function cashTimelineLabel(wish: WishSummary): string | null {
   const readiness = wish.readiness;
@@ -78,12 +74,7 @@ export function WishCard({ wish, position, draggable = false }: WishCardProps) {
                   {position}
                 </span>
               )}
-              <span
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
-                style={{ backgroundColor: `${wish.subcategory.color}1F`, color: wish.subcategory.color }}
-              >
-                {renderSubcategoryIcon(wish.subcategory.icon)}
-              </span>
+              <IconBadge icon={getCategoryIcon(wish.subcategory.icon)} colorHex={wish.subcategory.color} />
               <div>
                 <p className="font-medium text-(--color-text)">{wish.name}</p>
                 <p className="text-xs text-(--color-text-muted)">
@@ -106,20 +97,7 @@ export function WishCard({ wish, position, draggable = false }: WishCardProps) {
                 </span>
                 <span className="text-(--color-text-muted)">{Math.round(progressPercent)}%</span>
               </div>
-              <div className="relative h-2.5 w-full overflow-hidden rounded-full bg-(--color-bg)">
-                <div
-                  className="h-full rounded-full bg-(--color-primary) transition-all duration-300"
-                  style={{ width: `${Math.min(100, progressPercent)}%` }}
-                />
-                {MILESTONES.map((milestone) => (
-                  <span
-                    key={milestone}
-                    className="absolute top-0 h-2.5 w-px bg-(--color-surface)/70"
-                    style={{ left: `${milestone}%` }}
-                    aria-hidden="true"
-                  />
-                ))}
-              </div>
+              <ProgressBar value={progressPercent} showMilestones height="lg" />
               {!gapFocus && (
                 <p className="text-xs text-(--color-text-muted)">Faltam {formatCurrency(remaining)}</p>
               )}
@@ -144,10 +122,7 @@ export function WishCard({ wish, position, draggable = false }: WishCardProps) {
             </span>
 
             {timelineLabel && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-(--color-success)/10 px-2.5 py-1 text-xs font-medium text-(--color-success)">
-                <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-                {timelineLabel}
-              </span>
+              <StatusBadge label={timelineLabel} variant="success" icon={Sparkles} size="sm" />
             )}
 
             <span className="inline-flex items-center gap-1 rounded-full border border-(--color-border) px-2.5 py-1 text-xs font-medium text-(--color-text-muted)">

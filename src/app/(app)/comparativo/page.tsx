@@ -4,6 +4,7 @@ import { parseTransactionFilters } from "@/lib/validations/transaction-filters";
 import { getComparativeData } from "@/lib/comparative-data";
 import { FiltersPanel } from "@/components/transactions/filters-panel";
 import { ComparativeExplorer } from "@/components/comparative/comparative-explorer";
+import { PageHeader } from "@/components/ui/page-header";
 
 type ComparativoPageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -33,12 +34,7 @@ export default async function ComparativoPage({ searchParams }: ComparativoPageP
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="font-display text-2xl font-semibold text-(--color-text)">Comparativo mês a mês</h1>
-        <p className="mt-1 text-sm text-(--color-text-muted)">
-          Compare dois ou mais meses por grupo, com variação percentual e exportação
-        </p>
-      </div>
+      <PageHeader title="Comparativo mês a mês" description="Compare dois ou mais meses por grupo, com variação percentual e exportação" />
 
       <FiltersPanel categories={formCategories} />
 

@@ -71,6 +71,12 @@ Sistema web de controle de gastos pessoais com dashboard inteligente, lançament
 | `npm run build` | Gera o build de produção |
 | `npm run start` | Inicia o servidor em modo produção (após o build) |
 | `npm run lint` | Roda o ESLint |
+| `npm test` | Roda todos os testes uma única vez |
+| `npx vitest run tests/` | Roda apenas os testes da pasta `tests/` |
+| `npx vitest run tests/components/` | Roda apenas os testes de componentes UI |
+| `npx vitest run tests/lib/` | Roda apenas os testes de helpers/lib |
+| `npx vitest run tests/actions/` | Roda apenas os testes de Server Actions |
+| `npx vitest tests/` | Roda os testes em modo watch (re-executa ao salvar) |
 | `npx prisma studio` | Abre uma interface visual para explorar o banco de dados |
 | `npx prisma migrate dev` | Cria/aplica migrações em desenvolvimento |
 

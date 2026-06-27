@@ -12,5 +12,8 @@ export default defineConfig({
     hookTimeout: 30_000,
     // Arquivos de teste rodam sequencialmente para evitar contenção no banco compartilhado
     fileParallelism: false,
+    globals: true,
+    environment: "node",
+    setupFiles: ["src/test-setup.ts"],
   },
 });

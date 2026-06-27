@@ -2,7 +2,7 @@ import "dotenv/config";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { prisma } from "@/lib/prisma";
 import { buildMappedRows } from "@/lib/import-helpers";
-import { readFixtureSheet, identityMapping } from "../../../../test-fixtures/import/load-fixture";
+import { readFixtureSheet, identityMapping } from "../../../../tests/import/load-fixture";
 
 const sessionUserId = { current: "" };
 

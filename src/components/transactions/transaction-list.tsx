@@ -6,6 +6,8 @@ import toast from "react-hot-toast";
 import { Plus } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/ui/page-header";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Modal } from "@/components/ui/modal";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
@@ -101,37 +103,39 @@ export function TransactionList({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h1 className="font-display text-2xl font-semibold text-(--color-text)">{title}</h1>
-          <p className="mt-1 text-sm text-(--color-text-muted)">{description}</p>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {viewAllHref && (
-            <Link href={viewAllHref} className="text-sm font-medium text-(--color-primary) hover:underline">
-              Ver todos
-            </Link>
-          )}
-          {showHeaderAction && (
-            <Button onClick={openCreate}>
-              <Plus className="h-4 w-4" aria-hidden="true" />
-              Novo lançamento
-            </Button>
-          )}
-        </div>
-      </div>
+      <PageHeader
+        title={title}
+        description={description}
+        action={
+          (viewAllHref || showHeaderAction) ? (
+            <>
+              {viewAllHref && (
+                <Link href={viewAllHref} className="text-sm font-medium text-(--color-primary) hover:underline">
+                  Ver todos
+                </Link>
+              )}
+              {showHeaderAction && (
+                <Button onClick={openCreate}>
+                  <Plus className="h-4 w-4" aria-hidden="true" />
+                  Novo lançamento
+                </Button>
+              )}
+            </>
+          ) : undefined
+        }
+      />
 
       {transactions.length === 0 ? (
-        <Card className="flex flex-col items-center gap-2 py-12 text-center">
-          <p className="font-display text-lg font-semibold text-(--color-text)">Nenhum lançamento ainda</p>
-          <p className="max-w-sm text-sm text-(--color-text-muted)">
-            Comece registrando suas despesas e entradas para acompanhar sua evolução financeira.
-          </p>
-          <Button onClick={openCreate} className="mt-2">
-            <Plus className="h-4 w-4" aria-hidden="true" />
-            Criar primeiro lançamento
-          </Button>
-        </Card>
+        <EmptyState
+          title="Nenhum lançamento ainda"
+          description="Comece registrando suas despesas e entradas para acompanhar sua evolução financeira."
+          action={
+            <Button onClick={openCreate}>
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              Criar primeiro lançamento
+            </Button>
+          }
+        />
       ) : (
         <Card className="divide-y divide-(--color-border) p-0">
           {transactions.map((transaction) => (

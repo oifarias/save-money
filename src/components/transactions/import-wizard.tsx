@@ -331,6 +331,8 @@ export function ImportWizard({ existingCategories }: ImportWizardProps) {
       setResult({ imported: response.imported ?? 0, skipped: (response.skipped ?? 0) + invalidRows.length });
       setStep("result");
       toast.success(response.message ?? "Importação concluída");
+    } catch {
+      toast.error("Não foi possível importar os lançamentos. Tente novamente.");
     } finally {
       setIsSubmitting(false);
     }
@@ -560,6 +562,13 @@ export function ImportWizard({ existingCategories }: ImportWizardProps) {
                   Importar {validRows.length} lançamento(s)
                 </Button>
               </div>
+
+              {isSubmitting && (
+                <div className="flex items-center gap-2 rounded-xl border border-(--color-border) bg-(--color-bg) px-3.5 py-3 text-sm text-(--color-text-muted)">
+                  <Loader2 size={15} className="animate-spin shrink-0 text-(--color-primary)" aria-hidden="true" />
+                  <span>Importando {validRows.length} lançamento(s)… Isso pode levar alguns segundos para planilhas grandes.</span>
+                </div>
+              )}
 
               {validRows.length === 0 ? (
                 <div className="flex flex-col items-center justify-center gap-3 py-10 text-center">

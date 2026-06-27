@@ -3,6 +3,7 @@ import { clsx } from "clsx";
 import { RefreshCcw } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { IconBadge } from "@/components/ui/icon-badge";
 import { CategoryDonutChart } from "@/components/dashboard/category-donut-chart";
 import { getCategoryIcon } from "@/lib/category-icons";
 import { formatCurrency } from "@/lib/format";
@@ -50,12 +51,7 @@ export function BudgetProgressView({ progress }: { progress: BudgetProgress }) {
               <li key={category.categoryId}>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="flex items-center gap-2 text-sm font-medium text-(--color-text)">
-                    <span
-                      className="flex h-8 w-8 items-center justify-center rounded-lg"
-                      style={{ backgroundColor: `${category.color}1F`, color: category.color }}
-                    >
-                      <Icon className="h-4 w-4" aria-hidden="true" />
-                    </span>
+                    <IconBadge icon={Icon} size="sm" colorHex={category.color} />
                     {category.name}
                     <span
                       className={clsx(

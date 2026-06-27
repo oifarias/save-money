@@ -42,8 +42,10 @@ export type ImportRowPayload = {
   isFixed: string;
 };
 
-const IMPORT_TRANSACTION_TIMEOUT_MS = 60_000;
-const IMPORT_TRANSACTION_MAX_WAIT_MS = 15_000;
+// Timeout por linha com parcelamento (plan + N transactions devem ser atômicos entre si,
+// mas cada linha é independente das demais — isso evita o estouro da tx global).
+const ROW_TX_TIMEOUT_MS = 30_000;
+const ROW_TX_MAX_WAIT_MS = 5_000;
 
 type Tx = PrismaClient | Prisma.TransactionClient;
 
@@ -115,42 +117,52 @@ export async function importTransactionsAction(rows: ImportRowPayload[]): Promis
   let imported = 0;
   let skipped = 0;
 
-  await prisma.$transaction(
-    async (tx) => {
-      const accountId = await ensureDefaultAccountId(userId, tx);
-      const categoryCache = new Map<string, Category | null>();
+  // Conta padrão buscada uma única vez fora do loop — operação idempotente sem necessidade de tx.
+  const accountId = await ensureDefaultAccountId(userId);
+  // Cache de categoria compartilhado entre linhas: evita roundtrips duplicados ao banco para
+  // categorias repetidas na mesma importação.
+  const categoryCache = new Map<string, Category | null>();
 
-      for (const row of rows) {
-        const parsed = importRowSchema.safeParse(row);
-        if (!parsed.success) {
-          skipped += 1;
-          continue;
-        }
+  for (const row of rows) {
+    const parsed = importRowSchema.safeParse(row);
+    if (!parsed.success) {
+      skipped += 1;
+      continue;
+    }
 
-        const { date, description, amount, type, category, subcategory, tags, installments, isFixed } = parsed.data;
+    const { date, description, amount, type, category, subcategory, tags, installments, isFixed } = parsed.data;
 
-        let categoryId: string | null = null;
-        let subcategoryId: string | null = null;
+    let categoryId: string | null = null;
+    let subcategoryId: string | null = null;
 
-        if (category) {
-          const categoryRecord = await resolveRootCategoryCached(tx, userId, category, categoryCache);
-          categoryId = categoryRecord?.id ?? null;
-        }
+    // Resolução de categoria fora de tx individual: as funções já têm tratamento de corrida P2002.
+    try {
+      if (category) {
+        const categoryRecord = await resolveRootCategoryCached(prisma, userId, category, categoryCache);
+        categoryId = categoryRecord?.id ?? null;
+      }
+      if (subcategory && categoryId) {
+        const subcategoryRecord = await resolveSubcategoryCached(prisma, userId, categoryId, subcategory, categoryCache);
+        subcategoryId = subcategoryRecord?.id ?? null;
+      }
+    } catch {
+      skipped += 1;
+      continue;
+    }
 
-        if (subcategory && categoryId) {
-          const subcategoryRecord = await resolveSubcategoryCached(tx, userId, categoryId, subcategory, categoryCache);
-          subcategoryId = subcategoryRecord?.id ?? null;
-        }
+    const rowDate = new Date(date);
+    const parsedInstallments = normalizeInstallments(installments ?? "");
+    const parsedTagNames = tags ? normalizeTags(tags) : [];
 
-        const rowDate = new Date(date);
-        const parsedInstallments = normalizeInstallments(installments ?? "");
-        const parsedTagNames = tags ? normalizeTags(tags) : [];
+    try {
+      if (parsedInstallments) {
+        // A própria linha representa a parcela `current` — a data projetada da parcela 1
+        // é obtida andando `current - 1` meses para trás a partir da data informada na linha.
+        const planStartDate = addMonths(rowDate, -(parsedInstallments.current - 1));
 
-        if (parsedInstallments) {
-          // A própria linha representa a parcela `current` — a data projetada da parcela 1
-          // é obtida andando `current - 1` meses para trás a partir da data informada na linha.
-          const planStartDate = addMonths(rowDate, -(parsedInstallments.current - 1));
-
+        // Mini-tx por linha: plan + N parcelas devem ser atômicos entre si, mas cada linha
+        // é independente das demais — isso elimina o risco de estouro da tx global.
+        const createdTransactions = await prisma.$transaction(async (tx) => {
           const { transactions } = await createInstallmentPlanWithTransactions(tx, userId, {
             baseDescription: description,
             totalInstallments: parsedInstallments.total,
@@ -169,50 +181,53 @@ export async function importTransactionsAction(rows: ImportRowPayload[]): Promis
             }
           }
 
-          imported += transactions.length;
-        } else {
-          const isFixedFlag = normalizeFixedFlag(isFixed ?? "");
+          return transactions;
+        }, { timeout: ROW_TX_TIMEOUT_MS, maxWait: ROW_TX_MAX_WAIT_MS });
 
-          let fixedExpenseTemplateId: string | null = null;
-          if (isFixedFlag && type === "EXPENSE") {
-            const result = await resolveFixedExpenseTemplate(tx, userId, {
-              isFixed: true,
-              description,
-              date: rowDate,
-              amount: Number(amount),
-              categoryId,
-              subcategoryId,
-              previousTemplateId: null,
-            });
-            fixedExpenseTemplateId = result.fixedExpenseTemplateId;
-          }
+        imported += createdTransactions.length;
+      } else {
+        const isFixedFlag = normalizeFixedFlag(isFixed ?? "");
 
-          const transaction = await tx.transaction.create({
-            data: {
-              userId,
-              accountId,
-              categoryId,
-              subcategoryId,
-              type: type as TransactionType,
-              amount: Number(amount),
-              date: rowDate,
-              description,
-              isFixed: isFixedFlag,
-              fixedExpenseTemplateId,
-              recurrence: "NONE",
-            },
+        let fixedExpenseTemplateId: string | null = null;
+        if (isFixedFlag && type === "EXPENSE") {
+          const result = await resolveFixedExpenseTemplate(prisma, userId, {
+            isFixed: true,
+            description,
+            date: rowDate,
+            amount: Number(amount),
+            categoryId,
+            subcategoryId,
+            previousTemplateId: null,
           });
-
-          if (parsedTagNames.length > 0) {
-            await syncTransactionTags(tx, userId, transaction.id, parsedTagNames);
-          }
-
-          imported += 1;
+          fixedExpenseTemplateId = result.fixedExpenseTemplateId;
         }
+
+        const transaction = await prisma.transaction.create({
+          data: {
+            userId,
+            accountId,
+            categoryId,
+            subcategoryId,
+            type: type as TransactionType,
+            amount: Number(amount),
+            date: rowDate,
+            description,
+            isFixed: isFixedFlag,
+            fixedExpenseTemplateId,
+            recurrence: "NONE",
+          },
+        });
+
+        if (parsedTagNames.length > 0) {
+          await syncTransactionTags(prisma, userId, transaction.id, parsedTagNames);
+        }
+
+        imported += 1;
       }
-    },
-    { timeout: IMPORT_TRANSACTION_TIMEOUT_MS, maxWait: IMPORT_TRANSACTION_MAX_WAIT_MS }
-  );
+    } catch {
+      skipped += 1;
+    }
+  }
 
   revalidatePath("/dashboard");
   revalidatePath("/lancamentos");

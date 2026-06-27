@@ -5,6 +5,7 @@ import toast from "react-hot-toast";
 import { clsx } from "clsx";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { SelectField } from "@/components/ui/select-field";
 import { CATEGORY_ICON_NAMES, getCategoryIcon } from "@/lib/category-icons";
 import { createCategoryAction, updateCategoryAction, type ActionResult } from "@/app/(app)/grupos/actions";
 
@@ -62,25 +63,20 @@ export function CategoryForm({ category, rootCategories = [], lockParent = false
         <input type="hidden" name="parentId" value={category?.parentId ?? ""} />
       ) : (
         availableParents.length > 0 && (
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="parentId" className="text-sm font-medium text-(--color-text)">
-              Categoria pai (opcional)
-            </label>
-            <select
-              id="parentId"
-              name="parentId"
-              defaultValue={category?.parentId ?? ""}
-              className="rounded-xl border border-(--color-border) bg-(--color-surface) px-3.5 py-2.5 text-sm text-(--color-text) outline-none transition-colors focus:border-(--color-primary) focus:ring-2 focus:ring-(--color-primary)/20"
-            >
-              <option value="">Nenhuma — é um grupo principal</option>
-              {availableParents.map((parent) => (
-                <option key={parent.id} value={parent.id}>
-                  {parent.name}
-                </option>
-              ))}
-            </select>
-            {state.fieldErrors?.parentId && <p className="text-xs text-(--color-danger)">{state.fieldErrors.parentId}</p>}
-          </div>
+          <SelectField
+            label="Categoria pai (opcional)"
+            id="parentId"
+            name="parentId"
+            defaultValue={category?.parentId ?? ""}
+            error={state.fieldErrors?.parentId}
+          >
+            <option value="">Nenhuma — é um grupo principal</option>
+            {availableParents.map((parent) => (
+              <option key={parent.id} value={parent.id}>
+                {parent.name}
+              </option>
+            ))}
+          </SelectField>
         )
       )}
 

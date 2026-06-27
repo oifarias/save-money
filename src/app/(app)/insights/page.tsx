@@ -8,6 +8,7 @@ import {
   InstallmentForecastCard,
   ReductionSuggestionsCard,
 } from "@/components/insights/insight-sections";
+import { PageHeader } from "@/components/ui/page-header";
 
 export default async function InsightsPage() {
   const session = await auth();
@@ -17,12 +18,7 @@ export default async function InsightsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="font-display text-2xl font-semibold text-(--color-text)">Insights e recomendações</h1>
-        <p className="mt-1 text-sm text-(--color-text-muted)">
-          Análises detalhadas de tendências, hashtags e sugestões de economia baseadas nos seus dados
-        </p>
-      </div>
+      <PageHeader title="Insights e recomendações" description="Análises detalhadas de tendências, hashtags e sugestões de economia baseadas nos seus dados" />
 
       {!data.hasData ? (
         <p className="rounded-2xl border border-(--color-border) bg-(--color-surface) p-8 text-center text-sm text-(--color-text-muted)">

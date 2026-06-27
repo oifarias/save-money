@@ -8,6 +8,10 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
+import { Alert } from "@/components/ui/alert";
+import { IconBadge } from "@/components/ui/icon-badge";
+import { ProgressBar } from "@/components/ui/progress-bar";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { getCategoryIcon } from "@/lib/category-icons";
 import { formatCurrency, formatDate, monthLabel } from "@/lib/format";
 import type { WishSummary } from "@/lib/wish-data";
@@ -33,11 +37,6 @@ function cashTimelineMessage(wish: WishSummary): string | null {
     return "No ritmo atual de parcelas, não há previsão de espaço no orçamento da categoria nos próximos 12 meses.";
   }
   return null;
-}
-
-function renderSubcategoryIcon(icon: string) {
-  const Icon = getCategoryIcon(icon);
-  return <Icon className="h-6 w-6" aria-hidden="true" />;
 }
 
 type WishDetailViewProps = {
@@ -90,12 +89,7 @@ export function WishDetailView({ wish, availableGoals }: WishDetailViewProps) {
       <Card className="flex flex-col gap-5">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-start gap-3">
-            <span
-              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl"
-              style={{ backgroundColor: `${wish.subcategory.color}1F`, color: wish.subcategory.color }}
-            >
-              {renderSubcategoryIcon(wish.subcategory.icon)}
-            </span>
+            <IconBadge icon={getCategoryIcon(wish.subcategory.icon)} colorHex={wish.subcategory.color} size="lg" />
             <div>
               <h1 className="font-display text-xl font-semibold text-(--color-text)">{wish.name}</h1>
               <p className="mt-0.5 text-sm text-(--color-text-muted)">
@@ -111,17 +105,21 @@ export function WishDetailView({ wish, availableGoals }: WishDetailViewProps) {
         {wish.notes && <p className="text-sm text-(--color-text-muted)">{wish.notes}</p>}
 
         {wish.status === "PURCHASED" && (
-          <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-(--color-success)/10 px-3 py-1.5 text-sm font-medium text-(--color-success)">
-            <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-            Comprado {wish.purchasedAt ? `em ${formatDate(wish.purchasedAt)}` : ""}
-          </span>
+          <StatusBadge
+            label={`Comprado${wish.purchasedAt ? ` em ${formatDate(wish.purchasedAt)}` : ""}`}
+            variant="success"
+            icon={CheckCircle2}
+            size="sm"
+          />
         )}
 
         {wish.status === "ABANDONED" && (
-          <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-(--color-text-muted)/10 px-3 py-1.5 text-sm font-medium text-(--color-text-muted)">
-            <XCircle className="h-4 w-4" aria-hidden="true" />
-            Prioridade mudou {wish.abandonedAt ? `em ${formatDate(wish.abandonedAt)}` : ""}
-          </span>
+          <StatusBadge
+            label={`Prioridade mudou${wish.abandonedAt ? ` em ${formatDate(wish.abandonedAt)}` : ""}`}
+            variant="muted"
+            icon={XCircle}
+            size="sm"
+          />
         )}
         {wish.status === "ABANDONED" && wish.abandonReason && (
           <p className="text-sm text-(--color-text-muted)">Motivo registrado: {wish.abandonReason}</p>
@@ -137,20 +135,7 @@ export function WishDetailView({ wish, availableGoals }: WishDetailViewProps) {
                   </span>
                   <span className="text-(--color-text-muted)">{Math.round(progressPercent)}%</span>
                 </div>
-                <div className="relative h-3 w-full overflow-hidden rounded-full bg-(--color-bg)">
-                  <div
-                    className="h-full rounded-full bg-(--color-primary) transition-all duration-300"
-                    style={{ width: `${Math.min(100, progressPercent)}%` }}
-                  />
-                  {[25, 50, 75].map((milestone) => (
-                    <span
-                      key={milestone}
-                      className="absolute top-0 h-3 w-px bg-(--color-surface)/70"
-                      style={{ left: `${milestone}%` }}
-                      aria-hidden="true"
-                    />
-                  ))}
-                </div>
+                <ProgressBar value={progressPercent} showMilestones height="lg" />
                 <p className="text-xs text-(--color-text-muted)">
                   {gapFocus ? `Você já tem ${formatCurrency(accumulated)}` : `Faltam ${formatCurrency(remaining)}`} · meta
                   &ldquo;{wish.goal.name}&rdquo;
@@ -169,31 +154,22 @@ export function WishDetailView({ wish, availableGoals }: WishDetailViewProps) {
             )}
 
             {timelineMessage && (
-              <div
-                className={`flex items-start gap-2 rounded-xl px-4 py-3 text-sm ${
-                  wish.readiness?.cashTimeline === "now"
-                    ? "bg-(--color-success)/10 text-(--color-success)"
-                    : "bg-(--color-accent)/10 text-(--color-text)"
-                }`}
-              >
-                <Sparkles className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              <Alert variant={wish.readiness?.cashTimeline === "now" ? "success" : "info"} icon={Sparkles}>
                 <p>{timelineMessage}</p>
-              </div>
+              </Alert>
             )}
 
             {wish.readiness?.cashTimeline === "indeterminate" && (
-              <div className="flex items-start gap-2 rounded-xl bg-(--color-bg) px-4 py-3 text-sm text-(--color-text-muted)">
-                <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              <Alert variant="neutral" icon={Info}>
                 <p>
                   Orçamento do grupo &ldquo;{wish.category.name}&rdquo; ainda não configurado — configure em Metas para sabermos
                   quando o orçamento dessa categoria comporta a compra à vista.
                 </p>
-              </div>
+              </Alert>
             )}
 
             {wish.readiness && !wish.readiness.savings.alreadyEnough && (
-              <div className="flex items-start gap-2 rounded-xl border border-(--color-border) px-4 py-3 text-sm text-(--color-text)">
-                <PiggyBank className="mt-0.5 h-4 w-4 shrink-0 text-(--color-primary)" aria-hidden="true" />
+              <Alert variant="default" icon={PiggyBank}>
                 <div className="flex flex-col gap-0.5">
                   <p className="font-medium">Quer guardar em vez de esperar?</p>
                   <p className="text-(--color-text-muted)">
@@ -216,7 +192,7 @@ export function WishDetailView({ wish, availableGoals }: WishDetailViewProps) {
                       " Configure o orçamento em Metas para estimarmos quanto você pode guardar por mês."}
                   </p>
                 </div>
-              </div>
+              </Alert>
             )}
 
             {wish.goal && (

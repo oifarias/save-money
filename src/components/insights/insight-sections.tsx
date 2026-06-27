@@ -1,6 +1,9 @@
 import { AlertTriangle, CalendarClock, Hash, Sprout, TrendingDown, TrendingUp } from "lucide-react";
 import { clsx } from "clsx";
 import { Card } from "@/components/ui/card";
+import { CardSection } from "@/components/ui/card-section";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { ProgressBar } from "@/components/ui/progress-bar";
 import { formatCurrency } from "@/lib/format";
 import { FixedExpenseCandidatesList, FixedExpenseResolvedList } from "@/components/insights/fixed-expense-candidate-card";
 import type {
@@ -21,21 +24,14 @@ function EmptySection({ message }: { message: string }) {
 function VariationBadge({ value }: { value: number }) {
   const isUp = value > 0;
   const isFlat = value === 0;
+  const label = `${value > 0 ? "+" : ""}${value.toFixed(1)}%`;
   return (
-    <span
-      className={clsx(
-        "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold",
-        isFlat
-          ? "bg-(--color-border)/50 text-(--color-text-muted)"
-          : isUp
-            ? "bg-(--color-danger)/10 text-(--color-danger)"
-            : "bg-(--color-success)/10 text-(--color-success)"
-      )}
-    >
-      {!isFlat && (isUp ? <TrendingUp size={13} aria-hidden="true" /> : <TrendingDown size={13} aria-hidden="true" />)}
-      {value > 0 ? "+" : ""}
-      {value.toFixed(1)}%
-    </span>
+    <StatusBadge
+      label={label}
+      variant={isFlat ? "muted" : isUp ? "danger" : "success"}
+      icon={isFlat ? undefined : isUp ? TrendingUp : TrendingDown}
+      size="sm"
+    />
   );
 }
 
@@ -114,54 +110,39 @@ export function CategoryAveragesCard({ data, windowLabel }: { data: CategoryAver
 
 export function ReductionSuggestionsCard({ data }: { data: ReductionSuggestion[] }) {
   return (
-    <Card>
-      <div className="flex items-center gap-2.5">
-        <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-(--color-primary)/10 text-(--color-primary)">
-          <Sprout className="h-4.5 w-4.5" aria-hidden="true" />
-        </span>
-        <div>
-          <h3 className="font-display text-base font-semibold text-(--color-text)">Metas de redução sugeridas</h3>
-          <p className="mt-0.5 text-xs text-(--color-text-muted)">
-            Baseado nos grupos mais pesados do mês — meta de 10% de corte
-          </p>
-        </div>
-      </div>
-
-      {data.length === 0 ? (
-        <EmptySection message="Registre despesas para receber sugestões de metas de redução" />
-      ) : (
-        <ul className="mt-4 flex flex-col gap-4">
-          {data.map((entry) => {
-            const targetShare = entry.currentSpend > 0 ? (entry.targetSpend / entry.currentSpend) * 100 : 0;
-            return (
-              <li key={entry.id} className="rounded-xl border border-(--color-border) p-3.5">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="inline-flex items-center gap-2 text-sm font-medium text-(--color-text)">
-                    <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: entry.color }} aria-hidden="true" />
-                    {entry.name}
-                  </span>
-                  <span className="text-xs text-(--color-text-muted)">
-                    Atual: <span className="font-numeric text-(--color-text)">{formatCurrency(entry.currentSpend)}</span>
-                  </span>
-                </div>
-                <div className="mt-3 h-2 overflow-hidden rounded-full bg-(--color-border)/60">
-                  <div
-                    className="h-full rounded-full bg-(--color-primary)"
-                    style={{ width: `${Math.min(100, Math.max(0, targetShare))}%` }}
-                  />
-                </div>
-                <p className="mt-2 text-xs text-(--color-text-muted)">
-                  Reduza <span className="font-medium text-(--color-text)">{formatCurrency(entry.suggestedCut)}</span> e
-                  chegue a uma meta mensal de{" "}
-                  <span className="font-numeric font-medium text-(--color-primary)">{formatCurrency(entry.targetSpend)}</span> em{" "}
-                  {entry.name}.
-                </p>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </Card>
+    <CardSection
+      icon={Sprout}
+      title="Metas de redução sugeridas"
+      subtitle="Baseado nos grupos mais pesados do mês — meta de 10% de corte"
+      empty={data.length === 0}
+      emptyMessage="Registre despesas para receber sugestões de metas de redução"
+    >
+      <ul className="flex flex-col gap-4">
+        {data.map((entry) => {
+          const targetShare = entry.currentSpend > 0 ? (entry.targetSpend / entry.currentSpend) * 100 : 0;
+          return (
+            <li key={entry.id} className="rounded-xl border border-(--color-border) p-3.5">
+              <div className="flex items-center justify-between gap-3">
+                <span className="inline-flex items-center gap-2 text-sm font-medium text-(--color-text)">
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: entry.color }} aria-hidden="true" />
+                  {entry.name}
+                </span>
+                <span className="text-xs text-(--color-text-muted)">
+                  Atual: <span className="font-numeric text-(--color-text)">{formatCurrency(entry.currentSpend)}</span>
+                </span>
+              </div>
+              <ProgressBar value={Math.min(100, Math.max(0, targetShare))} color="primary" className="mt-3" />
+              <p className="mt-2 text-xs text-(--color-text-muted)">
+                Reduza <span className="font-medium text-(--color-text)">{formatCurrency(entry.suggestedCut)}</span> e chegue a
+                uma meta mensal de{" "}
+                <span className="font-numeric font-medium text-(--color-primary)">{formatCurrency(entry.targetSpend)}</span> em{" "}
+                {entry.name}.
+              </p>
+            </li>
+          );
+        })}
+      </ul>
+    </CardSection>
   );
 }
 
@@ -190,12 +171,7 @@ export function HashtagRankingCard({ data }: { data: HashtagRanking[] }) {
                   {entry.count} lançamento(s)
                 </span>
               </div>
-              <div className="h-1.5 overflow-hidden rounded-full bg-(--color-border)/60">
-                <div
-                  className="h-full rounded-full bg-(--color-accent)"
-                  style={{ width: `${max > 0 ? (entry.total / max) * 100 : 0}%` }}
-                />
-              </div>
+              <ProgressBar value={max > 0 ? (entry.total / max) * 100 : 0} height="sm" color="accent" />
             </li>
           ))}
         </ul>
@@ -206,50 +182,42 @@ export function HashtagRankingCard({ data }: { data: HashtagRanking[] }) {
 
 export function InstallmentForecastCard({ data }: { data: InstallmentForecast[] }) {
   return (
-    <Card>
-      <div className="flex items-center gap-2.5">
-        <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-(--color-primary)/10 text-(--color-primary)">
-          <CalendarClock className="h-4.5 w-4.5" aria-hidden="true" />
-        </span>
-        <div>
-          <h3 className="font-display text-base font-semibold text-(--color-text)">Previsibilidade de parcelamentos</h3>
-          <p className="mt-0.5 text-xs text-(--color-text-muted)">Quando cada parcelamento ativo termina</p>
-        </div>
-      </div>
-
-      {data.length === 0 ? (
-        <EmptySection message="Você não tem parcelamentos em andamento" />
-      ) : (
-        <ul className="mt-4 flex flex-col gap-3">
-          {data.map((entry) => (
-            <li key={entry.planId} className="rounded-xl border border-(--color-border) p-3.5">
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-sm font-medium text-(--color-text)">{entry.baseDescription}</span>
-                {entry.categoryName && (
-                  <span className="rounded-full bg-(--color-border)/50 px-2.5 py-1 text-xs font-medium text-(--color-text-muted)">
-                    {entry.categoryName}
-                  </span>
-                )}
-              </div>
-              <p className="mt-2 text-xs text-(--color-text-muted)">
-                Termina em <span className="font-medium text-(--color-text)">{entry.endMonthLabel}</span>,{" "}
-                {entry.remainingInstallments === 1 ? (
-                  <>
-                    falta <span className="font-numeric font-medium text-(--color-text)">1 parcela</span>
-                  </>
-                ) : (
-                  <>
-                    faltam{" "}
-                    <span className="font-numeric font-medium text-(--color-text)">{entry.remainingInstallments} parcelas</span>
-                  </>
-                )}{" "}
-                de <span className="font-numeric font-medium text-(--color-text)">{formatCurrency(entry.estimatedAmount)}</span>
-              </p>
-            </li>
-          ))}
-        </ul>
-      )}
-    </Card>
+    <CardSection
+      icon={CalendarClock}
+      title="Previsibilidade de parcelamentos"
+      subtitle="Quando cada parcelamento ativo termina"
+      empty={data.length === 0}
+      emptyMessage="Você não tem parcelamentos em andamento"
+    >
+      <ul className="flex flex-col gap-3">
+        {data.map((entry) => (
+          <li key={entry.planId} className="rounded-xl border border-(--color-border) p-3.5">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm font-medium text-(--color-text)">{entry.baseDescription}</span>
+              {entry.categoryName && (
+                <span className="rounded-full bg-(--color-border)/50 px-2.5 py-1 text-xs font-medium text-(--color-text-muted)">
+                  {entry.categoryName}
+                </span>
+              )}
+            </div>
+            <p className="mt-2 text-xs text-(--color-text-muted)">
+              Termina em <span className="font-medium text-(--color-text)">{entry.endMonthLabel}</span>,{" "}
+              {entry.remainingInstallments === 1 ? (
+                <>
+                  falta <span className="font-numeric font-medium text-(--color-text)">1 parcela</span>
+                </>
+              ) : (
+                <>
+                  faltam{" "}
+                  <span className="font-numeric font-medium text-(--color-text)">{entry.remainingInstallments} parcelas</span>
+                </>
+              )}{" "}
+              de <span className="font-numeric font-medium text-(--color-text)">{formatCurrency(entry.estimatedAmount)}</span>
+            </p>
+          </li>
+        ))}
+      </ul>
+    </CardSection>
   );
 }
 
@@ -315,12 +283,7 @@ export function FixedExpenseAlertCard({
               ? "Suas despesas fixas ultrapassam metade do total gasto neste mês — vale revisar contratos recorrentes."
               : "Suas despesas fixas estão sob controle em relação ao total do mês."}
           </p>
-          <div className="mt-3 h-2 overflow-hidden rounded-full bg-(--color-border)/60">
-            <div
-              className={clsx("h-full rounded-full", isAlert ? "bg-(--color-danger)" : "bg-(--color-primary)")}
-              style={{ width: `${Math.min(100, data.share)}%` }}
-            />
-          </div>
+          <ProgressBar value={Math.min(100, data.share)} color={isAlert ? "danger" : "primary"} className="mt-3" />
           <p className="mt-2 text-xs text-(--color-text-muted)">
             <span className="font-numeric font-medium text-(--color-text)">{formatCurrency(data.fixedTotal)}</span> de{" "}
             <span className="font-numeric font-medium text-(--color-text)">{formatCurrency(data.expenseTotal)}</span> em despesas

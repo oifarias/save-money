@@ -3,11 +3,12 @@
 import { useActionState, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
-import { clsx } from "clsx";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
+import { SelectField } from "@/components/ui/select-field";
+import { ToggleGroup } from "@/components/ui/toggle-group";
 import { TagInput } from "@/components/transactions/tag-input";
 import { CategoryForm } from "@/components/groups/category-form";
 import {
@@ -80,37 +81,18 @@ export function TransactionForm({ categories, tagSuggestions, transaction, onDon
         {transaction && <input type="hidden" name="id" value={transaction.id} />}
         <input type="hidden" name="type" value={type} />
 
-        <fieldset className="flex flex-col gap-1.5">
-          <legend className="text-sm font-medium text-(--color-text)">Tipo</legend>
-          <div className="grid grid-cols-2 gap-2 rounded-xl border border-(--color-border) bg-(--color-bg) p-1">
-            {(
-              [
-                { value: "EXPENSE", label: "Despesa" },
-                { value: "INCOME", label: "Entrada" },
-              ] as const
-            ).map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => {
-                  setType(option.value);
-                  if (option.value === "INCOME") setIsInstallment(false);
-                }}
-                aria-pressed={type === option.value}
-                className={clsx(
-                  "rounded-lg py-2 text-sm font-medium transition-all duration-200",
-                  type === option.value
-                    ? option.value === "EXPENSE"
-                      ? "bg-(--color-danger) text-white shadow-sm"
-                      : "bg-(--color-success) text-white shadow-sm"
-                    : "text-(--color-text-muted) hover:text-(--color-text)"
-                )}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-        </fieldset>
+        <ToggleGroup
+          legend="Tipo"
+          value={type}
+          onChange={(val) => {
+            setType(val);
+            if (val === "INCOME") setIsInstallment(false);
+          }}
+          options={[
+            { value: "EXPENSE" as const, label: "Despesa", activeColor: "--color-danger" },
+            { value: "INCOME" as const, label: "Entrada", activeColor: "--color-success" },
+          ]}
+        />
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Input
@@ -147,11 +129,13 @@ export function TransactionForm({ categories, tagSuggestions, transaction, onDon
         />
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="flex flex-col gap-1.5">
-            <div className="flex items-center justify-between">
-              <label htmlFor="categoryId" className="text-sm font-medium text-(--color-text)">
-                Grupo
-              </label>
+          <SelectField
+            label="Grupo"
+            name="categoryId"
+            id="categoryId"
+            value={categoryId}
+            onChange={(event) => setCategoryId(event.target.value)}
+            hint={
               <button
                 type="button"
                 onClick={() => setCategoryModalOpen(true)}
@@ -160,62 +144,45 @@ export function TransactionForm({ categories, tagSuggestions, transaction, onDon
                 <Plus className="h-3.5 w-3.5" aria-hidden="true" />
                 Novo grupo
               </button>
-            </div>
-            <select
-              id="categoryId"
-              name="categoryId"
-              value={categoryId}
-              onChange={(event) => setCategoryId(event.target.value)}
-              className="rounded-xl border border-(--color-border) bg-(--color-surface) px-3.5 py-2.5 text-sm text-(--color-text) outline-none transition-colors focus:border-(--color-primary) focus:ring-2 focus:ring-(--color-primary)/20"
-            >
-              <option value="">Sem grupo</option>
-              {categories.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
-              ))}
-            </select>
-          </div>
+            }
+          >
+            <option value="">Sem grupo</option>
+            {categories.map((category) => (
+              <option key={category.id} value={category.id}>
+                {category.name}
+              </option>
+            ))}
+          </SelectField>
 
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="subcategoryId" className="text-sm font-medium text-(--color-text)">
-              Sub-grupo
-            </label>
-            <select
-              key={categoryId}
-              id="subcategoryId"
-              name="subcategoryId"
-              defaultValue={categoryId === transaction?.categoryId ? transaction?.subcategoryId ?? "" : ""}
-              disabled={subcategoryOptions.length === 0}
-              className="rounded-xl border border-(--color-border) bg-(--color-surface) px-3.5 py-2.5 text-sm text-(--color-text) outline-none transition-colors focus:border-(--color-primary) focus:ring-2 focus:ring-(--color-primary)/20 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <option value="">Sem sub-grupo</option>
-              {subcategoryOptions.map((subcategory) => (
-                <option key={subcategory.id} value={subcategory.id}>
-                  {subcategory.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          <SelectField
+            key={categoryId}
+            label="Sub-grupo"
+            name="subcategoryId"
+            id="subcategoryId"
+            defaultValue={categoryId === transaction?.categoryId ? transaction?.subcategoryId ?? "" : ""}
+            disabled={subcategoryOptions.length === 0}
+          >
+            <option value="">Sem sub-grupo</option>
+            {subcategoryOptions.map((subcategory) => (
+              <option key={subcategory.id} value={subcategory.id}>
+                {subcategory.name}
+              </option>
+            ))}
+          </SelectField>
         </div>
 
         {type === "EXPENSE" && (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="recurrence" className="text-sm font-medium text-(--color-text)">
-                Repetição
-              </label>
-              <select
-                id="recurrence"
-                name="recurrence"
-                defaultValue={transaction?.recurrence ?? "NONE"}
-                className="rounded-xl border border-(--color-border) bg-(--color-surface) px-3.5 py-2.5 text-sm text-(--color-text) outline-none transition-colors focus:border-(--color-primary) focus:ring-2 focus:ring-(--color-primary)/20"
-              >
-                <option value="NONE">Único</option>
-                <option value="WEEKLY">Semanal</option>
-                <option value="MONTHLY">Mensal</option>
-              </select>
-            </div>
+            <SelectField
+              label="Repetição"
+              name="recurrence"
+              id="recurrence"
+              defaultValue={transaction?.recurrence ?? "NONE"}
+            >
+              <option value="NONE">Único</option>
+              <option value="WEEKLY">Semanal</option>
+              <option value="MONTHLY">Mensal</option>
+            </SelectField>
 
             <div className="flex flex-col justify-end gap-1.5 pb-1">
               <label className="flex items-center gap-2.5 text-sm font-medium text-(--color-text)">
@@ -227,42 +194,26 @@ export function TransactionForm({ categories, tagSuggestions, transaction, onDon
                 />
                 Despesa fixa
               </label>
-              {/* <p className="text-xs text-(--color-text-muted)">Marque para gastos recorrentes como aluguel ou assinaturas</p> */}
             </div>
           </div>
         )}
 
         {type === "INCOME" && (
-          <fieldset className="flex flex-col gap-1.5">
-            <legend className="mb-1.5 text-sm font-medium text-(--color-text)">Tipo de entrada</legend>
-            <div className="grid grid-cols-2 gap-2 rounded-xl border border-(--color-border) bg-(--color-bg) p-1">
-              {(
-                [
-                  { value: false, label: "Variável" },
-                  { value: true, label: "Fixa" },
-                ] as const
-              ).map((option) => (
-                <button
-                  key={String(option.value)}
-                  type="button"
-                  onClick={() => setIsFixedIncome(option.value)}
-                  aria-pressed={isFixedIncome === option.value}
-                  className={clsx(
-                    "rounded-lg py-2 text-sm font-medium transition-all duration-200",
-                    isFixedIncome === option.value
-                      ? "bg-(--color-success) text-white shadow-sm"
-                      : "text-(--color-text-muted) hover:text-(--color-text)"
-                  )}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
+          <div className="flex flex-col gap-1.5">
+            <ToggleGroup
+              legend="Tipo de entrada"
+              value={isFixedIncome ? "true" : "false"}
+              onChange={(val) => setIsFixedIncome(val === "true")}
+              options={[
+                { value: "false" as const, label: "Variável", activeColor: "--color-success" },
+                { value: "true" as const, label: "Fixa", activeColor: "--color-success" },
+              ]}
+            />
             <p className="text-xs text-(--color-text-muted)">
               Fixa: salário, aluguel recebido — Variável: pix de amigo, venda pontual
             </p>
             {isFixedIncome && <input type="hidden" name="isFixed" value="on" />}
-          </fieldset>
+          </div>
         )}
 
         {type === "EXPENSE" && !transaction && (

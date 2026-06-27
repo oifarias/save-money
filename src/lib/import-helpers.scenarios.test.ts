@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildMappedRows, guessColumnMapping, summarizeMappedRows, NONE_COLUMN } from "@/lib/import-helpers";
-import { readFixtureSheet, identityMapping } from "../../test-fixtures/import/load-fixture";
+import { readFixtureSheet, identityMapping } from "../../tests/import/load-fixture";
 
 describe("import-helpers (regras de frontend) — guessColumnMapping nos 3 fixtures .xlsx", () => {
   it("planilha de cenários válidos: todas as colunas são reconhecidas automaticamente pelos headers do modelo", () => {

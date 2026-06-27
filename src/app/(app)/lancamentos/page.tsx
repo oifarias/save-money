@@ -8,6 +8,7 @@ import type { FixedExpenseTemplatesTotals, IncomeBreakdown, ExpenseBreakdown } f
 import { TransactionIntake } from "@/components/transactions/transaction-intake";
 import { TransactionsManager } from "@/components/transactions/transactions-manager";
 import { FixedExpensesChecklist } from "@/components/transactions/fixed-expenses-checklist";
+import { PageHeader } from "@/components/ui/page-header";
 
 type LancamentosPageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -109,10 +110,7 @@ export default async function LancamentosPage({ searchParams }: LancamentosPageP
 
   return (
     <div className="flex flex-col gap-8">
-      <div>
-        <h1 className="font-display text-2xl font-semibold text-(--color-text)">Lançamentos</h1>
-        <p className="mt-1 text-sm text-(--color-text-muted)">Registre um lançamento individual ou importe várias linhas de uma planilha</p>
-      </div>
+      <PageHeader title="Lançamentos" description="Registre um lançamento individual ou importe várias linhas de uma planilha" />
 
       <TransactionIntake />
 

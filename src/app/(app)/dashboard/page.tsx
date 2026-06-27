@@ -6,6 +6,7 @@ import { CategoryDonutChart } from "@/components/dashboard/category-donut-chart"
 import { MonthlyTrendChart } from "@/components/dashboard/monthly-trend-chart";
 import { InsightsPanel } from "@/components/dashboard/insights-panel";
 import { TransactionList, type TransactionListItem } from "@/components/transactions/transaction-list";
+import { PageHeader } from "@/components/ui/page-header";
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -63,12 +64,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="font-display text-2xl font-semibold text-(--color-text)">Dashboard</h1>
-        <p className="mt-1 text-sm text-(--color-text-muted)">
-          Visão geral das suas finanças no mês atual
-        </p>
-      </div>
+      <PageHeader title="Dashboard" description="Visão geral das suas finanças no mês atual" />
 
       <SummaryCards
         income={dashboardData.totals.income}

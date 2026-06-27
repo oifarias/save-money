@@ -26,6 +26,9 @@ import { insightsCacheTag } from "@/lib/insights-data";
 import type { TransactionListItem } from "@/components/transactions/transaction-list";
 import { Prisma, type Recurrence, type TransactionType } from "@/generated/prisma/client";
 
+const TX_TIMEOUT_MS = 30_000;
+const TX_MAX_WAIT_MS = 10_000;
+
 /** Invalida o cache (`unstable_cache`) das telas agregadas — chamar após qualquer mutação de Transaction. */
 function invalidateAggregateCaches(userId: string) {
   revalidateTag(dashboardCacheTag(userId), { expire: 0 });
@@ -115,7 +118,7 @@ export async function createTransactionAction(_prev: ActionResult, formData: For
       for (const created of transactions) {
         await syncTransactionTags(tx, userId, created.id, tags);
       }
-    });
+    }, { timeout: TX_TIMEOUT_MS, maxWait: TX_MAX_WAIT_MS });
 
     revalidatePath("/dashboard");
     revalidatePath("/lancamentos");
@@ -164,7 +167,7 @@ export async function createTransactionAction(_prev: ActionResult, formData: For
     });
 
     await syncTransactionTags(tx, userId, created.id, tags);
-  });
+  }, { timeout: TX_TIMEOUT_MS, maxWait: TX_MAX_WAIT_MS });
 
   revalidatePath("/dashboard");
   revalidatePath("/lancamentos");
@@ -255,7 +258,7 @@ export async function updateTransactionAction(_prev: ActionResult, formData: For
         await syncTransactionTags(tx, userId, siblingId, tags);
       }
     }
-  });
+  }, { timeout: TX_TIMEOUT_MS, maxWait: TX_MAX_WAIT_MS });
 
   revalidatePath("/dashboard");
   revalidatePath("/lancamentos");
@@ -427,7 +430,7 @@ export async function acceptFixedExpenseInsightAction(groupKey: string, transact
         },
       });
     }
-  });
+  }, { timeout: TX_TIMEOUT_MS, maxWait: TX_MAX_WAIT_MS });
 
   await prisma.fixedExpenseInsightDecision.upsert({
     where: { userId_groupKey: { userId, groupKey } },
@@ -516,7 +519,7 @@ export async function deleteTransactionAction(id: string): Promise<ActionResult>
         where: { id: existing.fixedExpenseTemplateId, userId },
       });
     }
-  });
+  }, { timeout: TX_TIMEOUT_MS, maxWait: TX_MAX_WAIT_MS });
 
   revalidatePath("/dashboard");
   revalidatePath("/lancamentos");
@@ -548,7 +551,7 @@ export async function bulkDeleteTransactionsAction(ids: string[]): Promise<Actio
     if (templateIds.length > 0) {
       await tx.fixedExpenseTemplate.deleteMany({ where: { id: { in: templateIds }, userId } });
     }
-  });
+  }, { timeout: TX_TIMEOUT_MS, maxWait: TX_MAX_WAIT_MS });
 
   revalidatePath("/dashboard");
   revalidatePath("/lancamentos");
@@ -622,7 +625,7 @@ export async function payFixedExpensesAction(items: unknown): Promise<ActionResu
         throw error;
       }
     }
-  });
+  }, { timeout: TX_TIMEOUT_MS, maxWait: TX_MAX_WAIT_MS });
 
   revalidatePath("/dashboard");
   revalidatePath("/lancamentos");
@@ -731,7 +734,7 @@ export async function createTransactionBatchAction(items: unknown): Promise<Acti
           totalCreated += 1;
         }
       }
-    });
+    }, { timeout: TX_TIMEOUT_MS, maxWait: TX_MAX_WAIT_MS });
   } catch {
     return { success: false, message: "Não foi possível salvar os lançamentos. Tente novamente." };
   }
