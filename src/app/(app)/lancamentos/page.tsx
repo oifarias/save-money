@@ -4,7 +4,7 @@ import { parseTransactionFilters } from "@/lib/validations/transaction-filters";
 import { buildTransactionWhere, getEffectivePeriod, TRANSACTIONS_PAGE_SIZE } from "@/lib/transaction-filters";
 import { getTransactionsPage } from "@/lib/transactions-query";
 import { getFixedExpensesChecklist } from "@/lib/fixed-expenses-data";
-import type { FixedExpenseTemplatesTotals } from "@/lib/dashboard-data";
+import type { FixedExpenseTemplatesTotals, IncomeBreakdown, ExpenseBreakdown } from "@/lib/dashboard-data";
 import { TransactionIntake } from "@/components/transactions/transaction-intake";
 import { TransactionsManager } from "@/components/transactions/transactions-manager";
 import { FixedExpensesChecklist } from "@/components/transactions/fixed-expenses-checklist";
@@ -30,7 +30,7 @@ export default async function LancamentosPage({ searchParams }: LancamentosPageP
   const effectivePeriod = getEffectivePeriod(filters);
   const periodLabel = effectivePeriod ? PERIOD_SUMMARY_LABELS[effectivePeriod] : "na data selecionada";
 
-  const [total, items, categories, tags, incomeAgg, expenseAgg, fixedExpensesChecklist] =
+  const [total, items, categories, tags, incomeAgg, expenseAgg, incomeBreakdownRows, expenseBreakdownRows, fixedExpensesChecklist] =
     await Promise.all([
       prisma.transaction.count({ where }),
       getTransactionsPage(where, 1),
@@ -42,11 +42,48 @@ export default async function LancamentosPage({ searchParams }: LancamentosPageP
       prisma.tag.findMany({ where: { userId }, orderBy: { name: "asc" }, select: { name: true } }),
       prisma.transaction.aggregate({ where: { ...where, type: "INCOME" }, _sum: { amount: true } }),
       prisma.transaction.aggregate({ where: { ...where, type: "EXPENSE" }, _sum: { amount: true } }),
+      prisma.transaction.groupBy({
+        by: ["isFixed"],
+        where: { ...where, type: "INCOME" },
+        _sum: { amount: true },
+        _count: { _all: true },
+      }),
+      prisma.transaction.groupBy({
+        by: ["isFixed"],
+        where: { ...where, type: "EXPENSE" },
+        _sum: { amount: true },
+        _count: { _all: true },
+      }),
       getFixedExpensesChecklist(userId),
     ]);
 
   const income = incomeAgg._sum.amount ?? 0;
   const expense = expenseAgg._sum.amount ?? 0;
+
+  const incomeBreakdown: IncomeBreakdown = { fixedTotal: 0, fixedCount: 0, variableTotal: 0, variableCount: 0 };
+  for (const row of incomeBreakdownRows) {
+    const sum = Number(row._sum.amount ?? 0);
+    const count = row._count._all;
+    if (row.isFixed) {
+      incomeBreakdown.fixedTotal += sum;
+      incomeBreakdown.fixedCount += count;
+    } else {
+      incomeBreakdown.variableTotal += sum;
+      incomeBreakdown.variableCount += count;
+    }
+  }
+  const expenseBreakdown: ExpenseBreakdown = { fixedTotal: 0, fixedCount: 0, variableTotal: 0, variableCount: 0 };
+  for (const row of expenseBreakdownRows) {
+    const sum = Number(row._sum.amount ?? 0);
+    const count = row._count._all;
+    if (row.isFixed) {
+      expenseBreakdown.fixedTotal += sum;
+      expenseBreakdown.fixedCount += count;
+    } else {
+      expenseBreakdown.variableTotal += sum;
+      expenseBreakdown.variableCount += count;
+    }
+  }
   // Breakdown pendente/pago das despesas fixas com base no `FixedExpenseTemplate` — fonte única
   // de verdade para despesas fixas (substitui a antiga soma simples via `Transaction.isFixed`).
   const fixedExpenseTemplates: FixedExpenseTemplatesTotals = fixedExpensesChecklist.reduce(
@@ -87,7 +124,7 @@ export default async function LancamentosPage({ searchParams }: LancamentosPageP
         tagSuggestions={tagSuggestions}
         totalCount={total}
         pageSize={TRANSACTIONS_PAGE_SIZE}
-        summary={{ income, expense, balance: income - expense, fixedExpenseTemplates, periodLabel }}
+        summary={{ income, expense, fixedExpenseTemplates, incomeBreakdown, expenseBreakdown, periodLabel }}
       />
     </div>
   );

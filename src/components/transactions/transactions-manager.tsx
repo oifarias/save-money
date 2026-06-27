@@ -21,13 +21,14 @@ import { ShareSplitButton } from "@/components/split/share-split-button";
 import type { TransactionListItem } from "@/components/transactions/transaction-list";
 import { toInputDate } from "@/lib/format";
 import { deleteTransactionAction, loadMoreTransactionsAction } from "@/app/(app)/lancamentos/actions";
-import type { FixedExpenseTemplatesTotals } from "@/lib/dashboard-data";
+import type { FixedExpenseTemplatesTotals, IncomeBreakdown, ExpenseBreakdown } from "@/lib/dashboard-data";
 
 type TransactionsSummary = {
   income: number;
   expense: number;
-  balance: number;
   fixedExpenseTemplates: FixedExpenseTemplatesTotals;
+  incomeBreakdown: IncomeBreakdown;
+  expenseBreakdown: ExpenseBreakdown;
   periodLabel: string;
 };
 
@@ -55,7 +56,8 @@ export function TransactionsManager({
   const [deleting, setDeleting] = useState<TransactionListItem | null>(null);
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [summaryExpanded, setSummaryExpanded] = useState(true);
+  const isDashboardFilter = searchParams.has("type") || searchParams.has("isFixed") || searchParams.has("installment");
+  const [summaryExpanded, setSummaryExpanded] = useState(!isDashboardFilter);
   const [isPending, startTransition] = useTransition();
 
   const [items, setItems] = useState(transactions);
@@ -88,6 +90,15 @@ export function TransactionsManager({
     const visibleSelectedCount = items.filter((t) => selectedIds.has(t.id)).length;
     selectAllRef.current.indeterminate = visibleSelectedCount > 0 && visibleSelectedCount < items.length;
   }, [selectedIds, items]);
+
+  useEffect(() => {
+    const hasDashboardFilter = searchParams.has("type") || searchParams.has("isFixed") || searchParams.has("installment");
+    if (hasDashboardFilter) {
+      setSummaryExpanded(false);
+      window.scrollTo({ top: 0, behavior: "instant" });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtersKey]);
 
   function loadMore() {
     if (isLoadingMore || !hasMore) return;
@@ -222,9 +233,10 @@ export function TransactionsManager({
         <SummaryCards
           income={summary.income}
           expense={summary.expense}
-          balance={summary.balance}
           fixedExpenseTemplates={summary.fixedExpenseTemplates}
-          installments={{ currentMonth: 0, remaining: 0 }}
+          incomeBreakdown={summary.incomeBreakdown}
+          expenseBreakdown={summary.expenseBreakdown}
+          installments={{ currentMonth: 0, currentMonthCount: 0, remaining: 0, lastInstallmentPlansCount: 0 }}
           periodLabel={summary.periodLabel}
           filterParams={searchParams}
         />

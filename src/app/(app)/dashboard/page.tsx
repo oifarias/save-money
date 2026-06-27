@@ -73,10 +73,11 @@ export default async function DashboardPage() {
       <SummaryCards
         income={dashboardData.totals.income}
         expense={dashboardData.totals.expense}
-        balance={dashboardData.totals.balance}
         installments={dashboardData.totals.installments}
         currentMonthKey={currentMonthKey}
         fixedExpenseTemplates={dashboardData.totals.fixedExpenseTemplates}
+        incomeBreakdown={dashboardData.totals.incomeBreakdown}
+        expenseBreakdown={dashboardData.totals.expenseBreakdown}
       />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

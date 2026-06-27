@@ -38,7 +38,23 @@ export type Insight = {
 
 export type InstallmentTotals = {
   currentMonth: number;
+  currentMonthCount: number;
   remaining: number;
+  lastInstallmentPlansCount: number;
+};
+
+export type IncomeBreakdown = {
+  fixedTotal: number;
+  fixedCount: number;
+  variableTotal: number;
+  variableCount: number;
+};
+
+export type ExpenseBreakdown = {
+  fixedTotal: number;
+  fixedCount: number;
+  variableTotal: number;
+  variableCount: number;
 };
 
 export type FixedExpenseTemplatesTotals = {
@@ -53,6 +69,8 @@ export type DashboardData = {
     income: number;
     expense: number;
     balance: number;
+    incomeBreakdown: IncomeBreakdown;
+    expenseBreakdown: ExpenseBreakdown;
     fixedExpenseTemplates: FixedExpenseTemplatesTotals;
     installments: InstallmentTotals;
   };
@@ -93,9 +111,10 @@ async function getDashboardDataUncached(userId: string): Promise<DashboardData> 
     fixedExpenseChecklist,
   ] = await Promise.all([
     prisma.transaction.groupBy({
-      by: ["type"],
+      by: ["type", "isFixed"],
       where: { userId, date: { gte: monthStart, lt: nextMonthStart } },
       _sum: { amount: true },
+      _count: { _all: true },
     }),
     prisma.transaction.groupBy({
       by: ["categoryId"],
@@ -115,13 +134,14 @@ async function getDashboardDataUncached(userId: string): Promise<DashboardData> 
     prisma.transaction.aggregate({
       where: { userId, installmentPlanId: { not: null }, date: { gte: monthStart, lt: nextMonthStart } },
       _sum: { amount: true },
+      _count: { _all: true },
     }),
     prisma.installmentPlan.findMany({
       where: { userId },
       select: {
         totalInstallments: true,
         estimatedAmount: true,
-        transactions: { select: { installmentNumber: true } },
+        transactions: { select: { installmentNumber: true, date: true } },
       },
     }),
     getFixedExpensesChecklist(userId, monthKeyOf(monthStart)),
@@ -129,12 +149,29 @@ async function getDashboardDataUncached(userId: string): Promise<DashboardData> 
 
   let income = 0;
   let expense = 0;
+  const incomeBreakdown: IncomeBreakdown = { fixedTotal: 0, fixedCount: 0, variableTotal: 0, variableCount: 0 };
+  const expenseBreakdown: ExpenseBreakdown = { fixedTotal: 0, fixedCount: 0, variableTotal: 0, variableCount: 0 };
   for (const row of typeTotals) {
     const sum = Number(row._sum.amount ?? 0);
+    const count = row._count._all;
     if (row.type === "INCOME") {
       income += sum;
+      if (row.isFixed) {
+        incomeBreakdown.fixedTotal += sum;
+        incomeBreakdown.fixedCount += count;
+      } else {
+        incomeBreakdown.variableTotal += sum;
+        incomeBreakdown.variableCount += count;
+      }
     } else {
       expense += sum;
+      if (row.isFixed) {
+        expenseBreakdown.fixedTotal += sum;
+        expenseBreakdown.fixedCount += count;
+      } else {
+        expenseBreakdown.variableTotal += sum;
+        expenseBreakdown.variableCount += count;
+      }
     }
   }
 
@@ -164,7 +201,9 @@ async function getDashboardDataUncached(userId: string): Promise<DashboardData> 
 
   // Plano "ativo" é derivado: existe pelo menos uma transação lançada com installmentNumber < totalInstallments.
   // "Falta pagar" = (totalInstallments - maior installmentNumber já lançado) × estimatedAmount, por plano.
+  // "Última parcela" = planos cuja última parcela (installmentNumber === totalInstallments) cai no mês atual.
   let installmentsRemaining = 0;
+  let lastInstallmentPlansCount = 0;
   for (const plan of installmentPlans) {
     if (plan.transactions.length === 0) continue;
     const maxLaunched = Math.max(...plan.transactions.map((t) => t.installmentNumber ?? 0));
@@ -172,10 +211,21 @@ async function getDashboardDataUncached(userId: string): Promise<DashboardData> 
     if (remainingCount > 0) {
       installmentsRemaining += remainingCount * plan.estimatedAmount;
     }
+    const hasLastInstallmentThisMonth = plan.transactions.some(
+      (t) =>
+        t.installmentNumber === plan.totalInstallments &&
+        t.date >= monthStart &&
+        t.date < nextMonthStart
+    );
+    if (hasLastInstallmentThisMonth) {
+      lastInstallmentPlansCount += 1;
+    }
   }
   const installments = {
     currentMonth: Number(installmentCurrentMonth._sum.amount ?? 0),
+    currentMonthCount: installmentCurrentMonth._count._all,
     remaining: installmentsRemaining,
+    lastInstallmentPlansCount,
   };
   const balance = income - expense;
 
@@ -231,7 +281,7 @@ async function getDashboardDataUncached(userId: string): Promise<DashboardData> 
   });
 
   return {
-    totals: { income, expense, balance, fixedExpenseTemplates, installments },
+    totals: { income, expense, balance, incomeBreakdown, expenseBreakdown, fixedExpenseTemplates, installments },
     categoryDistribution,
     monthlyTrend,
     insights,
