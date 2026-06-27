@@ -12,6 +12,7 @@ import { TagInput } from "@/components/transactions/tag-input";
 import { CategoryForm } from "@/components/groups/category-form";
 import { formatCurrency } from "@/lib/format";
 import { createTransactionBatchAction } from "@/app/(app)/lancamentos/actions";
+import { batchCreateTransactionSchema } from "@/lib/validations/transaction";
 import type { TransactionFormCategory } from "@/components/transactions/transaction-form";
 
 type ItemDraft = {
@@ -121,8 +122,31 @@ export function TransactionBatchPanel({ categories, tagSuggestions }: Transactio
       totalInstallments: item.totalInstallments,
     }));
 
+    const parsed = batchCreateTransactionSchema.safeParse({ items: payload });
+    if (!parsed.success) {
+      const nextErrors: Record<string, Record<string, string>> = {};
+      let firstErrorKey: string | null = null;
+
+      for (const issue of parsed.error.issues) {
+        const [, indexPart, ...rest] = issue.path;
+        if (typeof indexPart !== "number" || rest.length === 0) continue;
+        const item = items[indexPart];
+        if (!item) continue;
+        const field = String(rest[0]);
+        nextErrors[item.key] = { ...nextErrors[item.key], [field]: issue.message };
+        firstErrorKey ??= item.key;
+      }
+
+      setItemErrors(nextErrors);
+      if (firstErrorKey) setExpandedKey(firstErrorKey);
+      toast.error("Revise os campos destacados antes de salvar");
+      return;
+    }
+
+    setItemErrors({});
+
     startTransition(async () => {
-      const result = await createTransactionBatchAction(payload);
+      const result = await createTransactionBatchAction(parsed.data.items);
       if (!result.success) {
         toast.error(result.message ?? "Erro ao salvar lançamentos");
         return;

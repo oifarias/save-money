@@ -1,5 +1,7 @@
 # Plano — Lançamento Manual em Lote e Campos Corretos por Tipo
 
+> **Status geral: ✅ Concluído.** Todas as 8 tarefas foram implementadas e verificadas no código (`main` / `claude/batch-launch-execution-plan-j7p907`, sem diff entre as duas). Detalhes de status por tarefa/decisão/risco abaixo.
+
 ## Seção 1 — Diagnóstico
 
 ### 1.1 Fluxo atual (ponta a ponta)
@@ -71,9 +73,11 @@
 
 ## Seção 2 — Tarefas detalhadas
 
-### Tarefa 1 — Corrigir campos exibidos por tipo no `TransactionForm`
+### Tarefa 1 — Corrigir campos exibidos por tipo no `TransactionForm` ✅ Concluído
 
 **Prioridade:** Alta | **Arquivo:** `src/components/transactions/transaction-form.tsx`
+
+**Verificado:** `isFixedIncome` em `transaction-form.tsx:56-58`; blocos condicionais `type === "EXPENSE"` (linha 174) e `type === "INCOME"` (linha 201) com toggle Fixa/Variável (linhas 203-216); bloco de parcelamento restrito a `type === "EXPENSE" && !transaction` (linha 219). `recurrence` não é renderizado para INCOME e `parseFormData` já default para `"NONE"` quando ausente (`actions.ts:75`), cobrindo a Decisão D4(a) sem precisar de hidden input explícito.
 
 **O que muda:**
 
@@ -99,9 +103,11 @@
 
 ---
 
-### Tarefa 2 — Adicionar guarda de tipo em `createTransactionAction` para `resolveFixedExpenseTemplate`
+### Tarefa 2 — Adicionar guarda de tipo em `createTransactionAction` para `resolveFixedExpenseTemplate` ✅ Concluído
 
 **Prioridade:** Alta (bug latente) | **Arquivo:** `src/app/(app)/lancamentos/actions.ts`
+
+**Verificado:** guarda `type === "EXPENSE" ? await resolveFixedExpenseTemplate(...) : { fixedExpenseTemplateId: null }` presente em `createTransactionAction` (linhas 138-149), `updateTransactionAction` (linhas 215-216) e também em `createTransactionBatchAction` (linhas 702-713).
 
 **O que muda:**
 
@@ -123,9 +129,11 @@ Mesmo ajuste em `updateTransactionAction` (linhas 208–217). Garantir que `fixe
 
 ---
 
-### Tarefa 3 — Adicionar guarda de tipo na `transactionSchema`
+### Tarefa 3 — Adicionar guarda de tipo na `transactionSchema` ✅ Concluído
 
 **Prioridade:** Média | **Arquivo:** `src/lib/validations/transaction.ts`
+
+**Verificado:** `superRefine` em `transaction.ts:31-39`, incluindo o issue customizado para `isInstallment && type === "INCOME"`.
 
 **O que muda:**
 
@@ -148,9 +156,11 @@ Isso protege o servidor caso um payload manipulado tente criar `InstallmentPlan`
 
 ---
 
-### Tarefa 4 — Estender `TagInput` para suportar modo controlado
+### Tarefa 4 — Estender `TagInput` para suportar modo controlado ✅ Concluído
 
 **Prioridade:** Alta (bloqueante para Tarefa 6) | **Arquivo:** `src/components/transactions/tag-input.tsx`
+
+**Verificado:** `isControlled = value !== undefined` em `tag-input.tsx:18`, fallback uncontrolled preservado (`internalTags`), `tags = isControlled ? value : internalTags` (linha 24).
 
 **O que muda:**
 
@@ -181,9 +191,11 @@ O comportamento de `addTag`, `removeTag` e `handleKeyDown` permanece idêntico �
 
 ---
 
-### Tarefa 5 — Criar `batchCreateTransactionSchema`
+### Tarefa 5 — Criar `batchCreateTransactionSchema` ✅ Concluído
 
 **Prioridade:** Alta (bloqueante para Tarefa 7) | **Arquivo:** `src/lib/validations/transaction.ts`
+
+**Verificado:** `batchCreateTransactionSchema` em `transaction.ts:50-57`, com `min(1)`/`max(50)` conforme proposto (limite final de 50 mantido — ver D5).
 
 **O que muda:**
 
@@ -206,9 +218,11 @@ Reutiliza `transactionSchema` por item, sem duplicação. O limite de 50 é prov
 
 ---
 
-### Tarefa 6 — Criar `createTransactionBatchAction`
+### Tarefa 6 — Criar `createTransactionBatchAction` ✅ Concluído
 
 **Prioridade:** Alta (bloqueante para Tarefa 7) | **Arquivo:** `src/app/(app)/lancamentos/actions.ts`
+
+**Verificado:** implementada em `actions.ts:651-746`. Segue o desenho proposto: `requireUserId`, `safeParse`, `getDefaultAccountId`, loop com `resolveCategoryAndSubcategory` (linhas 664-669, fora da transação — erro de categoria interrompe antes de qualquer mutação), `prisma.$transaction` com timeout (`TX_TIMEOUT_MS`/`TX_MAX_WAIT_MS`) envolvendo o loop principal (linhas 674-737), `try/catch` retornando mensagem genérica em falha (linha 738-740), revalidação de cache e contagem total (`totalCreated`) na mensagem de sucesso. O tratamento de erro por item indexado (`items[N].campo`) mencionado como "melhoria de UX opcional" **não foi implementado** — erros de categoria hoje retornam `fieldErrors` sem índice de item; isto é uma lacuna real e menor, não bloqueante.
 
 **O que muda:**
 
@@ -232,9 +246,13 @@ Lógica:
 
 ---
 
-### Tarefa 7 — Criar `TransactionBatchPanel`
+### Tarefa 7 — Criar `TransactionBatchPanel` ✅ Concluído
 
 **Prioridade:** Alta | **Arquivo a criar:** `src/components/transactions/transaction-batch-panel.tsx`
+
+**Verificado:** componente implementado seguindo o modelo do `WishBatchModal` (accordeon, `ItemDraft`, `addItem`/`removeItem`/`toggleExpanded`/`reset`). Diferença do desenho original: em vez de Modal (D1-a), foi implementado como seção de página dedicada (`/lancamentos/novo`) — decisão de produto razoável, mantém o mesmo comportamento de accordeon.
+
+**Gap encontrado e corrigido nesta sessão:** a validação client-side com `batchCreateTransactionSchema.safeParse()` (prevista na Tarefa 7 e no Risco R4) não estava implementada — o `handleSubmit` enviava o payload direto para a server action sem validar, e `itemErrors` era lido na UI mas nunca populado. Adicionado `safeParse` antes do submit, mapeamento de `issue.path` para `itemErrors[item.key]` e expansão automática do primeiro item com erro.
 
 **O que é:**
 
@@ -362,9 +380,11 @@ Abre dentro de `<Modal size="lg" title="Novo lançamento" ...>`.
 
 ---
 
-### Tarefa 8 — Atualizar `TransactionIntake` para usar o batch panel
+### Tarefa 8 — Atualizar `TransactionIntake` para usar o batch panel ✅ Concluído
 
 **Prioridade:** Alta | **Arquivo:** `src/components/transactions/transaction-intake.tsx`
+
+**Verificado:** card renomeado para "Manual" (resolve D6), aponta para `/lancamentos/novo`, que renderiza `TransactionBatchPanel` numa página dedicada em vez de modal.
 
 **O que muda:**
 
@@ -400,6 +420,8 @@ As Tarefas 2, 3 e 1 podem entrar em PR separado (corretivo de UX/bug). As Tarefa
 ---
 
 ## Seção 3 — Decisões de produto pendentes
+
+> **Resolvidas na implementação:** D1 → seção dedicada em página própria (não modal); D2 → expansão automática (sem botão "Confirmar"); D3 → resumo `[ícone] descrição · valor · badges`; D4 → recurrence removido da UI de INCOME; D5 → limite de 50 mantido; D6 → label "Manual"; D7 → fecha/reseta e redireciona para `/lancamentos` após sucesso.
 
 **D1 — Modal ou seção inline para o batch panel?**
 O padrão existente (`WishBatchModal`) usa Modal `size="lg"`. O pedido menciona "tela/seção de lançamento em lote". Opções:
@@ -437,6 +459,8 @@ Após submit bem-sucedido: fechar o Modal e resetar o batch panel (padrão `Wish
 ---
 
 ## Seção 4 — Riscos e edge cases
+
+> **Status:** R1, R2, R3, R6, R7, R9 — comportamento aceito/mitigado por design, conforme já descrito em cada item abaixo. R4 — **tinha gap, corrigido nesta sessão** (validação client-side não estava ligada ao submit). R5 — resolvido via Tarefa 4 (TagInput controlado). R8 — não testado manualmente nesta sessão (requer navegador); ver nota abaixo. R10 — não resolvido, é otimização opcional, não bloqueante.
 
 **R1 — Atomicidade do lote com installment plans**
 `createTransactionBatchAction` usa `prisma.$transaction()` externo. Cada item com `isInstallment = true` chama `createInstallmentPlanWithTransactions`, que internamente cria 1 `InstallmentPlan` + N `Transaction`. Se o item 3 de 5 falhar, o rollback desfaz os itens 1 e 2 também. Este é o comportamento correto para consistência, mas o usuário perde tudo. Considerar estratégia de retry ou submit parcial (fora do escopo v1 — registrar como limitação conhecida).
