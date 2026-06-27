@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useSearchParams } from "next/navigation";
 import toast from "react-hot-toast";
-import { ChevronDown, Download, Loader2, Pencil } from "lucide-react";
+import { ChevronDown, Download, Loader2, Pencil, Trash2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
@@ -20,7 +20,7 @@ import { BulkEditForm } from "@/components/transactions/bulk-edit-form";
 import { ShareSplitButton } from "@/components/split/share-split-button";
 import type { TransactionListItem } from "@/components/transactions/transaction-list";
 import { toInputDate } from "@/lib/format";
-import { deleteTransactionAction, loadMoreTransactionsAction } from "@/app/(app)/lancamentos/actions";
+import { bulkDeleteTransactionsAction, deleteTransactionAction, loadMoreTransactionsAction } from "@/app/(app)/lancamentos/actions";
 import type { FixedExpenseTemplatesTotals, IncomeBreakdown, ExpenseBreakdown } from "@/lib/dashboard-data";
 
 type TransactionsSummary = {
@@ -55,6 +55,7 @@ export function TransactionsManager({
   const [editing, setEditing] = useState<TransactionListItem | null>(null);
   const [deleting, setDeleting] = useState<TransactionListItem | null>(null);
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const isDashboardFilter = searchParams.has("type") || searchParams.has("isFixed") || searchParams.has("installment");
   const [summaryExpanded, setSummaryExpanded] = useState(!isDashboardFilter);
@@ -181,6 +182,19 @@ export function TransactionsManager({
     setSelectedIds(new Set());
   }
 
+  function confirmBulkDelete() {
+    startTransition(async () => {
+      const result = await bulkDeleteTransactionsAction([...selectedIds]);
+      if (result.success) {
+        toast.success(result.message ?? "Lançamentos excluídos");
+        setSelectedIds(new Set());
+      } else {
+        toast.error(result.message ?? "Não foi possível excluir os lançamentos");
+      }
+      setBulkDeleteOpen(false);
+    });
+  }
+
   const editingValues: TransactionFormValues | undefined = editing
     ? {
         id: editing.id,
@@ -266,6 +280,10 @@ export function TransactionsManager({
               <Pencil className="h-4 w-4" aria-hidden="true" />
               Editar em lote
             </Button>
+            <Button type="button" variant="danger" onClick={() => setBulkDeleteOpen(true)}>
+              <Trash2 className="h-4 w-4" aria-hidden="true" />
+              Excluir selecionados
+            </Button>
           </div>
         </div>
       )}
@@ -340,6 +358,15 @@ export function TransactionsManager({
         isLoading={isPending}
         onConfirm={confirmDelete}
         onCancel={() => setDeleting(null)}
+      />
+
+      <ConfirmDialog
+        open={bulkDeleteOpen}
+        title={`Excluir ${selectedCount} lançamento(s)`}
+        description={`Tem certeza que deseja excluir os ${selectedCount} lançamentos selecionados? Lançamentos parcelados terão todas as parcelas removidas. Essa ação não pode ser desfeita.`}
+        isLoading={isPending}
+        onConfirm={confirmBulkDelete}
+        onCancel={() => setBulkDeleteOpen(false)}
       />
     </div>
   );

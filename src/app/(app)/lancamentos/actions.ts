@@ -489,23 +489,65 @@ export async function dismissFixedExpenseInsightAction(groupKey: string, transac
 export async function deleteTransactionAction(id: string): Promise<ActionResult> {
   const userId = await requireUserId();
 
-  const existing = await prisma.transaction.findFirst({ where: { id, userId } });
+  const existing = await prisma.transaction.findFirst({
+    where: { id, userId },
+    select: { installmentPlanId: true, fixedExpenseTemplateId: true },
+  });
   if (!existing) {
     return { success: false, message: "Lançamento não encontrado" };
   }
 
-  if (existing.installmentPlanId) {
-    // Excluir qualquer parcela de um plano remove o plano inteiro e todas as suas transações —
-    // elas foram geradas juntas como uma unidade, não faz sentido deixar parcelas órfãs.
-    await prisma.$transaction((tx) => deleteInstallmentPlanCascade(tx, userId, existing.installmentPlanId!));
-  } else {
-    await prisma.transaction.delete({ where: { id } });
-  }
+  await prisma.$transaction(async (tx) => {
+    if (existing.installmentPlanId) {
+      // Excluir qualquer parcela de um plano remove o plano inteiro e todas as suas transações —
+      // elas foram geradas juntas como uma unidade, não faz sentido deixar parcelas órfãs.
+      await deleteInstallmentPlanCascade(tx, userId, existing.installmentPlanId);
+    } else {
+      await tx.transaction.delete({ where: { id } });
+    }
+    if (existing.fixedExpenseTemplateId) {
+      await tx.fixedExpenseTemplate.deleteMany({
+        where: { id: existing.fixedExpenseTemplateId, userId },
+      });
+    }
+  });
 
   revalidatePath("/dashboard");
   revalidatePath("/lancamentos");
   invalidateAggregateCaches(userId);
   return { success: true, message: "Lançamento excluído com sucesso" };
+}
+
+export async function bulkDeleteTransactionsAction(ids: string[]): Promise<ActionResult> {
+  const userId = await requireUserId();
+
+  if (ids.length === 0) return { success: false, message: "Nenhum lançamento selecionado" };
+
+  const transactions = await prisma.transaction.findMany({
+    where: { id: { in: ids }, userId },
+    select: { id: true, installmentPlanId: true, fixedExpenseTemplateId: true },
+  });
+
+  const planIds = [...new Set(transactions.map((t) => t.installmentPlanId).filter((id): id is string => id !== null))];
+  const simpleIds = transactions.filter((t) => !t.installmentPlanId).map((t) => t.id);
+  const templateIds = [...new Set(transactions.map((t) => t.fixedExpenseTemplateId).filter((id): id is string => id !== null))];
+
+  await prisma.$transaction(async (tx) => {
+    for (const planId of planIds) {
+      await deleteInstallmentPlanCascade(tx, userId, planId);
+    }
+    if (simpleIds.length > 0) {
+      await tx.transaction.deleteMany({ where: { id: { in: simpleIds }, userId } });
+    }
+    if (templateIds.length > 0) {
+      await tx.fixedExpenseTemplate.deleteMany({ where: { id: { in: templateIds }, userId } });
+    }
+  });
+
+  revalidatePath("/dashboard");
+  revalidatePath("/lancamentos");
+  invalidateAggregateCaches(userId);
+  return { success: true, message: `${transactions.length} lançamento(s) excluído(s) com sucesso` };
 }
 
 /**
