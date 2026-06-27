@@ -41,6 +41,7 @@ export type InstallmentTotals = {
   currentMonthCount: number;
   remaining: number;
   lastInstallmentPlansCount: number;
+  lastInstallmentAmount: number;
 };
 
 export type IncomeBreakdown = {
@@ -141,7 +142,7 @@ async function getDashboardDataUncached(userId: string): Promise<DashboardData> 
       select: {
         totalInstallments: true,
         estimatedAmount: true,
-        transactions: { select: { installmentNumber: true, date: true } },
+        transactions: { select: { installmentNumber: true, date: true, amount: true } },
       },
     }),
     getFixedExpensesChecklist(userId, monthKeyOf(monthStart)),
@@ -204,6 +205,7 @@ async function getDashboardDataUncached(userId: string): Promise<DashboardData> 
   // "Última parcela" = planos cuja última parcela (installmentNumber === totalInstallments) cai no mês atual.
   let installmentsRemaining = 0;
   let lastInstallmentPlansCount = 0;
+  let lastInstallmentAmount = 0;
   for (const plan of installmentPlans) {
     if (plan.transactions.length === 0) continue;
     const maxLaunched = Math.max(...plan.transactions.map((t) => t.installmentNumber ?? 0));
@@ -211,14 +213,15 @@ async function getDashboardDataUncached(userId: string): Promise<DashboardData> 
     if (remainingCount > 0) {
       installmentsRemaining += remainingCount * plan.estimatedAmount;
     }
-    const hasLastInstallmentThisMonth = plan.transactions.some(
+    const lastTransaction = plan.transactions.find(
       (t) =>
         t.installmentNumber === plan.totalInstallments &&
         t.date >= monthStart &&
         t.date < nextMonthStart
     );
-    if (hasLastInstallmentThisMonth) {
+    if (lastTransaction) {
       lastInstallmentPlansCount += 1;
+      lastInstallmentAmount += lastTransaction.amount;
     }
   }
   const installments = {
@@ -226,6 +229,7 @@ async function getDashboardDataUncached(userId: string): Promise<DashboardData> 
     currentMonthCount: installmentCurrentMonth._count._all,
     remaining: installmentsRemaining,
     lastInstallmentPlansCount,
+    lastInstallmentAmount,
   };
   const balance = income - expense;
 

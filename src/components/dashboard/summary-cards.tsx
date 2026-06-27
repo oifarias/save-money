@@ -7,7 +7,7 @@ import type { FixedExpenseTemplatesTotals, IncomeBreakdown, ExpenseBreakdown } f
 type SummaryCardsProps = {
   income: number;
   expense: number;
-  installments: { currentMonth: number; currentMonthCount: number; remaining: number; lastInstallmentPlansCount: number };
+  installments: { currentMonth: number; currentMonthCount: number; remaining: number; lastInstallmentPlansCount: number; lastInstallmentAmount: number };
   /** Mês atual no formato "YYYY-MM", usado para linkar os cards ao mesmo período exibido neles, quando `filterParams` não é informado. */
   currentMonthKey?: string;
   /** Filtros atualmente aplicados em /lancamentos (period, month, categoryId, etc.), preservados ao clicar nos cards. */
@@ -155,11 +155,8 @@ export function SummaryCards({
       icon: CreditCard,
       classes: CARD_COLORS.blue,
       total: installments.currentMonth,
-      left: { label: `Pendentes (${installments.currentMonthCount})`, value: installments.currentMonth },
-      right: {
-        label: `Última parcela (${lastInstallmentCount})`,
-        value: lastInstallmentCount > 0 ? `${lastInstallmentCount} plano${lastInstallmentCount > 1 ? "s" : ""}` : "—",
-      },
+      left: { label: "Continua próx. mês", value: installments.remaining },
+      right: { label: `Última parcela (${lastInstallmentCount})`, value: installments.lastInstallmentAmount },
     },
     {
       title: "Despesas fixas (mês)",

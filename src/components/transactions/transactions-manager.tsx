@@ -91,14 +91,6 @@ export function TransactionsManager({
     selectAllRef.current.indeterminate = visibleSelectedCount > 0 && visibleSelectedCount < items.length;
   }, [selectedIds, items]);
 
-  useEffect(() => {
-    const hasDashboardFilter = searchParams.has("type") || searchParams.has("isFixed") || searchParams.has("installment");
-    if (hasDashboardFilter) {
-      setSummaryExpanded(false);
-      window.scrollTo({ top: 0, behavior: "instant" });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtersKey]);
 
   function loadMore() {
     if (isLoadingMore || !hasMore) return;
@@ -236,7 +228,7 @@ export function TransactionsManager({
           fixedExpenseTemplates={summary.fixedExpenseTemplates}
           incomeBreakdown={summary.incomeBreakdown}
           expenseBreakdown={summary.expenseBreakdown}
-          installments={{ currentMonth: 0, currentMonthCount: 0, remaining: 0, lastInstallmentPlansCount: 0 }}
+          installments={{ currentMonth: 0, currentMonthCount: 0, remaining: 0, lastInstallmentPlansCount: 0, lastInstallmentAmount: 0 }}
           periodLabel={summary.periodLabel}
           filterParams={searchParams}
         />
