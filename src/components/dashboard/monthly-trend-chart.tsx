@@ -3,9 +3,11 @@
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/format";
+import { useValuesVisibility } from "@/contexts/values-visibility";
 import type { MonthlyTrendPoint } from "@/lib/dashboard-data";
 
 export function MonthlyTrendChart({ data }: { data: MonthlyTrendPoint[] }) {
+  const { showValues } = useValuesVisibility();
   return (
     <Card>
       <h3 className="font-display text-base font-semibold text-(--color-text)">Entradas x Saídas</h3>
@@ -31,7 +33,7 @@ export function MonthlyTrendChart({ data }: { data: MonthlyTrendPoint[] }) {
               }
             />
             <Tooltip
-              formatter={(value, name) => [formatCurrency(Number(value)), name === "income" ? "Entradas" : "Saídas"]}
+              formatter={(value, name) => [showValues ? formatCurrency(Number(value)) : "R$ ••••", name === "income" ? "Entradas" : "Saídas"]}
               contentStyle={{
                 borderRadius: 12,
                 border: "1px solid var(--color-border)",

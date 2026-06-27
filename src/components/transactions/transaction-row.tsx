@@ -3,7 +3,8 @@
 import { clsx } from "clsx";
 import { ArrowDownLeft, ArrowUpRight, Pencil, Repeat, Trash2 } from "lucide-react";
 import { getCategoryIcon } from "@/lib/category-icons";
-import { formatCurrency, formatDate } from "@/lib/format";
+import { formatDate } from "@/lib/format";
+import { Money } from "@/components/ui/money";
 import type { TransactionListItem } from "@/components/transactions/transaction-list";
 
 type TransactionRowProps = {
@@ -88,7 +89,7 @@ export function TransactionRow({ transaction, onEdit, onDelete, selectable, sele
           isExpense ? "text-(--color-danger)" : "text-(--color-success)"
         )}
       >
-        {isExpense ? "-" : "+"} {formatCurrency(transaction.amount)}
+        {isExpense ? "-" : "+"} <Money value={transaction.amount} />
       </p>
 
       <div className="flex shrink-0 gap-1">

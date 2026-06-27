@@ -3,10 +3,13 @@
 import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { Card } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/format";
+import { Money } from "@/components/ui/money";
+import { useValuesVisibility } from "@/contexts/values-visibility";
 import type { CategorySlice } from "@/lib/dashboard-data";
 
 export function CategoryDonutChart({ data }: { data: CategorySlice[] }) {
   const total = data.reduce((sum, slice) => sum + slice.value, 0);
+  const { showValues } = useValuesVisibility();
 
   return (
     <Card>
@@ -36,7 +39,7 @@ export function CategoryDonutChart({ data }: { data: CategorySlice[] }) {
                 ))}
               </Pie>
               <Tooltip
-                formatter={(value, name) => [formatCurrency(Number(value)), String(name)]}
+                formatter={(value, name) => [showValues ? formatCurrency(Number(value)) : "R$ ••••", String(name)]}
                 contentStyle={{
                   borderRadius: 12,
                   border: "1px solid var(--color-border)",
@@ -57,7 +60,7 @@ export function CategoryDonutChart({ data }: { data: CategorySlice[] }) {
 
       {data.length > 0 && (
         <p className="mt-2 text-center text-xs text-(--color-text-muted)">
-          Total de despesas: <span className="font-numeric font-medium text-(--color-text)">{formatCurrency(total)}</span>
+          Total de despesas: <span className="font-numeric font-medium text-(--color-text)"><Money value={total} /></span>
         </p>
       )}
     </Card>

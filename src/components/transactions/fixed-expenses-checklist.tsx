@@ -5,7 +5,8 @@ import { CalendarClock, ChevronDown, CheckCircle2, ClipboardList, Pencil } from 
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
-import { formatCurrency, formatDate } from "@/lib/format";
+import { formatDate } from "@/lib/format";
+import { Money } from "@/components/ui/money";
 import { PayFixedExpensesForm } from "@/components/transactions/pay-fixed-expenses-form";
 import type { FixedExpenseChecklistItem } from "@/lib/fixed-expenses-data";
 
@@ -122,7 +123,7 @@ export function FixedExpensesChecklist({ items }: FixedExpensesChecklistProps) {
 
                 <div className="flex shrink-0 items-center gap-3">
                   <span className="font-numeric text-sm font-semibold text-(--color-text)">
-                    {formatCurrency(isPaid ? item.paidAmount ?? 0 : item.expectedAmount)}
+                    <Money value={isPaid ? item.paidAmount ?? 0 : item.expectedAmount} />
                   </span>
                   {isPaid ? (
                     <span className="inline-flex items-center gap-1 rounded-full bg-(--color-success)/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-(--color-success)">

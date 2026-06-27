@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { ArrowDownLeft, ArrowUpRight, CalendarCheck, CreditCard } from "lucide-react";
+import { type LucideIcon, ArrowDownLeft, ArrowUpRight, CalendarCheck, CreditCard } from "lucide-react";
 import { Card } from "@/components/ui/card";
-import { formatCurrency } from "@/lib/format";
+import { Money } from "@/components/ui/money";
 import type { FixedExpenseTemplatesTotals, IncomeBreakdown, ExpenseBreakdown } from "@/lib/dashboard-data";
 
 type SummaryCardsProps = {
@@ -17,6 +17,91 @@ type SummaryCardsProps = {
   incomeBreakdown: IncomeBreakdown;
   expenseBreakdown: ExpenseBreakdown;
 };
+
+type CardClasses = {
+  text: string;
+  iconBg: string;
+  border: string;
+  gradient: string;
+  divider: string;
+};
+
+type SummaryCardProps = {
+  title: string;
+  href: string;
+  icon: LucideIcon;
+  classes: CardClasses;
+  total: number;
+  left: { label: string; value: number | string };
+  right: { label: string; value: number | string };
+};
+
+function SummaryCard({ title, href, icon: Icon, classes, total, left, right }: SummaryCardProps) {
+  return (
+    <Link href={href} className="block">
+      <Card className={`flex flex-col gap-2 p-4 ${classes.border} ${classes.gradient} transition-shadow hover:shadow-md`}>
+        <div className="flex items-center justify-between">
+          <p className={`text-xs font-medium uppercase tracking-wide ${classes.text}`}>{title}</p>
+          <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${classes.iconBg} ${classes.text}`}>
+            <Icon className="h-5 w-5" aria-hidden="true" />
+          </span>
+        </div>
+        <div className="flex items-baseline gap-1.5">
+          <span className="font-numeric text-2xl font-semibold text-(--color-text)">
+            <Money value={total} />
+          </span>
+          <span className="text-xs text-(--color-text-muted)">(Total)</span>
+        </div>
+        <div className={`border-t ${classes.divider}`} />
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <p className="text-xs font-medium text-(--color-text)">{left.label}</p>
+            <p className={`font-numeric text-sm font-semibold ${classes.text}`}>
+              {typeof left.value === "number" ? <Money value={left.value} /> : left.value}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs font-medium text-(--color-text)">{right.label}</p>
+            <p className={`font-numeric text-sm font-semibold ${classes.text}`}>
+              {typeof right.value === "number" ? <Money value={right.value} /> : right.value}
+            </p>
+          </div>
+        </div>
+      </Card>
+    </Link>
+  );
+}
+
+const CARD_COLORS = {
+  success: {
+    text: "text-(--color-success)",
+    iconBg: "bg-(--color-success)/15",
+    border: "border-(--color-success)/30",
+    gradient: "bg-gradient-to-br from-(--color-success)/10 to-transparent",
+    divider: "border-(--color-success)/20",
+  },
+  danger: {
+    text: "text-(--color-danger)",
+    iconBg: "bg-(--color-danger)/15",
+    border: "border-(--color-danger)/30",
+    gradient: "bg-gradient-to-br from-(--color-danger)/10 to-transparent",
+    divider: "border-(--color-danger)/20",
+  },
+  blue: {
+    text: "text-blue-500",
+    iconBg: "bg-blue-500/15",
+    border: "border-blue-500/30",
+    gradient: "bg-gradient-to-br from-blue-500/10 to-transparent",
+    divider: "border-blue-500/20",
+  },
+  accent: {
+    text: "text-(--color-accent)",
+    iconBg: "bg-(--color-accent)/15",
+    border: "border-(--color-accent)/30",
+    gradient: "bg-gradient-to-br from-(--color-accent)/10 to-transparent",
+    divider: "border-(--color-accent)/20",
+  },
+} satisfies Record<string, CardClasses>;
 
 function buildFilterHref(base: { toString(): string } | undefined, overrides: Record<string, string>) {
   const params = new URLSearchParams(base?.toString() ?? "");
@@ -43,124 +128,55 @@ export function SummaryCards({
 }: SummaryCardsProps) {
   const baseParams = filterParams ?? (currentMonthKey ? new URLSearchParams({ month: currentMonthKey }) : new URLSearchParams());
   const fixedExpenseTotal = fixedExpenseTemplates.pendingTotal + fixedExpenseTemplates.paidTotal;
+  const lastInstallmentCount = installments.lastInstallmentPlansCount;
+
+  const cards: SummaryCardProps[] = [
+    {
+      title: `Entradas ${periodLabel}`,
+      href: buildFilterHref(baseParams, { type: "INCOME" }),
+      icon: ArrowDownLeft,
+      classes: CARD_COLORS.success,
+      total: income,
+      left: { label: `Entrada fixa (${incomeBreakdown.fixedCount})`, value: incomeBreakdown.fixedTotal },
+      right: { label: `Entrada variável (${incomeBreakdown.variableCount})`, value: incomeBreakdown.variableTotal },
+    },
+    {
+      title: `Despesas ${periodLabel}`,
+      href: buildFilterHref(baseParams, { type: "EXPENSE" }),
+      icon: ArrowUpRight,
+      classes: CARD_COLORS.danger,
+      total: expense,
+      left: { label: `Saída fixa (${expenseBreakdown.fixedCount})`, value: expenseBreakdown.fixedTotal },
+      right: { label: `Saída variável (${expenseBreakdown.variableCount})`, value: expenseBreakdown.variableTotal },
+    },
+    {
+      title: "Total de parcelamentos",
+      href: buildFilterHref(baseParams, { installment: "true" }),
+      icon: CreditCard,
+      classes: CARD_COLORS.blue,
+      total: installments.currentMonth,
+      left: { label: `Pendentes (${installments.currentMonthCount})`, value: installments.currentMonth },
+      right: {
+        label: `Última parcela (${lastInstallmentCount})`,
+        value: lastInstallmentCount > 0 ? `${lastInstallmentCount} plano${lastInstallmentCount > 1 ? "s" : ""}` : "—",
+      },
+    },
+    {
+      title: "Despesas fixas (mês)",
+      href: buildFilterHref(baseParams, { isFixed: "true" }),
+      icon: CalendarCheck,
+      classes: CARD_COLORS.accent,
+      total: fixedExpenseTotal,
+      left: { label: `Pendente (${fixedExpenseTemplates.pendingCount})`, value: fixedExpenseTemplates.pendingTotal },
+      right: { label: `Pago (${fixedExpenseTemplates.paidCount})`, value: fixedExpenseTemplates.paidTotal },
+    },
+  ];
 
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-
-      {/* Card Entradas */}
-      <Link href={buildFilterHref(baseParams, { type: "INCOME" })} className="block">
-        <Card className="flex flex-col gap-3 border-(--color-success)/30 bg-gradient-to-br from-(--color-success)/10 to-transparent transition-shadow hover:shadow-md">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-medium uppercase tracking-wide text-(--color-success)">Entradas {periodLabel}</p>
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-(--color-success)/15 text-(--color-success)">
-              <ArrowDownLeft className="h-5 w-5" aria-hidden="true" />
-            </span>
-          </div>
-          <div className="flex items-baseline gap-1.5">
-            <span className="font-numeric text-2xl font-semibold text-(--color-text)">{formatCurrency(income)}</span>
-            <span className="text-xs text-(--color-text-muted)">(Total)</span>
-          </div>
-          <div className="border-t border-(--color-success)/20" />
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <p className="text-xs font-medium text-(--color-text)">Entrada fixa ({incomeBreakdown.fixedCount})</p>
-              <p className="font-numeric text-sm font-semibold text-(--color-success)">{formatCurrency(incomeBreakdown.fixedTotal)}</p>
-            </div>
-            <div>
-              <p className="text-xs font-medium text-(--color-text)">Entrada variável ({incomeBreakdown.variableCount})</p>
-              <p className="font-numeric text-sm font-semibold text-(--color-success)">{formatCurrency(incomeBreakdown.variableTotal)}</p>
-            </div>
-          </div>
-        </Card>
-      </Link>
-
-      {/* Card Despesas */}
-      <Link href={buildFilterHref(baseParams, { type: "EXPENSE" })} className="block">
-        <Card className="flex flex-col gap-3 border-(--color-danger)/30 bg-gradient-to-br from-(--color-danger)/10 to-transparent transition-shadow hover:shadow-md">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-medium uppercase tracking-wide text-(--color-danger)">Despesas {periodLabel}</p>
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-(--color-danger)/15 text-(--color-danger)">
-              <ArrowUpRight className="h-5 w-5" aria-hidden="true" />
-            </span>
-          </div>
-          <div className="flex items-baseline gap-1.5">
-            <span className="font-numeric text-2xl font-semibold text-(--color-text)">{formatCurrency(expense)}</span>
-            <span className="text-xs text-(--color-text-muted)">(Total)</span>
-          </div>
-          <div className="border-t border-(--color-danger)/20" />
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <p className="text-xs font-medium text-(--color-text)">Saída fixa ({expenseBreakdown.fixedCount})</p>
-              <p className="font-numeric text-sm font-semibold text-(--color-danger)">{formatCurrency(expenseBreakdown.fixedTotal)}</p>
-            </div>
-            <div>
-              <p className="text-xs font-medium text-(--color-text)">Saída variável ({expenseBreakdown.variableCount})</p>
-              <p className="font-numeric text-sm font-semibold text-(--color-danger)">{formatCurrency(expenseBreakdown.variableTotal)}</p>
-            </div>
-          </div>
-        </Card>
-      </Link>
-
-      {/* Card Parcelamentos */}
-      <Link href={buildFilterHref(baseParams, { installment: "true" })} className="block">
-        <Card className="flex flex-col gap-3 border-blue-500/30 bg-gradient-to-br from-blue-500/10 to-transparent transition-shadow hover:shadow-md">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-medium uppercase tracking-wide text-blue-500">Total de parcelamentos</p>
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/15 text-blue-500">
-              <CreditCard className="h-5 w-5" aria-hidden="true" />
-            </span>
-          </div>
-          <div className="flex items-baseline gap-1.5">
-            <span className="font-numeric text-2xl font-semibold text-(--color-text)">{formatCurrency(installments.currentMonth)}</span>
-            <span className="text-xs text-(--color-text-muted)">(Total)</span>
-          </div>
-          <div className="border-t border-blue-500/20" />
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <p className="text-xs font-medium text-(--color-text)">Pendentes ({installments.currentMonthCount})</p>
-              <p className="font-numeric text-sm font-semibold text-blue-500">{formatCurrency(installments.currentMonth)}</p>
-            </div>
-            <div>
-              <p className="text-xs font-medium text-(--color-text)">Última parcela ({installments.lastInstallmentPlansCount})</p>
-              <p className="font-numeric text-sm font-semibold text-blue-400">
-                {installments.lastInstallmentPlansCount > 0 ? `${installments.lastInstallmentPlansCount} plano${installments.lastInstallmentPlansCount > 1 ? "s" : ""}` : "—"}
-              </p>
-            </div>
-          </div>
-        </Card>
-      </Link>
-
-      {/* Card Despesas Fixas */}
-      <Link href={buildFilterHref(baseParams, { isFixed: "true" })} className="block">
-        <Card className="flex flex-col gap-3 border-(--color-accent)/30 bg-gradient-to-br from-(--color-accent)/10 to-transparent transition-shadow hover:shadow-md">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-medium uppercase tracking-wide text-(--color-accent)">Despesas fixas (mês)</p>
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-(--color-accent)/15 text-(--color-accent)">
-              <CalendarCheck className="h-5 w-5" aria-hidden="true" />
-            </span>
-          </div>
-          <div className="flex items-baseline gap-1.5">
-            <span className="font-numeric text-2xl font-semibold text-(--color-text)">{formatCurrency(fixedExpenseTotal)}</span>
-            <span className="text-xs text-(--color-text-muted)">(Total)</span>
-          </div>
-          <div className="border-t border-(--color-accent)/20" />
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <p className="text-xs font-medium text-(--color-text)">Pendente ({fixedExpenseTemplates.pendingCount})</p>
-              <p className="font-numeric text-sm font-semibold text-(--color-accent)">
-                {formatCurrency(fixedExpenseTemplates.pendingTotal)}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs font-medium text-(--color-text)">Pago ({fixedExpenseTemplates.paidCount})</p>
-              <p className="font-numeric text-sm font-semibold text-(--color-success)">
-                {formatCurrency(fixedExpenseTemplates.paidTotal)}
-              </p>
-            </div>
-          </div>
-        </Card>
-      </Link>
-
+      {cards.map((card) => (
+        <SummaryCard key={card.title} {...card} />
+      ))}
     </div>
   );
 }

@@ -111,7 +111,7 @@ export default async function LancamentosPage({ searchParams }: LancamentosPageP
     <div className="flex flex-col gap-8">
       <div>
         <h1 className="font-display text-2xl font-semibold text-(--color-text)">Lançamentos</h1>
-        <p className="mt-1 text-sm text-(--color-text-muted)">Registre e acompanhe suas entradas e despesas</p>
+        <p className="mt-1 text-sm text-(--color-text-muted)">Registre um lançamento individual ou importe várias linhas de uma planilha</p>
       </div>
 
       <TransactionIntake categories={formCategories} tagSuggestions={tagSuggestions} />

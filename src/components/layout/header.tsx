@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Bell, LogOut, Menu } from "lucide-react";
+import { Eye, EyeOff, LogOut, Menu } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
+import { useValuesVisibility } from "@/contexts/values-visibility";
 
 type HeaderProps = {
   userName: string;
@@ -13,6 +14,7 @@ type HeaderProps = {
 
 export function Header({ userName, onMenuClick, linkedLoginMethods }: HeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const { showValues, toggleVisibility } = useValuesVisibility();
   const initials = userName
     .split(" ")
     .map((part) => part[0])
@@ -37,10 +39,16 @@ export function Header({ userName, onMenuClick, linkedLoginMethods }: HeaderProp
       <div className="flex items-center gap-2 sm:gap-3">
         <button
           type="button"
-          aria-label="Notificações"
+          onClick={toggleVisibility}
+          aria-label={showValues ? "Ocultar valores" : "Mostrar valores"}
+          title={showValues ? "Ocultar valores" : "Mostrar valores"}
           className="relative flex h-9 w-9 items-center justify-center rounded-full border border-(--color-border) bg-(--color-surface) text-(--color-text-muted) transition-colors hover:text-(--color-primary)"
         >
-          <Bell className="h-4.5 w-4.5" aria-hidden="true" />
+          {showValues ? (
+            <Eye className="h-4.5 w-4.5" aria-hidden="true" />
+          ) : (
+            <EyeOff className="h-4.5 w-4.5" aria-hidden="true" />
+          )}
         </button>
 
         <ThemeToggle />

@@ -22,13 +22,13 @@ export function BottomNav() {
             key={item.href}
             href={item.href}
             aria-current={isActive ? "page" : undefined}
+            aria-label={item.label}
             className={clsx(
-              "flex flex-1 flex-col items-center gap-1 rounded-lg py-1.5 text-[11px] font-medium transition-colors duration-200",
+              "flex flex-1 flex-col items-center justify-center rounded-lg py-2 transition-colors duration-200",
               isActive ? "text-(--color-primary)" : "text-(--color-text-muted)"
             )}
           >
-            <Icon className="h-5 w-5" aria-hidden="true" />
-            {item.label}
+            <Icon className="h-7 w-7" aria-hidden="true" />
           </Link>
         );
       })}
