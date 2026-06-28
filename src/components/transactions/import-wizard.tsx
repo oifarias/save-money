@@ -13,21 +13,28 @@ import {
   ChevronUp,
   ChevronLeft,
   ChevronRight,
+  ChevronsUpDown,
   ClipboardList,
   Trash2,
   Pencil,
   Repeat,
   Lock,
+  TrendingUp,
+  Tag,
+  Layers,
+  Hash,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Modal } from "@/components/ui/modal";
 import { importRowSchema, IMPORT_FIELDS, type ImportFieldKey } from "@/lib/validations/import";
 import type { MappedRow } from "@/lib/import-helpers";
 import {
   normalizeInstallments,
   normalizeFixedFlag,
+  normalizeTags,
   summarizeMappedRows,
   buildMappedRows,
   guessColumnMapping,
@@ -37,6 +44,7 @@ import {
 } from "@/lib/import-helpers";
 import { formatCurrency } from "@/lib/format";
 import { importTransactionsAction } from "@/app/(app)/lancamentos/import-actions";
+import { SummaryCard, CARD_COLORS } from "@/components/dashboard/summary-cards";
 
 type Step = "upload" | "map" | "result";
 
@@ -46,6 +54,16 @@ const PAGE_SIZE = 25;
 
 type EditableField = "category" | "subcategory" | "tags" | "installments" | "isFixed";
 type RowFilter = "all" | "valid" | "invalid";
+type BulkEditType = "category" | "subcategory" | "tags";
+
+type BulkEditItem = {
+  key: string;
+  originalName: string;
+  parentCategory?: string;
+  draft: string;
+  isNew: boolean;
+  rowCount: number;
+};
 
 function selectClass() {
   return "rounded-xl border border-(--color-border) bg-(--color-surface) px-3.5 py-2.5 text-sm text-(--color-text) outline-none transition-colors focus:border-(--color-primary) focus:ring-2 focus:ring-(--color-primary)/20";
@@ -158,11 +176,156 @@ function EditableCell({
   );
 }
 
+function BulkEditModalContent({
+  bulkEditModal,
+  updateBulkEditDraft,
+  saveBulkEdit,
+  onClose,
+}: {
+  bulkEditModal: { type: BulkEditType; items: BulkEditItem[] };
+  updateBulkEditDraft: (key: string, draft: string) => void;
+  saveBulkEdit: () => void;
+  onClose: () => void;
+}) {
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [inputDraft, setInputDraft] = useState("");
+
+  function startEdit(key: string, currentDraft: string) {
+    setEditingKey(key);
+    setInputDraft(currentDraft);
+  }
+
+  function confirmEdit() {
+    if (!editingKey) return;
+    if (inputDraft.trim()) {
+      updateBulkEditDraft(editingKey, inputDraft.trim());
+    }
+    setEditingKey(null);
+  }
+
+  function cancelEdit() {
+    setEditingKey(null);
+  }
+
+  const groupedItems = useMemo(() => {
+    if (bulkEditModal.type !== "subcategory") {
+      return [{ groupLabel: null as string | null, items: bulkEditModal.items }];
+    }
+    const groups = new Map<string, BulkEditItem[]>();
+    for (const item of bulkEditModal.items) {
+      const key = item.parentCategory ?? "";
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(item);
+    }
+    return Array.from(groups.entries()).map(([label, groupItems]) => ({
+      groupLabel: label as string | null,
+      items: groupItems,
+    }));
+  }, [bulkEditModal]);
+
+  return (
+    <div className="flex flex-col gap-4">
+      <p className="text-sm text-(--color-text-muted)">
+        Duplo clique em um item para renomear. Ao salvar, todas as linhas que usam cada valor serão atualizadas automaticamente.
+      </p>
+
+      {bulkEditModal.items.length === 0 ? (
+        <p className="py-6 text-center text-sm text-(--color-text-muted)">
+          Nenhum valor encontrado no arquivo.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-5">
+          {groupedItems.map(({ groupLabel, items }) => (
+            <div key={groupLabel ?? "__root__"} className="flex flex-col gap-2">
+              {groupLabel && (
+                <p className="text-xs font-medium uppercase tracking-wide text-(--color-text-muted)">
+                  {groupLabel}
+                </p>
+              )}
+              <div className="flex flex-wrap gap-2">
+                {items.map((item) => {
+                  const isEditing = editingKey === item.key;
+                  const isModified = item.draft !== item.originalName;
+
+                  if (isEditing) {
+                    return (
+                      <input
+                        key={item.key}
+                        autoFocus
+                        value={inputDraft}
+                        onChange={(e) => setInputDraft(e.target.value)}
+                        onBlur={confirmEdit}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            confirmEdit();
+                          }
+                          if (e.key === "Escape") {
+                            e.preventDefault();
+                            cancelEdit();
+                          }
+                        }}
+                        className="rounded-full border border-(--color-primary) bg-(--color-surface) px-3 py-1 text-sm text-(--color-text) outline-none ring-2 ring-(--color-primary)/20"
+                        style={{ width: `${Math.max(inputDraft.length + 4, 10)}ch` }}
+                      />
+                    );
+                  }
+
+                  return (
+                    <button
+                      key={item.key}
+                      type="button"
+                      title="Duplo clique para editar"
+                      onDoubleClick={() => startEdit(item.key, item.draft)}
+                      className={[
+                        "inline-flex cursor-pointer select-none items-center gap-1.5 rounded-full border px-3 py-1 text-sm transition-colors",
+                        item.isNew
+                          ? isModified
+                            ? "border-(--color-primary) bg-(--color-primary)/10 text-(--color-primary)"
+                            : "border-(--color-primary)/30 bg-(--color-primary)/10 text-(--color-primary)"
+                          : isModified
+                            ? "border-(--color-primary) bg-(--color-bg) text-(--color-text)"
+                            : "border-(--color-border) bg-(--color-bg) text-(--color-text)",
+                      ].join(" ")}
+                    >
+                      <span>{item.draft}</span>
+                      <span className={`text-xs ${item.isNew ? "opacity-70" : "text-(--color-text-muted)"}`}>
+                        · {item.rowCount}
+                      </span>
+                      {isModified && (
+                        <Pencil
+                          size={11}
+                          className={item.isNew ? "opacity-60" : "text-(--color-text-muted)"}
+                          aria-hidden="true"
+                        />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="flex justify-end gap-3 border-t border-(--color-border) pt-4">
+        <Button type="button" variant="secondary" onClick={onClose}>
+          Cancelar
+        </Button>
+        <Button type="button" onClick={saveBulkEdit} disabled={bulkEditModal.items.length === 0}>
+          Salvar alterações
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 type ImportWizardProps = {
   existingCategories: ExistingCategoryRef[];
+  existingTagNames?: string[];
 };
 
-export function ImportWizard({ existingCategories }: ImportWizardProps) {
+export function ImportWizard({ existingCategories, existingTagNames = [] }: ImportWizardProps) {
   const router = useRouter();
   const [step, setStep] = useState<Step>("upload");
   const [fileName, setFileName] = useState("");
@@ -187,6 +350,9 @@ export function ImportWizard({ existingCategories }: ImportWizardProps) {
   const [rowFilter, setRowFilter] = useState<RowFilter>("all");
   const [page, setPage] = useState(1);
   const [editingCell, setEditingCell] = useState<{ index: number; field: EditableField } | null>(null);
+  const [sortField, setSortField] = useState<keyof MappedRow | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [bulkEditModal, setBulkEditModal] = useState<{ type: BulkEditType; items: BulkEditItem[] } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const rawMappedRows = useMemo(() => {
@@ -215,8 +381,8 @@ export function ImportWizard({ existingCategories }: ImportWizardProps) {
   const isMappingComplete = REQUIRED_FIELDS.every((field) => mapping[field.key] !== NONE);
 
   const summary = useMemo(
-    () => summarizeMappedRows(mappedRows, existingCategories),
-    [mappedRows, existingCategories]
+    () => summarizeMappedRows(mappedRows, existingCategories, existingTagNames),
+    [mappedRows, existingCategories, existingTagNames]
   );
 
   const filteredRows = useMemo(() => {
@@ -225,16 +391,149 @@ export function ImportWizard({ existingCategories }: ImportWizardProps) {
     return mappedRows;
   }, [mappedRows, rowFilter]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
+  const sortedRows = useMemo(() => {
+    if (!sortField) return filteredRows;
+    return [...filteredRows].sort((a, b) => {
+      const aVal = a[sortField] ?? "";
+      const bVal = b[sortField] ?? "";
+      const cmp =
+        sortField === "amount"
+          ? Number(aVal) - Number(bVal)
+          : String(aVal).localeCompare(String(bVal), "pt-BR", { numeric: true });
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+  }, [filteredRows, sortField, sortDir]);
+
+  const totalPages = Math.max(1, Math.ceil(sortedRows.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
   const paginatedRows = useMemo(
-    () => filteredRows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE),
-    [filteredRows, currentPage]
+    () => sortedRows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE),
+    [sortedRows, currentPage]
   );
 
   function toggleFilter(filter: RowFilter) {
     setRowFilter((current) => (current === filter ? "all" : filter));
     setPage(1);
+  }
+
+  function toggleSort(field: keyof MappedRow) {
+    if (sortField === field) {
+      setSortDir((dir) => (dir === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortDir("asc");
+    }
+    setPage(1);
+  }
+
+  function openBulkEditModal(type: BulkEditType) {
+    const existingRootNames = new Set(
+      existingCategories.filter((c) => !c.parentName).map((c) => c.name.toLowerCase())
+    );
+    const existingSubKeys = new Set(
+      existingCategories
+        .filter((c) => c.parentName)
+        .map((c) => `${c.parentName!.toLowerCase()}::${c.name.toLowerCase()}`)
+    );
+    const existingTagSet = new Set(existingTagNames.map((t) => t.toLowerCase()));
+
+    let items: BulkEditItem[] = [];
+
+    if (type === "category") {
+      const map = new Map<string, { count: number; isNew: boolean }>();
+      for (const row of mappedRows) {
+        const cat = row.category.trim();
+        if (!cat) continue;
+        const prev = map.get(cat) ?? { count: 0, isNew: !existingRootNames.has(cat.toLowerCase()) };
+        map.set(cat, { ...prev, count: prev.count + 1 });
+      }
+      items = Array.from(map.entries())
+        .sort(([a], [b]) => a.localeCompare(b, "pt-BR"))
+        .map(([name, { count, isNew }]) => ({ key: name, originalName: name, draft: name, isNew, rowCount: count }));
+    } else if (type === "subcategory") {
+      const map = new Map<string, { category: string; name: string; count: number; isNew: boolean }>();
+      for (const row of mappedRows) {
+        const cat = row.category.trim();
+        const sub = row.subcategory.trim();
+        if (!sub || !cat) continue;
+        const key = `${cat}::${sub}`;
+        const prev = map.get(key) ?? {
+          category: cat,
+          name: sub,
+          count: 0,
+          isNew: !existingSubKeys.has(`${cat.toLowerCase()}::${sub.toLowerCase()}`),
+        };
+        map.set(key, { ...prev, count: prev.count + 1 });
+      }
+      items = Array.from(map.entries())
+        .sort(([, av], [, bv]) => av.category.localeCompare(bv.category, "pt-BR") || av.name.localeCompare(bv.name, "pt-BR"))
+        .map(([key, { category, name, count, isNew }]) => ({ key, originalName: name, parentCategory: category, draft: name, isNew, rowCount: count }));
+    } else {
+      const map = new Map<string, { count: number; isNew: boolean }>();
+      for (const row of mappedRows) {
+        for (const tag of normalizeTags(row.tags)) {
+          const prev = map.get(tag) ?? { count: 0, isNew: !existingTagSet.has(tag.toLowerCase()) };
+          map.set(tag, { ...prev, count: prev.count + 1 });
+        }
+      }
+      items = Array.from(map.entries())
+        .sort(([a], [b]) => a.localeCompare(b, "pt-BR"))
+        .map(([name, { count, isNew }]) => ({ key: name, originalName: name, draft: name, isNew, rowCount: count }));
+    }
+
+    setBulkEditModal({ type, items });
+  }
+
+  function updateBulkEditDraft(key: string, draft: string) {
+    setBulkEditModal((current) => {
+      if (!current) return null;
+      return { ...current, items: current.items.map((item) => (item.key === key ? { ...item, draft } : item)) };
+    });
+  }
+
+  function saveBulkEdit() {
+    if (!bulkEditModal) return;
+    const changed = bulkEditModal.items.filter((item) => item.draft.trim() && item.draft.trim() !== item.originalName);
+
+    if (changed.length === 0) {
+      setBulkEditModal(null);
+      return;
+    }
+
+    const newOverrides = { ...overrides };
+    let totalUpdated = 0;
+
+    for (const item of changed) {
+      const newValue = item.draft.trim();
+      if (bulkEditModal.type === "category") {
+        for (const row of mappedRows) {
+          if (row.category.trim() === item.originalName) {
+            newOverrides[row.index] = { ...newOverrides[row.index], category: newValue };
+            totalUpdated++;
+          }
+        }
+      } else if (bulkEditModal.type === "subcategory") {
+        for (const row of mappedRows) {
+          if (row.category.trim() === item.parentCategory && row.subcategory.trim() === item.originalName) {
+            newOverrides[row.index] = { ...newOverrides[row.index], subcategory: newValue };
+            totalUpdated++;
+          }
+        }
+      } else {
+        for (const row of mappedRows) {
+          const tags = normalizeTags(row.tags);
+          if (tags.includes(item.originalName)) {
+            const updatedTags = tags.map((t) => (t === item.originalName ? newValue : t)).join(", ");
+            newOverrides[row.index] = { ...newOverrides[row.index], tags: updatedTags };
+            totalUpdated++;
+          }
+        }
+      }
+    }
+
+    setOverrides(newOverrides);
+    setBulkEditModal(null);
+    toast.success(`${totalUpdated} linha${totalUpdated === 1 ? "" : "s"} atualizada${totalUpdated === 1 ? "" : "s"}`);
   }
 
   function handleRemoveRow(index: number) {
@@ -488,45 +787,54 @@ export function ImportWizard({ existingCategories }: ImportWizardProps) {
           </Card>
 
           {isMappingComplete && (
-            <Card className="flex flex-col gap-4">
-              <div className="flex items-center gap-2">
-                <ClipboardList size={18} className="text-(--color-primary)" aria-hidden="true" />
-                <h2 className="font-display text-base font-semibold text-(--color-text)">Resumo da importação</h2>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-                <SummaryStat label="Linhas" value={String(summary.totalRows)} />
-                <SummaryStat
-                  label="Válidas"
-                  value={String(summary.validCount)}
-                  tone="success"
-                  active={rowFilter === "valid"}
-                  onClick={() => toggleFilter("valid")}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 md:grid-cols-5">
+              <SummaryCard
+                title="Linhas"
+                icon={ClipboardList}
+                classes={CARD_COLORS.blue}
+                total={String(summary.totalRows)}
+                left={{ label: `Válidas (${summary.validCount})`, value: String(summary.validCount) }}
+                right={{ label: `Erro (${summary.invalidCount})`, value: String(summary.invalidCount) }}
+              />
+              <SummaryCard
+                title="Saldo"
+                icon={TrendingUp}
+                classes={summary.balance >= 0 ? CARD_COLORS.success : CARD_COLORS.danger}
+                total={summary.balance}
+                left={{ label: "Entradas", value: summary.totalIncome }}
+                right={{ label: "Despesas", value: summary.totalExpense }}
+              />
+              <button type="button" onClick={() => openBulkEditModal("category")} className="w-full text-left cursor-pointer">
+                <SummaryCard
+                  title="Categorias"
+                  icon={Tag}
+                  classes={CARD_COLORS.accent}
+                  total={String(summary.newCategoriesCount + summary.existingCategoriesCount)}
+                  left={{ label: `Novas (${summary.newCategoriesCount})`, value: String(summary.newCategoriesCount) }}
+                  right={{ label: `Existentes (${summary.existingCategoriesCount})`, value: String(summary.existingCategoriesCount) }}
                 />
-                <SummaryStat
-                  label="Com erro"
-                  value={String(summary.invalidCount)}
-                  tone={summary.invalidCount > 0 ? "danger" : undefined}
-                  active={rowFilter === "invalid"}
-                  onClick={() => toggleFilter("invalid")}
+              </button>
+              <button type="button" onClick={() => openBulkEditModal("subcategory")} className="w-full text-left cursor-pointer">
+                <SummaryCard
+                  title="Sub-categorias"
+                  icon={Layers}
+                  classes={CARD_COLORS.blue}
+                  total={String(summary.newSubcategoriesCount + summary.existingSubcategoriesCount)}
+                  left={{ label: `Novas (${summary.newSubcategoriesCount})`, value: String(summary.newSubcategoriesCount) }}
+                  right={{ label: `Existentes (${summary.existingSubcategoriesCount})`, value: String(summary.existingSubcategoriesCount) }}
                 />
-                <SummaryStat label="Entradas" value={formatCurrency(summary.totalIncome)} tone="success" />
-                <SummaryStat label="Despesas" value={formatCurrency(summary.totalExpense)} tone="danger" />
-                <SummaryStat
-                  label="Saldo"
-                  value={formatCurrency(summary.balance)}
-                  tone={summary.balance >= 0 ? "success" : "danger"}
+              </button>
+              <button type="button" onClick={() => openBulkEditModal("tags")} className="w-full text-left cursor-pointer">
+                <SummaryCard
+                  title="Tags"
+                  icon={Hash}
+                  classes={CARD_COLORS.accent}
+                  total={String(summary.tagsCount)}
+                  left={{ label: `Novas (${summary.newTagsCount})`, value: String(summary.newTagsCount) }}
+                  right={{ label: `Existentes (${summary.existingTagsCount})`, value: String(summary.existingTagsCount) }}
                 />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-                <SummaryStat label="Categorias novas" value={String(summary.newCategoriesCount)} />
-                <SummaryStat label="Categorias existentes" value={String(summary.existingCategoriesCount)} />
-                <SummaryStat label="Sub-categorias novas" value={String(summary.newSubcategoriesCount)} />
-                <SummaryStat label="Tags" value={String(summary.tagsCount)} />
-                <SummaryStat label="Parcelas futuras geradas" value={String(summary.futureInstallmentsCount)} />
-              </div>
-            </Card>
+              </button>
+            </div>
           )}
 
           {isMappingComplete && (
@@ -607,16 +915,39 @@ export function ImportWizard({ existingCategories }: ImportWizardProps) {
                     <table className="w-full text-left text-sm">
                       <thead>
                         <tr className="border-b border-(--color-border) bg-(--color-bg) text-xs uppercase tracking-wide text-(--color-text-muted)">
-                          <th scope="col" className="px-3 py-2">Status</th>
-                          <th scope="col" className="px-3 py-2">Data</th>
-                          <th scope="col" className="px-3 py-2">Transação</th>
-                          <th scope="col" className="px-3 py-2">Valor</th>
-                          <th scope="col" className="px-3 py-2">Tipo</th>
-                          <th scope="col" className="px-3 py-2">Categoria</th>
-                          <th scope="col" className="px-3 py-2">Sub-categoria</th>
-                          <th scope="col" className="px-3 py-2">Tags</th>
-                          <th scope="col" className="px-3 py-2">Parcelas</th>
-                          <th scope="col" className="px-3 py-2">Fixa</th>
+                          {(
+                            [
+                              { label: "Status", field: "error" as keyof MappedRow },
+                              { label: "Data", field: "date" as keyof MappedRow },
+                              { label: "Transação", field: "description" as keyof MappedRow },
+                              { label: "Valor", field: "amount" as keyof MappedRow },
+                              { label: "Tipo", field: "type" as keyof MappedRow },
+                              { label: "Categoria", field: "category" as keyof MappedRow },
+                              { label: "Sub-categoria", field: "subcategory" as keyof MappedRow },
+                              { label: "Tags", field: "tags" as keyof MappedRow },
+                              { label: "Parcelas", field: "installments" as keyof MappedRow },
+                              { label: "Fixa", field: "isFixed" as keyof MappedRow },
+                            ] as { label: string; field: keyof MappedRow }[]
+                          ).map(({ label, field }) => (
+                            <th key={field} scope="col" className="px-3 py-2">
+                              <button
+                                type="button"
+                                onClick={() => toggleSort(field)}
+                                className="inline-flex items-center gap-1 cursor-pointer hover:text-(--color-text) transition-colors"
+                              >
+                                {label}
+                                {sortField === field ? (
+                                  sortDir === "asc" ? (
+                                    <ChevronUp size={12} aria-hidden="true" />
+                                  ) : (
+                                    <ChevronDown size={12} aria-hidden="true" />
+                                  )
+                                ) : (
+                                  <ChevronsUpDown size={12} className="opacity-40" aria-hidden="true" />
+                                )}
+                              </button>
+                            </th>
+                          ))}
                           <th scope="col" className="px-3 py-2">
                             <span className="sr-only">Ações</span>
                           </th>
@@ -638,7 +969,9 @@ export function ImportWizard({ existingCategories }: ImportWizardProps) {
                                 </span>
                               )}
                             </td>
-                            <td className="px-3 py-2 font-numeric text-(--color-text)">{row.date || "—"}</td>
+                            <td className="px-3 py-2 font-numeric text-(--color-text)">
+                              {row.date ? row.date.split("-").reverse().join("/") : "—"}
+                            </td>
                             <td className="px-3 py-2 text-(--color-text)">{row.description || "—"}</td>
                             <td className="px-3 py-2 font-numeric text-(--color-text)">
                               {row.amount ? formatCurrency(Number(row.amount)) : "—"}
@@ -804,6 +1137,28 @@ export function ImportWizard({ existingCategories }: ImportWizardProps) {
           Lendo planilha…
         </div>
       )}
+
+      <Modal
+        open={bulkEditModal !== null}
+        title={
+          bulkEditModal?.type === "category"
+            ? "Editar categorias"
+            : bulkEditModal?.type === "subcategory"
+              ? "Editar sub-categorias"
+              : "Editar tags"
+        }
+        onClose={() => setBulkEditModal(null)}
+        size="lg"
+      >
+        {bulkEditModal && (
+          <BulkEditModalContent
+            bulkEditModal={bulkEditModal}
+            updateBulkEditDraft={updateBulkEditDraft}
+            saveBulkEdit={saveBulkEdit}
+            onClose={() => setBulkEditModal(null)}
+          />
+        )}
+      </Modal>
     </div>
   );
 }

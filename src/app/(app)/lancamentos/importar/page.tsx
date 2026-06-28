@@ -8,16 +8,20 @@ export default async function LancamentosImportarPage() {
   const session = await auth();
   const userId = session!.user.id;
 
-  const categories = await prisma.category.findMany({
-    where: { userId },
-    select: { name: true, parent: { select: { name: true } } },
-    orderBy: { name: "asc" },
-  });
+  const [categories, tags] = await Promise.all([
+    prisma.category.findMany({
+      where: { userId },
+      select: { name: true, parent: { select: { name: true } } },
+      orderBy: { name: "asc" },
+    }),
+    prisma.tag.findMany({ where: { userId }, select: { name: true } }),
+  ]);
 
   const existingCategories = categories.map((category) => ({
     name: category.name,
     parentName: category.parent?.name ?? null,
   }));
+  const existingTagNames = tags.map((t) => t.name);
 
   return (
     <div className="flex flex-col gap-6">
@@ -35,7 +39,7 @@ export default async function LancamentosImportarPage() {
         </p>
       </div>
 
-      <ImportWizard existingCategories={existingCategories} />
+      <ImportWizard existingCategories={existingCategories} existingTagNames={existingTagNames} />
     </div>
   );
 }

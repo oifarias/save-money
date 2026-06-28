@@ -40,6 +40,7 @@ export type InstallmentTotals = {
   currentMonth: number;
   currentMonthCount: number;
   remaining: number;
+  remainingCount: number;
   lastInstallmentPlansCount: number;
   lastInstallmentAmount: number;
 };
@@ -82,6 +83,63 @@ export type DashboardData = {
 
 type TrendRow = { month: Date; type: "INCOME" | "EXPENSE"; total: number | string };
 
+/**
+ * Resume os parcelamentos de um mês específico. `monthStart` deve ser o primeiro dia do mês em
+ * fuso local (ex.: `new Date(2026, 5, 1)` para junho/2026).
+ * - `currentMonth` / `currentMonthCount`: soma e contagem das parcelas do mês informado.
+ * - `remaining`: soma das parcelas do mês SEGUINTE (label "Continua próx. mês").
+ * - `lastInstallmentAmount` / `lastInstallmentPlansCount`: planos cuja última parcela cai neste mês.
+ */
+export async function getInstallmentsSummary(userId: string, monthStart: Date): Promise<InstallmentTotals> {
+  const nextMonthStart = addMonths(monthStart, 1);
+  const monthAfterNextStart = addMonths(monthStart, 2);
+
+  const [installmentCurrentMonth, installmentNextMonth, installmentPlans] = await Promise.all([
+    prisma.transaction.aggregate({
+      where: { userId, installmentPlanId: { not: null }, date: { gte: monthStart, lt: nextMonthStart } },
+      _sum: { amount: true },
+      _count: { _all: true },
+    }),
+    prisma.transaction.aggregate({
+      where: { userId, installmentPlanId: { not: null }, date: { gte: nextMonthStart, lt: monthAfterNextStart } },
+      _sum: { amount: true },
+      _count: { _all: true },
+    }),
+    prisma.installmentPlan.findMany({
+      where: { userId },
+      select: {
+        totalInstallments: true,
+        transactions: { select: { installmentNumber: true, date: true, amount: true } },
+      },
+    }),
+  ]);
+
+  let lastInstallmentPlansCount = 0;
+  let lastInstallmentAmount = 0;
+  for (const plan of installmentPlans) {
+    if (plan.transactions.length === 0) continue;
+    const lastTransaction = plan.transactions.find(
+      (t) =>
+        t.installmentNumber === plan.totalInstallments &&
+        t.date >= monthStart &&
+        t.date < nextMonthStart
+    );
+    if (lastTransaction) {
+      lastInstallmentPlansCount += 1;
+      lastInstallmentAmount += lastTransaction.amount;
+    }
+  }
+
+  return {
+    currentMonth: Number(installmentCurrentMonth._sum.amount ?? 0),
+    currentMonthCount: installmentCurrentMonth._count._all,
+    remaining: Number(installmentNextMonth._sum.amount ?? 0),
+    remainingCount: installmentNextMonth._count._all,
+    lastInstallmentPlansCount,
+    lastInstallmentAmount,
+  };
+}
+
 export async function getDashboardData(userId: string): Promise<DashboardData> {
   return unstable_cache(getDashboardDataUncached, ["dashboard-data", userId], {
     tags: [dashboardCacheTag(userId)],
@@ -108,6 +166,7 @@ async function getDashboardDataUncached(userId: string): Promise<DashboardData> 
     trendRows,
     tagRows,
     installmentCurrentMonth,
+    installmentNextMonth,
     installmentPlans,
     fixedExpenseChecklist,
   ] = await Promise.all([
@@ -135,6 +194,10 @@ async function getDashboardDataUncached(userId: string): Promise<DashboardData> 
     prisma.transaction.aggregate({
       where: { userId, installmentPlanId: { not: null }, date: { gte: monthStart, lt: nextMonthStart } },
       _sum: { amount: true },
+      _count: { _all: true },
+    }),
+    prisma.transaction.aggregate({
+      where: { userId, installmentPlanId: { not: null }, date: { gte: nextMonthStart, lt: addMonths(nextMonthStart, 1) } },
       _count: { _all: true },
     }),
     prisma.installmentPlan.findMany({
@@ -228,6 +291,7 @@ async function getDashboardDataUncached(userId: string): Promise<DashboardData> 
     currentMonth: Number(installmentCurrentMonth._sum.amount ?? 0),
     currentMonthCount: installmentCurrentMonth._count._all,
     remaining: installmentsRemaining,
+    remainingCount: installmentNextMonth._count._all,
     lastInstallmentPlansCount,
     lastInstallmentAmount,
   };

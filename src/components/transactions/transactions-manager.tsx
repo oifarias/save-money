@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useSearchParams } from "next/navigation";
 import toast from "react-hot-toast";
-import { ChevronDown, Download, Loader2, Pencil, Trash2 } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, ChevronDown, Download, Loader2, Pencil, Trash2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
@@ -19,9 +19,19 @@ import { FiltersPanel } from "@/components/transactions/filters-panel";
 import { BulkEditForm } from "@/components/transactions/bulk-edit-form";
 import { ShareSplitButton } from "@/components/split/share-split-button";
 import type { TransactionListItem } from "@/components/transactions/transaction-list";
-import { toInputDate } from "@/lib/format";
-import { bulkDeleteTransactionsAction, deleteTransactionAction, loadMoreTransactionsAction } from "@/app/(app)/lancamentos/actions";
-import type { FixedExpenseTemplatesTotals, IncomeBreakdown, ExpenseBreakdown } from "@/lib/dashboard-data";
+import { formatCurrency, toInputDate } from "@/lib/format";
+import {
+  bulkDeleteTransactionsAction,
+  deleteTransactionAction,
+  loadMoreTransactionsAction,
+} from "@/app/(app)/lancamentos/actions";
+import type {
+  FixedExpenseTemplatesTotals,
+  IncomeBreakdown,
+  ExpenseBreakdown,
+  InstallmentTotals,
+} from "@/lib/dashboard-data";
+import { CollapsibleSection } from "../ui/collapsible-section";
 
 type TransactionsSummary = {
   income: number;
@@ -30,6 +40,7 @@ type TransactionsSummary = {
   incomeBreakdown: IncomeBreakdown;
   expenseBreakdown: ExpenseBreakdown;
   periodLabel: string;
+  installments: InstallmentTotals;
 };
 
 type TransactionsManagerProps = {
@@ -57,7 +68,10 @@ export function TransactionsManager({
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const isDashboardFilter = searchParams.has("type") || searchParams.has("isFixed") || searchParams.has("installment");
+  const isDashboardFilter =
+    searchParams.has("type") ||
+    searchParams.has("isFixed") ||
+    searchParams.has("installment");
   const [summaryExpanded, setSummaryExpanded] = useState(!isDashboardFilter);
   const [isPending, startTransition] = useTransition();
 
@@ -73,7 +87,10 @@ export function TransactionsManager({
   // Assinatura da primeira página vinda do servidor: muda quando um lançamento é criado, editado ou excluído
   // (via revalidatePath nas Server Actions), mesmo sem o usuário trocar nenhum filtro.
   const transactionsSignature = transactions
-    .map((t) => `${t.id}:${t.amount}:${t.description}:${t.category?.id ?? ""}:${t.subcategory?.id ?? ""}:${t.date}`)
+    .map(
+      (t) =>
+        `${t.id}:${t.amount}:${t.description}:${t.category?.id ?? ""}:${t.subcategory?.id ?? ""}:${t.date}`,
+    )
     .join("|");
   const resetKey = `${filtersKey}::${transactionsSignature}`;
   const [previousResetKey, setPreviousResetKey] = useState(resetKey);
@@ -88,10 +105,12 @@ export function TransactionsManager({
 
   useEffect(() => {
     if (!selectAllRef.current) return;
-    const visibleSelectedCount = items.filter((t) => selectedIds.has(t.id)).length;
-    selectAllRef.current.indeterminate = visibleSelectedCount > 0 && visibleSelectedCount < items.length;
+    const visibleSelectedCount = items.filter((t) =>
+      selectedIds.has(t.id),
+    ).length;
+    selectAllRef.current.indeterminate =
+      visibleSelectedCount > 0 && visibleSelectedCount < items.length;
   }, [selectedIds, items]);
-
 
   function loadMore() {
     if (isLoadingMore || !hasMore) return;
@@ -120,7 +139,7 @@ export function TransactionsManager({
           loadMore();
         }
       },
-      { rootMargin: "200px" }
+      { rootMargin: "200px" },
     );
 
     observer.observe(sentinel);
@@ -189,7 +208,9 @@ export function TransactionsManager({
         toast.success(result.message ?? "Lançamentos excluídos");
         setSelectedIds(new Set());
       } else {
-        toast.error(result.message ?? "Não foi possível excluir os lançamentos");
+        toast.error(
+          result.message ?? "Não foi possível excluir os lançamentos",
+        );
       }
       setBulkDeleteOpen(false);
     });
@@ -207,47 +228,46 @@ export function TransactionsManager({
         isFixed: editing.isFixed,
         recurrence: editing.recurrence,
         tags: editing.tags,
+        installmentNumber: editing.installment?.number,
+        installmentTotal: editing.installment?.total,
       }
     : undefined;
 
   const selectedCount = selectedIds.size;
-  const exportHref = filtersKey ? `/api/export/transactions?${filtersKey}` : "/api/export/transactions";
+  const exportHref = filtersKey
+    ? `/api/export/transactions?${filtersKey}`
+    : "/api/export/transactions";
 
   return (
     <div id="lancamentos-realizados" className="flex flex-col gap-6">
-      <button
+      {/* <button
         type="button"
         onClick={() => setSummaryExpanded((current) => !current)}
         aria-expanded={summaryExpanded}
         aria-controls="lancamentos-realizados-summary"
         className="flex w-full items-center justify-between gap-3 text-left"
+      > */}
+      <CollapsibleSection
+        title="Lançamentos realizados"
+        description="Acompanhe, filtre e edite o que já foi lançado"
+        defaultOpen={!isDashboardFilter}
       >
-        <div>
-          <h2 className="font-display text-xl font-semibold text-(--color-text)">Lançamentos realizados</h2>
-          <p className="mt-1 text-sm text-(--color-text-muted)">Acompanhe, filtre e edite o que já foi lançado</p>
+        <div
+          id="lancamentos-realizados-summary"
+          className={`overflow-hidden transition-all duration-200 ${summaryExpanded ? "max-h-[10000px] opacity-100" : "max-h-0 opacity-0"}`}
+        >
+          <SummaryCards
+            income={summary.income}
+            expense={summary.expense}
+            fixedExpenseTemplates={summary.fixedExpenseTemplates}
+            incomeBreakdown={summary.incomeBreakdown}
+            expenseBreakdown={summary.expenseBreakdown}
+            installments={summary.installments}
+            periodLabel={summary.periodLabel}
+            filterParams={searchParams}
+          />
         </div>
-        <ChevronDown
-          className={`h-5 w-5 shrink-0 text-(--color-text-muted) transition-transform duration-200 ${summaryExpanded ? "rotate-180" : ""}`}
-          aria-hidden="true"
-        />
-      </button>
-
-      <div
-        id="lancamentos-realizados-summary"
-        className={`overflow-hidden transition-all duration-200 ${summaryExpanded ? "max-h-[10000px] opacity-100" : "max-h-0 opacity-0"}`}
-      >
-        <SummaryCards
-          income={summary.income}
-          expense={summary.expense}
-          fixedExpenseTemplates={summary.fixedExpenseTemplates}
-          incomeBreakdown={summary.incomeBreakdown}
-          expenseBreakdown={summary.expenseBreakdown}
-          installments={{ currentMonth: 0, currentMonthCount: 0, remaining: 0, lastInstallmentPlansCount: 0, lastInstallmentAmount: 0 }}
-          periodLabel={summary.periodLabel}
-          filterParams={searchParams}
-        />
-      </div>
-
+      </CollapsibleSection>
       <FiltersPanel
         categories={categories}
         actions={
@@ -267,9 +287,15 @@ export function TransactionsManager({
           aria-live="polite"
           className="sticky top-2 z-10 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-(--color-primary)/30 bg-(--color-primary)/10 px-4 py-3"
         >
-          <p className="text-sm font-medium text-(--color-text)">{selectedCount} selecionado(s)</p>
+          <p className="text-sm font-medium text-(--color-text)">
+            {selectedCount} selecionado(s)
+          </p>
           <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="ghost" onClick={() => setSelectedIds(new Set())}>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setSelectedIds(new Set())}
+            >
               Limpar seleção
             </Button>
             <ShareSplitButton
@@ -280,7 +306,11 @@ export function TransactionsManager({
               <Pencil className="h-4 w-4" aria-hidden="true" />
               Editar em lote
             </Button>
-            <Button type="button" variant="danger" onClick={() => setBulkDeleteOpen(true)}>
+            <Button
+              type="button"
+              variant="danger"
+              onClick={() => setBulkDeleteOpen(true)}
+            >
               <Trash2 className="h-4 w-4" aria-hidden="true" />
               Excluir selecionados
             </Button>
@@ -290,24 +320,48 @@ export function TransactionsManager({
 
       {items.length === 0 ? (
         <Card className="flex flex-col items-center gap-2 py-12 text-center">
-          <p className="font-display text-lg font-semibold text-(--color-text)">Nenhum lançamento encontrado</p>
+          <p className="font-display text-lg font-semibold text-(--color-text)">
+            Nenhum lançamento encontrado
+          </p>
           <p className="max-w-sm text-sm text-(--color-text-muted)">
-            Ajuste os filtros ou registre um lançamento na seção &quot;Novo lançamento&quot;, acima.
+            Ajuste os filtros ou registre um lançamento na seção &quot;Novo
+            lançamento&quot;, acima.
           </p>
         </Card>
       ) : (
         <>
+          <div className="flex items-center justify-end gap-5 rounded-xl border border-(--color-border) bg-(--color-surface) px-4 py-3">
+            <div className="flex items-center gap-2">
+              <ArrowUpRight className="h-4 w-4 shrink-0 text-(--color-success)" aria-hidden="true" />
+              <span className="text-sm text-(--color-text-muted)">Entradas</span>
+              <span className="font-numeric text-sm font-semibold text-(--color-success)">
+                {formatCurrency(summary.income)}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <ArrowDownLeft className="h-4 w-4 shrink-0 text-(--color-danger)" aria-hidden="true" />
+              <span className="text-sm text-(--color-text-muted)">Despesas</span>
+              <span className="font-numeric text-sm font-semibold text-(--color-danger)">
+                {formatCurrency(summary.expense)}
+              </span>
+            </div>
+          </div>
+
           <Card className="divide-y divide-(--color-border) p-0">
             <div className="flex items-center gap-3 px-4 py-2.5 sm:px-5">
               <input
                 ref={selectAllRef}
                 type="checkbox"
-                checked={items.length > 0 && items.every((t) => selectedIds.has(t.id))}
+                checked={
+                  items.length > 0 && items.every((t) => selectedIds.has(t.id))
+                }
                 onChange={toggleSelectAllVisible}
                 aria-label="Selecionar todos os lançamentos carregados"
                 className="h-4 w-4 shrink-0 rounded border-(--color-border) accent-(--color-primary)"
               />
-              <span className="text-xs text-(--color-text-muted)">Selecionar todos os carregados</span>
+              <span className="text-xs text-(--color-text-muted)">
+                Selecionar todos os carregados
+              </span>
             </div>
             {items.map((transaction) => (
               <TransactionRow
@@ -327,12 +381,22 @@ export function TransactionsManager({
               Mostrando {items.length} de {totalCount} lançamento(s)
             </p>
             {hasMore ? (
-              <div ref={sentinelRef} className="flex items-center gap-2 text-xs text-(--color-text-muted)">
-                {isLoadingMore && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />}
+              <div
+                ref={sentinelRef}
+                className="flex items-center gap-2 text-xs text-(--color-text-muted)"
+              >
+                {isLoadingMore && (
+                  <Loader2
+                    className="h-3.5 w-3.5 animate-spin"
+                    aria-hidden="true"
+                  />
+                )}
                 Carregando mais lançamentos…
               </div>
             ) : (
-              <p className="text-xs text-(--color-text-muted)">Você viu todos os lançamentos do período.</p>
+              <p className="text-xs text-(--color-text-muted)">
+                Você viu todos os lançamentos do período.
+              </p>
             )}
           </div>
         </>
@@ -347,8 +411,16 @@ export function TransactionsManager({
         />
       </Modal>
 
-      <Modal open={bulkEditOpen} title={`Editar ${selectedCount} lançamentos selecionados`} onClose={closeBulkEdit}>
-        <BulkEditForm ids={Array.from(selectedIds)} categories={categories} onDone={closeBulkEdit} />
+      <Modal
+        open={bulkEditOpen}
+        title={`Editar ${selectedCount} lançamentos selecionados`}
+        onClose={closeBulkEdit}
+      >
+        <BulkEditForm
+          ids={Array.from(selectedIds)}
+          categories={categories}
+          onDone={closeBulkEdit}
+        />
       </Modal>
 
       <ConfirmDialog

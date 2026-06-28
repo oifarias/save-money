@@ -11,6 +11,7 @@ import { SelectField } from "@/components/ui/select-field";
 import { ToggleGroup } from "@/components/ui/toggle-group";
 import { TagInput } from "@/components/transactions/tag-input";
 import { CategoryForm } from "@/components/groups/category-form";
+import { formatCurrency } from "@/lib/format";
 import {
   createTransactionAction,
   updateTransactionAction,
@@ -32,6 +33,8 @@ export type TransactionFormValues = {
   isFixed: boolean;
   recurrence: "NONE" | "WEEKLY" | "MONTHLY";
   tags: string[];
+  installmentNumber?: number;
+  installmentTotal?: number;
 };
 
 type TransactionFormProps = {
@@ -56,18 +59,31 @@ export function TransactionForm({ categories, tagSuggestions, transaction, onDon
   const [isFixedIncome, setIsFixedIncome] = useState<boolean>(
     transaction?.type === "INCOME" ? (transaction.isFixed ?? false) : false
   );
+  const [amount, setAmount] = useState(transaction?.amount ?? "");
+  const [totalInstallments, setTotalInstallments] = useState("");
+  const [currentInstallment, setCurrentInstallment] = useState("1");
+  const [createPastInstallments, setCreatePastInstallments] = useState(false);
 
   const selectedCategory = categories.find((category) => category.id === categoryId);
   const subcategoryOptions = selectedCategory?.children ?? [];
 
+  const amountNum = parseFloat(amount);
+  const totalNum = parseInt(totalInstallments, 10);
+  const startNum = parseInt(currentInstallment, 10) || 1;
+  const pastCount = startNum > 1 ? startNum - 1 : 0;
+  const perInstallment = amountNum > 0 && !isNaN(amountNum) && totalNum >= 2 ? amountNum / totalNum : null;
+  const creatingCount = totalNum >= 2 && startNum >= 1 && startNum <= totalNum ? totalNum - startNum + 1 : null;
+  const effectiveStartInstallment = createPastInstallments && startNum > 1 ? "1" : currentInstallment;
+
   useEffect(() => {
     if (state.success) {
       toast.success(state.message ?? "Feito!");
+      router.refresh();
       onDone();
     } else if (state.message) {
       toast.error(state.message);
     }
-  }, [state, onDone]);
+  }, [state, onDone, router]);
 
   function handleCategoryCreated() {
     setCategoryModalOpen(false);
@@ -80,6 +96,7 @@ export function TransactionForm({ categories, tagSuggestions, transaction, onDon
       <form action={formAction} className="flex flex-col gap-4">
         {transaction && <input type="hidden" name="id" value={transaction.id} />}
         <input type="hidden" name="type" value={type} />
+        <input type="hidden" name="recurrence" value={transaction?.recurrence ?? "NONE"} />
 
         <ToggleGroup
           legend="Tipo"
@@ -111,7 +128,8 @@ export function TransactionForm({ categories, tagSuggestions, transaction, onDon
             min="0"
             inputMode="decimal"
             placeholder="0,00"
-            defaultValue={transaction?.amount}
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
             error={state.fieldErrors?.amount}
             className="font-numeric"
             required
@@ -172,30 +190,21 @@ export function TransactionForm({ categories, tagSuggestions, transaction, onDon
         </div>
 
         {type === "EXPENSE" && (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <SelectField
-              label="Repetição"
-              name="recurrence"
-              id="recurrence"
-              defaultValue={transaction?.recurrence ?? "NONE"}
-            >
-              <option value="NONE">Único</option>
-              <option value="WEEKLY">Semanal</option>
-              <option value="MONTHLY">Mensal</option>
-            </SelectField>
-
-            <div className="flex flex-col justify-end gap-1.5 pb-1">
-              <label className="flex items-center gap-2.5 text-sm font-medium text-(--color-text)">
-                <input
-                  type="checkbox"
-                  name="isFixed"
-                  defaultChecked={transaction?.isFixed}
-                  className="h-4 w-4 rounded border-(--color-border) accent-(--color-primary)"
-                />
-                Despesa fixa
-              </label>
+          <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-(--color-border) bg-(--color-bg) p-3.5 transition-colors has-[:checked]:border-(--color-primary) has-[:checked]:ring-1 has-[:checked]:ring-(--color-primary)">
+            <input
+              type="checkbox"
+              name="isFixed"
+              defaultChecked={transaction?.isFixed}
+              className="mt-0.5 h-4 w-4 shrink-0 accent-(--color-primary)"
+            />
+            <div className="flex flex-col gap-0.5">
+              <span className="text-sm font-medium text-(--color-text)">Despesa fixa</span>
+              <span className="text-xs text-(--color-text-muted)">
+               Marque essa opção para que ela apareça todo mês na checklist de despesas fixas leve em consideração despesas que se repetem todo mês.
+                     
+              </span>
             </div>
-          </div>
+          </label>
         )}
 
         {type === "INCOME" && (
@@ -216,38 +225,136 @@ export function TransactionForm({ categories, tagSuggestions, transaction, onDon
           </div>
         )}
 
+        {transaction?.installmentNumber && (
+          <div className="flex flex-col gap-3 rounded-xl border border-(--color-border) bg-(--color-bg) p-3.5">
+            <p className="text-sm text-(--color-text-muted)">
+              Parcela{" "}
+              <strong className="text-(--color-text)">
+                {transaction.installmentNumber}
+                {transaction.installmentTotal ? ` de ${transaction.installmentTotal}` : ""}
+              </strong>
+              {" "}deste parcelamento
+            </p>
+            {(transaction.installmentTotal ?? 0) > 1 && (
+              <label className="flex cursor-pointer items-start gap-2.5">
+                <input
+                  type="checkbox"
+                  name="propagateToAll"
+                  className="mt-0.5 h-4 w-4 shrink-0 rounded accent-(--color-primary)"
+                />
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-sm font-medium text-(--color-text)">
+                    Aplicar nas {(transaction.installmentTotal ?? 1) - 1} outra{(transaction.installmentTotal ?? 1) - 1 !== 1 ? "s" : ""} parcela{(transaction.installmentTotal ?? 1) - 1 !== 1 ? "s" : ""}
+                  </span>
+                  <span className="text-xs text-(--color-text-muted)">
+                    Valor, descrição, categoria e hashtags serão atualizados em todo o parcelamento
+                  </span>
+                </div>
+              </label>
+            )}
+          </div>
+        )}
+
         {type === "EXPENSE" && !transaction && (
-          <div className="flex flex-col gap-1.5 rounded-xl border border-(--color-border) bg-(--color-bg) p-3.5">
-            <label className="flex items-center gap-2.5 text-sm font-medium text-(--color-text)">
+          <div className="flex flex-col gap-3 rounded-xl border border-(--color-border) bg-(--color-bg) p-3.5">
+            <label className="flex cursor-pointer items-center gap-2.5">
               <input
                 type="checkbox"
                 name="isInstallment"
                 checked={isInstallment}
                 onChange={(event) => setIsInstallment(event.target.checked)}
-                className="h-4 w-4 rounded border-(--color-border) accent-(--color-primary)"
+                className="h-4 w-4 rounded accent-(--color-primary)"
               />
-              Esta despesa é parcelada?
+              <span className="text-sm font-medium text-(--color-text)">Esta despesa é parcelada?</span>
             </label>
-            {isInstallment ? (
+
+            {!isInstallment && (
+              <p className="text-xs text-(--color-text-muted)">
+                Marque se esta despesa será paga em mais de uma parcela
+              </p>
+            )}
+
+            {isInstallment && (
               <>
-                <Input
-                  label="Quantidade de parcelas"
-                  name="totalInstallments"
-                  type="number"
-                  min="2"
-                  max="360"
-                  step="1"
-                  placeholder="Ex.: 4"
-                  error={state.fieldErrors?.totalInstallments}
-                  required
-                />
+                <input type="hidden" name="currentInstallment" value={effectiveStartInstallment} />
+
+                <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2">
+                  <Input
+                    label="Parcela nº"
+                    type="number"
+                    min="1"
+                    max={totalInstallments || "360"}
+                    placeholder="1"
+                    value={currentInstallment}
+                    onChange={(e) => {
+                      setCurrentInstallment(e.target.value);
+                      setCreatePastInstallments(false);
+                    }}
+                    error={state.fieldErrors?.currentInstallment}
+                  />
+                  <span className="pb-2.5 text-sm text-(--color-text-muted)">de</span>
+                  <Input
+                    label="Total"
+                    name="totalInstallments"
+                    type="number"
+                    min="2"
+                    max="360"
+                    step="1"
+                    placeholder="Ex.: 5"
+                    value={totalInstallments}
+                    onChange={(e) => setTotalInstallments(e.target.value)}
+                    error={state.fieldErrors?.totalInstallments}
+                    required
+                  />
+                </div>
+
+                {totalNum >= 2 && (
+                  <div className="flex flex-col gap-2 rounded-lg border border-(--color-border) px-3.5 py-3">
+                    <p className="text-sm text-(--color-text)">
+                      {createPastInstallments && pastCount > 0 ? (
+                        <>Vamos criar <strong>{totalNum} parcelas</strong> — <strong>{pastCount}</strong> no passado e <strong>{creatingCount}</strong> nos próximos meses</>
+                      ) : creatingCount !== null && creatingCount < totalNum ? (
+                        <>Vamos criar <strong>{creatingCount} parcela{creatingCount !== 1 ? "s" : ""}</strong> ({startNum}/{totalNum} até {totalNum}/{totalNum}) nos próximos meses</>
+                      ) : (
+                        <>Vamos criar <strong>{totalNum} parcelas</strong> nos próximos meses</>
+                      )}
+                      {amountNum > 0 ? <>, de <strong>{formatCurrency(amountNum)}</strong> cada</> : null}.
+                    </p>
+
+                    {pastCount > 0 && (
+                      <label className="flex cursor-pointer items-center gap-2.5">
+                        <input
+                          type="checkbox"
+                          checked={createPastInstallments}
+                          onChange={(e) => setCreatePastInstallments(e.target.checked)}
+                          className="h-4 w-4 rounded accent-(--color-primary)"
+                        />
+                        <span className="text-xs text-(--color-text)">
+                          Criar também as {pastCount} parcela{pastCount !== 1 ? "s" : ""} anteriores (passado)
+                        </span>
+                      </label>
+                    )}
+
+                    {perInstallment !== null && (
+                      <p className="text-xs text-(--color-text-muted)">
+                        Digitou o valor total da compra?{" "}
+                        <button
+                          type="button"
+                          onClick={() => setAmount(perInstallment.toFixed(2))}
+                          className="text-(--color-primary) underline-offset-2 hover:underline"
+                        >
+                          Usar {formatCurrency(perInstallment)} por parcela
+                        </button>
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 <p className="text-xs text-(--color-text-muted)">
                   A numeração da parcela será adicionada automaticamente à descrição. As demais parcelas serão
                   lançadas automaticamente nos meses seguintes, com a mesma categoria, sub-grupo e hashtags.
                 </p>
               </>
-            ) : (
-              <p className="text-xs text-(--color-text-muted)">Marque se esta despesa será paga em mais de uma parcela</p>
             )}
           </div>
         )}

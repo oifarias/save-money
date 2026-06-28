@@ -98,6 +98,8 @@ export function TransactionList({
         isFixed: editing.isFixed,
         recurrence: editing.recurrence,
         tags: editing.tags,
+        installmentNumber: editing.installment?.number,
+        installmentTotal: editing.installment?.total,
       }
     : undefined;
 

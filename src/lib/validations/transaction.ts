@@ -27,6 +27,14 @@ export const transactionSchema = z
       .refine((value) => !value || (Number.isInteger(Number(value)) && Number(value) >= 2 && Number(value) <= 360), {
         message: "Informe um número de parcelas entre 2 e 360",
       }),
+    currentInstallment: z
+      .string()
+      .trim()
+      .optional()
+      .or(z.literal(""))
+      .refine((value) => !value || (Number.isInteger(Number(value)) && Number(value) >= 1 && Number(value) <= 360), {
+        message: "Informe um número de parcela entre 1 e 360",
+      }),
   })
   .superRefine((data, ctx) => {
     if (data.isInstallment && !data.totalInstallments) {
@@ -42,6 +50,15 @@ export const transactionSchema = z
         path: ["isInstallment"],
         message: "Parcelamento não se aplica a entradas",
       });
+    }
+    if (data.isInstallment && data.currentInstallment && data.totalInstallments) {
+      if (Number(data.currentInstallment) > Number(data.totalInstallments)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["currentInstallment"],
+          message: "A parcela atual não pode ser maior que o total",
+        });
+      }
     }
   });
 

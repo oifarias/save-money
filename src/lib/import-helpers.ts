@@ -156,6 +156,8 @@ export type ImportSummary = {
   newSubcategoriesCount: number;
   existingSubcategoriesCount: number;
   tagsCount: number;
+  newTagsCount: number;
+  existingTagsCount: number;
   /** Quantidade de parcelas futuras (além da própria linha) que serão geradas pela importação. */
   futureInstallmentsCount: number;
 };
@@ -262,7 +264,8 @@ export function guessColumnMapping(headers: string[]): Record<ImportFieldKey, st
 /** Agrega as linhas já mapeadas/validadas da prévia de importação em métricas de resumo. */
 export function summarizeMappedRows(
   rows: SummarizableRow[],
-  existingCategories: ExistingCategoryRef[] = []
+  existingCategories: ExistingCategoryRef[] = [],
+  existingTagNames: string[] = []
 ): ImportSummary {
   const existingRootNames = new Set(
     existingCategories.filter((category) => !category.parentName).map((category) => category.name.trim().toLowerCase())
@@ -319,6 +322,14 @@ export function summarizeMappedRows(
     else newSubcategoriesCount += 1;
   }
 
+  const existingTagNamesLower = new Set(existingTagNames.map((t) => t.toLowerCase()));
+  let newTagsCount = 0;
+  let existingTagsCount = 0;
+  for (const tag of tagNames) {
+    if (existingTagNamesLower.has(tag.toLowerCase())) existingTagsCount += 1;
+    else newTagsCount += 1;
+  }
+
   return {
     totalRows: rows.length,
     validCount,
@@ -331,6 +342,8 @@ export function summarizeMappedRows(
     newSubcategoriesCount,
     existingSubcategoriesCount,
     tagsCount: tagNames.size,
+    newTagsCount,
+    existingTagsCount,
     futureInstallmentsCount,
   };
 }

@@ -9,8 +9,6 @@ import { transactionSchema, batchCreateTransactionSchema } from "@/lib/validatio
 import { bulkUpdateTransactionSchema } from "@/lib/validations/bulk-transaction";
 import { resolveCategoryAndSubcategory } from "@/lib/category-resolver";
 import {
-  resolveInstallmentPlan,
-  parseInstallmentDescription,
   createInstallmentPlanWithTransactions,
   deleteInstallmentPlanCascade,
   propagateInstallmentEdit,
@@ -76,6 +74,7 @@ function parseFormData(formData: FormData) {
     tags,
     isInstallment: formData.get("isInstallment") === "on",
     totalInstallments: String(formData.get("totalInstallments") ?? ""),
+    currentInstallment: String(formData.get("currentInstallment") ?? ""),
   });
 }
 
@@ -87,7 +86,7 @@ export async function createTransactionAction(_prev: ActionResult, formData: For
     return { success: false, fieldErrors: flattenZodErrors(parsed.error) };
   }
 
-  const { type, date, description, amount, categoryId, subcategoryId, isFixed, recurrence, tags, isInstallment, totalInstallments } =
+  const { type, date, description, amount, categoryId, subcategoryId, isFixed, recurrence, tags, isInstallment, totalInstallments, currentInstallment } =
     parsed.data;
 
   const accountId = await getDefaultAccountId(userId);
@@ -101,12 +100,12 @@ export async function createTransactionAction(_prev: ActionResult, formData: For
   }
 
   if (isInstallment && totalInstallments) {
-    // Despesa parcelada via flag do formulário: gera o plano e já materializa as N parcelas
-    // (meses seguintes), todas vinculadas ao mesmo plano e replicando categoria/subcategoria.
+    const startInstallmentNumber = currentInstallment ? Number(currentInstallment) : 1;
     await prisma.$transaction(async (tx) => {
       const { transactions } = await createInstallmentPlanWithTransactions(tx, userId, {
         baseDescription: description,
         totalInstallments: Number(totalInstallments),
+        startInstallmentNumber,
         amount: Number(amount),
         startDate: new Date(date),
         type: type as TransactionType,
@@ -127,14 +126,6 @@ export async function createTransactionAction(_prev: ActionResult, formData: For
   }
 
   await prisma.$transaction(async (tx) => {
-    const installmentInfo = await resolveInstallmentPlan(tx, userId, {
-      description,
-      date: new Date(date),
-      amount: Number(amount),
-      categoryId,
-      subcategoryId,
-    });
-
     const fixedExpenseInfo =
       type === "EXPENSE"
         ? await resolveFixedExpenseTemplate(tx, userId, {
@@ -160,8 +151,8 @@ export async function createTransactionAction(_prev: ActionResult, formData: For
         description,
         isFixed: Boolean(isFixed),
         recurrence: recurrence as Recurrence,
-        installmentPlanId: installmentInfo?.installmentPlanId ?? null,
-        installmentNumber: installmentInfo?.installmentNumber ?? null,
+        installmentPlanId: null,
+        installmentNumber: null,
         fixedExpenseTemplateId: fixedExpenseInfo.fixedExpenseTemplateId,
       },
     });
@@ -178,6 +169,7 @@ export async function createTransactionAction(_prev: ActionResult, formData: For
 export async function updateTransactionAction(_prev: ActionResult, formData: FormData): Promise<ActionResult> {
   const userId = await requireUserId();
   const id = String(formData.get("id") ?? "");
+  const propagateToAll = formData.get("propagateToAll") === "on";
   const parsed = parseFormData(formData);
 
   if (!parsed.success) {
@@ -197,19 +189,9 @@ export async function updateTransactionAction(_prev: ActionResult, formData: For
   }
 
   await prisma.$transaction(async (tx) => {
-    // Transação já vinculada a um plano (criado pela flag ou por um vínculo regex anterior):
-    // mantém o vínculo estrutural via FK, sem tentar re-detectar pelo texto da nova descrição —
-    // senão editar só o nome-base (removendo o "(x/y)") desvincularia a transação do plano.
     const installmentInfo = existing.installmentPlanId
       ? { installmentPlanId: existing.installmentPlanId, installmentNumber: existing.installmentNumber }
-      : await resolveInstallmentPlan(tx, userId, {
-          description,
-          date: new Date(date),
-          amount: Number(amount),
-          categoryId,
-          subcategoryId,
-          excludeTransactionId: id,
-        });
+      : null;
 
     const fixedExpenseInfo =
       type === "EXPENSE"
@@ -244,16 +226,14 @@ export async function updateTransactionAction(_prev: ActionResult, formData: For
 
     await syncTransactionTags(tx, userId, id, tags);
 
-    // Editar a parcela 1/N propaga valor/categoria/descrição-base para as demais parcelas já
-    // geradas do mesmo plano — mantém as N transações coerentes entre si.
-    if (installmentInfo?.installmentNumber === 1 && installmentInfo.installmentPlanId) {
-      const baseDescription = parseInstallmentDescription(description)?.baseDescription ?? description;
-      const siblingIds = await propagateInstallmentEdit(tx, userId, installmentInfo.installmentPlanId, {
-        baseDescription,
-        amount: Number(amount),
-        categoryId,
-        subcategoryId,
-      });
+    if (propagateToAll && installmentInfo?.installmentPlanId) {
+      const siblingIds = await propagateInstallmentEdit(
+        tx,
+        userId,
+        installmentInfo.installmentPlanId,
+        { baseDescription: description, amount: Number(amount), categoryId, subcategoryId },
+        id,
+      );
       for (const siblingId of siblingIds) {
         await syncTransactionTags(tx, userId, siblingId, tags);
       }
@@ -673,12 +653,14 @@ export async function createTransactionBatchAction(items: unknown): Promise<Acti
   try {
     await prisma.$transaction(async (tx) => {
       for (const item of parsed.data.items) {
-        const { type, date, description, amount, categoryId, subcategoryId, isFixed, recurrence, tags, isInstallment, totalInstallments } = item;
+        const { type, date, description, amount, categoryId, subcategoryId, isFixed, recurrence, tags, isInstallment, totalInstallments, currentInstallment } = item;
 
         if (isInstallment && totalInstallments) {
+          const startInstallmentNumber = currentInstallment ? Number(currentInstallment) : 1;
           const { transactions } = await createInstallmentPlanWithTransactions(tx, userId, {
             baseDescription: description,
             totalInstallments: Number(totalInstallments),
+            startInstallmentNumber,
             amount: Number(amount),
             startDate: new Date(date),
             type: type as TransactionType,
@@ -691,14 +673,6 @@ export async function createTransactionBatchAction(items: unknown): Promise<Acti
           }
           totalCreated += Number(totalInstallments);
         } else {
-          const installmentInfo = await resolveInstallmentPlan(tx, userId, {
-            description,
-            date: new Date(date),
-            amount: Number(amount),
-            categoryId,
-            subcategoryId,
-          });
-
           const fixedExpenseInfo =
             type === "EXPENSE"
               ? await resolveFixedExpenseTemplate(tx, userId, {
@@ -724,8 +698,8 @@ export async function createTransactionBatchAction(items: unknown): Promise<Acti
               description,
               isFixed: Boolean(isFixed),
               recurrence: recurrence as Recurrence,
-              installmentPlanId: installmentInfo?.installmentPlanId ?? null,
-              installmentNumber: installmentInfo?.installmentNumber ?? null,
+              installmentPlanId: null,
+              installmentNumber: null,
               fixedExpenseTemplateId: fixedExpenseInfo.fixedExpenseTemplateId,
             },
           });

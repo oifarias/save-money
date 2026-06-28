@@ -1,7 +1,17 @@
 "use client";
 
-import { useState } from "react";
-import { CalendarClock, CheckCircle2, ClipboardList, Pencil } from "lucide-react";
+import { useState, useTransition } from "react";
+import {
+  AlertCircle,
+  CalendarClock,
+  Check,
+  CheckCircle2,
+  ClipboardList,
+  Loader2,
+  Pencil,
+} from "lucide-react";
+import { useRouter } from "next/navigation";
+import toast from "react-hot-toast";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
@@ -11,14 +21,49 @@ import { formatDate } from "@/lib/format";
 import { Money } from "@/components/ui/money";
 import { PayFixedExpensesForm } from "@/components/transactions/pay-fixed-expenses-form";
 import type { FixedExpenseChecklistItem } from "@/lib/fixed-expenses-data";
+import { payFixedExpensesAction } from "@/app/(app)/lancamentos/actions";
+import { useSearchParams } from "next/navigation";
 
 type FixedExpensesChecklistProps = {
   items: FixedExpenseChecklistItem[];
 };
 
 export function FixedExpensesChecklist({ items }: FixedExpensesChecklistProps) {
+  const router = useRouter();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [payModalOpen, setPayModalOpen] = useState(false);
+  const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
+  const [, startTransition] = useTransition();
+
+  function quickPay(item: FixedExpenseChecklistItem) {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(item.dueDay).padStart(2, "0");
+    const paidDate = `${year}-${month}-${day}`;
+
+    setPendingIds((prev) => new Set(prev).add(item.templateId));
+    startTransition(async () => {
+      const result = await payFixedExpensesAction([
+        {
+          templateId: item.templateId,
+          paidAmount: item.expectedAmount,
+          paidDate,
+        },
+      ]);
+      setPendingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(item.templateId);
+        return next;
+      });
+      if (result.success) {
+        toast.success(result.message ?? "Despesa marcada como paga");
+        router.refresh();
+      } else {
+        toast.error(result.message ?? "Não foi possível marcar como paga");
+      }
+    });
+  }
 
   function toggleSelect(templateId: string) {
     setSelectedIds((prev) => {
@@ -45,26 +90,43 @@ export function FixedExpensesChecklist({ items }: FixedExpensesChecklistProps) {
   if (items.length === 0) {
     return (
       <Card className="flex flex-col items-center gap-2 py-12 text-center">
-        <ClipboardList className="h-8 w-8 text-(--color-text-muted)" aria-hidden="true" />
-        <p className="font-display text-lg font-semibold text-(--color-text)">Nenhuma despesa fixa cadastrada</p>
+        <ClipboardList
+          className="h-8 w-8 text-(--color-text-muted)"
+          aria-hidden="true"
+        />
+        <p className="font-display text-lg font-semibold text-(--color-text)">
+          Nenhuma despesa fixa cadastrada
+        </p>
         <p className="max-w-sm text-sm text-(--color-text-muted)">
-          Marque um lançamento como despesa fixa para acompanhar aqui quais já foram pagas no mês.
+          Marque um lançamento como despesa fixa para acompanhar aqui quais já
+          foram pagas no mês.
         </p>
       </Card>
     );
   }
-
-  const selectedItems = items.filter((item) => selectedIds.has(item.templateId));
+  const searchParams = useSearchParams();
+  const selectedItems = items.filter((item) =>
+    selectedIds.has(item.templateId),
+  );
   const selectedCount = selectedItems.length;
+  const isDashboardFilter =
+    searchParams.has("type") ||
+    searchParams.has("isFixed") ||
+    searchParams.has("installment");
 
   return (
     <div className="flex flex-col gap-4">
       <CollapsibleSection
         title="Despesas fixas do mês"
         description="Acompanhe o que já foi pago e marque pendências como pagas"
+        defaultOpen={!isDashboardFilter}
       >
         <SelectionBar count={selectedCount}>
-          <Button type="button" variant="ghost" onClick={() => setSelectedIds(new Set())}>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => setSelectedIds(new Set())}
+          >
             Limpar seleção
           </Button>
           <Button type="button" onClick={() => setPayModalOpen(true)}>
@@ -75,8 +137,12 @@ export function FixedExpensesChecklist({ items }: FixedExpensesChecklistProps) {
         <Card className="divide-y divide-(--color-border) p-0">
           {items.map((item) => {
             const isPaid = item.status === "paid";
+            const isOverdue = item.status === "overdue";
             return (
-              <div key={item.templateId} className="flex items-center gap-3 px-4 py-3 sm:px-5">
+              <div
+                key={item.templateId}
+                className="flex items-center gap-3 px-4 py-3 sm:px-5"
+              >
                 <input
                   type="checkbox"
                   checked={selectedIds.has(item.templateId)}
@@ -85,27 +151,50 @@ export function FixedExpensesChecklist({ items }: FixedExpensesChecklistProps) {
                   aria-label={`Selecionar ${item.description}`}
                   className="h-4 w-4 shrink-0 rounded border-(--color-border) accent-(--color-primary) disabled:cursor-not-allowed disabled:opacity-40"
                 />
-
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-(--color-text)">{item.description}</p>
+                  <p
+                    className={`truncate text-sm font-medium ${isOverdue ? "text-(--color-danger)" : "text-(--color-text)"}`}
+                  >
+                    {item.description}
+                  </p>
                   <p className="mt-0.5 text-xs text-(--color-text-muted)">
                     {item.categoryName ?? "Sem grupo"}
                     {" · "}
-                    {isPaid && item.paidDate ? `Pago em ${formatDate(item.paidDate)}` : `Vence dia ${item.dueDay}`}
+                    {isPaid && item.paidDate
+                      ? `Pago em ${formatDate(item.paidDate)}`
+                      : isOverdue
+                        ? `Venceu dia ${item.dueDay}`
+                        : `Vence dia ${item.dueDay}`}
                   </p>
                 </div>
 
                 <div className="flex shrink-0 items-center gap-3">
                   <span className="font-numeric text-sm font-semibold text-(--color-text)">
-                    <Money value={isPaid ? item.paidAmount ?? 0 : item.expectedAmount} />
+                    <Money
+                      value={
+                        isPaid ? (item.paidAmount ?? 0) : item.expectedAmount
+                      }
+                    />
                   </span>
-                  {isPaid ? (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-(--color-success)/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-(--color-success)">
-                      <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
-                      Pago
-                    </span>
-                  ) : (
+                  {!isPaid && (
                     <>
+                      <button
+                        type="button"
+                        onClick={() => quickPay(item)}
+                        disabled={pendingIds.has(item.templateId)}
+                        title="Marcar como pago com valor e data exibidos"
+                        aria-label={`Marcar ${item.description} como pago`}
+                        className="inline-flex items-center justify-center rounded-lg p-1.5 text-(--color-text-muted) transition-colors hover:bg-(--color-success)/10 hover:text-(--color-success) disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+                      >
+                        {pendingIds.has(item.templateId) ? (
+                          <Loader2
+                            className="h-3.5 w-3.5 animate-spin"
+                            aria-hidden="true"
+                          />
+                        ) : (
+                          <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                        )}
+                      </button>
                       <button
                         type="button"
                         onClick={() => editAndPay(item.templateId)}
@@ -115,11 +204,23 @@ export function FixedExpensesChecklist({ items }: FixedExpensesChecklistProps) {
                       >
                         <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
                       </button>
-                      <span className="inline-flex items-center gap-1 rounded-full bg-(--color-accent)/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-(--color-accent)">
-                        <CalendarClock className="h-3 w-3" aria-hidden="true" />
-                        Pendente
-                      </span>
                     </>
+                  )}
+                  {isPaid ? (
+                    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-(--color-success)/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-(--color-success)">
+                      <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
+                      Pago
+                    </span>
+                  ) : isOverdue ? (
+                    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-(--color-danger)/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-(--color-danger)">
+                      <AlertCircle className="h-3 w-3" aria-hidden="true" />
+                      Vencido
+                    </span>
+                  ) : (
+                    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-(--color-accent)/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-(--color-accent)">
+                      <CalendarClock className="h-3 w-3" aria-hidden="true" />
+                      Pendente
+                    </span>
                   )}
                 </div>
               </div>

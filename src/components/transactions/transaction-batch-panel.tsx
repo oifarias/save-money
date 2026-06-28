@@ -27,6 +27,8 @@ type ItemDraft = {
   tags: string[];
   isInstallment: boolean;
   totalInstallments: string;
+  currentInstallment: string;
+  createPastInstallments: boolean;
 };
 
 function todayISODate() {
@@ -47,6 +49,8 @@ function createItem(): ItemDraft {
     tags: [],
     isInstallment: false,
     totalInstallments: "",
+    currentInstallment: "1",
+    createPastInstallments: false,
   };
 }
 
@@ -119,6 +123,7 @@ export function TransactionBatchPanel({ categories, tagSuggestions }: Transactio
       tags: item.tags,
       isInstallment: item.isInstallment,
       totalInstallments: item.totalInstallments,
+      currentInstallment: item.createPastInstallments && parseInt(item.currentInstallment, 10) > 1 ? "1" : item.currentInstallment,
     }));
 
     startTransition(async () => {
@@ -172,7 +177,9 @@ export function TransactionBatchPanel({ categories, tagSuggestions }: Transactio
                     <p className="text-xs text-(--color-text-muted)">
                       {amountNum > 0 ? formatCurrency(amountNum) : "Sem valor"}
                       {item.isFixed && " · Fixa"}
-                      {item.isInstallment && item.totalInstallments && ` · ${item.totalInstallments}x`}
+                      {item.isInstallment && item.totalInstallments && (
+                        <> · {item.currentInstallment || "1"}/{item.totalInstallments}x</>
+                      )}
                     </p>
                   </div>
                   <ChevronDown className="h-4 w-4 shrink-0 text-(--color-text-muted)" aria-hidden="true" />
@@ -183,6 +190,13 @@ export function TransactionBatchPanel({ categories, tagSuggestions }: Transactio
             const selectedCategory = categories.find((c) => c.id === item.categoryId);
             const subcategoryOptions = selectedCategory?.children ?? [];
             const errors = itemErrors[item.key] ?? {};
+
+            const itemAmountNum = Number(item.amount) || 0;
+            const totalNum = parseInt(item.totalInstallments, 10);
+            const startNum = parseInt(item.currentInstallment, 10) || 1;
+            const pastCount = startNum > 1 ? startNum - 1 : 0;
+            const perInstallment = itemAmountNum > 0 && !isNaN(itemAmountNum) && totalNum >= 2 ? itemAmountNum / totalNum : null;
+            const creatingCount = totalNum >= 2 && startNum >= 1 && startNum <= totalNum ? totalNum - startNum + 1 : null;
 
             return (
               <div
@@ -231,6 +245,7 @@ export function TransactionBatchPanel({ categories, tagSuggestions }: Transactio
                             isFixed: false,
                             isInstallment: false,
                             totalInstallments: "",
+                            currentInstallment: "1",
                           })
                         }
                         aria-pressed={item.type === option.value}
@@ -330,39 +345,23 @@ export function TransactionBatchPanel({ categories, tagSuggestions }: Transactio
 
                 {item.type === "EXPENSE" && (
                   <>
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-sm font-medium text-(--color-text)">Repetição</label>
-                        <select
-                          value={item.recurrence}
-                          onChange={(e) =>
-                            updateItem(item.key, { recurrence: e.target.value as ItemDraft["recurrence"] })
-                          }
-                          className="rounded-xl border border-(--color-border) bg-(--color-surface) px-3.5 py-2.5 text-sm text-(--color-text) outline-none transition-colors focus:border-(--color-primary) focus:ring-2 focus:ring-(--color-primary)/20"
-                        >
-                          <option value="NONE">Único</option>
-                          <option value="WEEKLY">Semanal</option>
-                          <option value="MONTHLY">Mensal</option>
-                        </select>
+                    <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-(--color-border) bg-(--color-bg) p-3.5 transition-colors has-[:checked]:border-(--color-primary) has-[:checked]:ring-1 has-[:checked]:ring-(--color-primary)">
+                      <input
+                        type="checkbox"
+                        checked={item.isFixed}
+                        onChange={(e) => updateItem(item.key, { isFixed: e.target.checked })}
+                        className="mt-0.5 h-4 w-4 shrink-0 accent-(--color-primary)"
+                      />
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-sm font-medium text-(--color-text)">Despesa fixa</span>
+                        <span className="text-xs text-(--color-text-muted)">
+                          Marque essa opção para que ela apareça todo mês na checklist de despesas fixas leve em consideração despesas que se repetem todo mês.
+                      </span>
                       </div>
-                      <div className="flex items-center gap-2.5 ">
-                        <label className="flex items-center gap-2.5 text-sm font-medium text-(--color-text)">
-                          <input
-                            type="checkbox"
-                            checked={item.isFixed}
-                            onChange={(e) => updateItem(item.key, { isFixed: e.target.checked })}
-                            className="h-4 w-4 rounded border-(--color-border) accent-(--color-primary)"
-                          />
-                          Despesa fixa
-                        </label>
-                        {/* <p className="text-xs text-(--color-text-muted)">
-                          Marque para gastos recorrentes como aluguel ou assinaturas
-                        </p> */}
-                      </div>
-                    </div>
+                    </label>
 
-                    <div className="flex flex-col gap-1.5 rounded-xl border border-(--color-border) bg-(--color-bg) p-3.5">
-                      <label className="flex items-center gap-2.5 text-sm font-medium text-(--color-text)">
+                    <div className="flex flex-col gap-3 rounded-xl border border-(--color-border) bg-(--color-bg) p-3.5">
+                      <label className="flex cursor-pointer items-center gap-2.5">
                         <input
                           type="checkbox"
                           checked={item.isInstallment}
@@ -370,35 +369,95 @@ export function TransactionBatchPanel({ categories, tagSuggestions }: Transactio
                             updateItem(item.key, {
                               isInstallment: e.target.checked,
                               totalInstallments: e.target.checked ? item.totalInstallments : "",
+                              currentInstallment: "1",
                             })
                           }
-                          className="h-4 w-4 rounded border-(--color-border) accent-(--color-primary)"
+                          className="h-4 w-4 rounded accent-(--color-primary)"
                         />
-                        Esta despesa é parcelada?
+                        <span className="text-sm font-medium text-(--color-text)">Esta despesa é parcelada?</span>
                       </label>
-                      {item.isInstallment ? (
+
+                      {!item.isInstallment && (
+                        <p className="text-xs text-(--color-text-muted)">
+                          Marque se esta despesa será paga em mais de uma parcela
+                        </p>
+                      )}
+
+                      {item.isInstallment && (
                         <>
-                          <Input
-                            label="Quantidade de parcelas"
-                            type="number"
-                            min="2"
-                            max="360"
-                            step="1"
-                            placeholder="Ex.: 4"
-                            value={item.totalInstallments}
-                            onChange={(e) => updateItem(item.key, { totalInstallments: e.target.value })}
-                            error={errors.totalInstallments}
-                            required
-                          />
+                          <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2">
+                            <Input
+                              label="Parcela nº"
+                              type="number"
+                              min="1"
+                              max={item.totalInstallments || "360"}
+                              placeholder="1"
+                              value={item.currentInstallment}
+                              onChange={(e) => updateItem(item.key, { currentInstallment: e.target.value, createPastInstallments: false })}
+                              error={errors.currentInstallment}
+                            />
+                            <span className="pb-2.5 text-sm text-(--color-text-muted)">de</span>
+                            <Input
+                              label="Total"
+                              type="number"
+                              min="2"
+                              max="360"
+                              step="1"
+                              placeholder="Ex.: 5"
+                              value={item.totalInstallments}
+                              onChange={(e) => updateItem(item.key, { totalInstallments: e.target.value })}
+                              error={errors.totalInstallments}
+                              required
+                            />
+                          </div>
+
+                          {totalNum >= 2 && (
+                            <div className="flex flex-col gap-2 rounded-lg border border-(--color-border) px-3.5 py-3">
+                              <p className="text-sm text-(--color-text)">
+                                {item.createPastInstallments && pastCount > 0 ? (
+                                  <>Vamos criar <strong>{totalNum} parcelas</strong> — <strong>{pastCount}</strong> no passado e <strong>{creatingCount}</strong> nos próximos meses</>
+                                ) : creatingCount !== null && creatingCount < totalNum ? (
+                                  <>Vamos criar <strong>{creatingCount} parcela{creatingCount !== 1 ? "s" : ""}</strong> ({startNum}/{totalNum} até {totalNum}/{totalNum}) nos próximos meses</>
+                                ) : (
+                                  <>Vamos criar <strong>{totalNum} parcelas</strong> nos próximos meses</>
+                                )}
+                                {itemAmountNum > 0 ? <>, de <strong>{formatCurrency(itemAmountNum)}</strong> cada</> : null}.
+                              </p>
+
+                              {pastCount > 0 && (
+                                <label className="flex cursor-pointer items-center gap-2.5">
+                                  <input
+                                    type="checkbox"
+                                    checked={item.createPastInstallments}
+                                    onChange={(e) => updateItem(item.key, { createPastInstallments: e.target.checked })}
+                                    className="h-4 w-4 rounded accent-(--color-primary)"
+                                  />
+                                  <span className="text-xs text-(--color-text)">
+                                    Criar também as {pastCount} parcela{pastCount !== 1 ? "s" : ""} anteriores (passado)
+                                  </span>
+                                </label>
+                              )}
+
+                              {perInstallment !== null && (
+                                <p className="text-xs text-(--color-text-muted)">
+                                  Digitou o valor total da compra?{" "}
+                                  <button
+                                    type="button"
+                                    onClick={() => updateItem(item.key, { amount: perInstallment.toFixed(2) })}
+                                    className="text-(--color-primary) underline-offset-2 hover:underline"
+                                  >
+                                    Usar {formatCurrency(perInstallment)} por parcela
+                                  </button>
+                                </p>
+                              )}
+                            </div>
+                          )}
+
                           <p className="text-xs text-(--color-text-muted)">
                             A numeração da parcela será adicionada automaticamente à descrição. As demais parcelas
                             serão lançadas automaticamente nos meses seguintes.
                           </p>
                         </>
-                      ) : (
-                        <p className="text-xs text-(--color-text-muted)">
-                          Marque se esta despesa será paga em mais de uma parcela
-                        </p>
                       )}
                     </div>
                   </>

@@ -22,17 +22,29 @@ export function TransactionFiltersBar({ categories }: TransactionFiltersProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  const [categoryId, setCategoryId] = useState(searchParams.get("categoryId") ?? "");
-  const [subcategoryId, setSubcategoryId] = useState(searchParams.get("subcategoryId") ?? "");
-  const [description, setDescription] = useState(searchParams.get("description") ?? "");
-  const [amountOperator, setAmountOperator] = useState(searchParams.get("amountOperator") ?? "");
-  const [amountValue, setAmountValue] = useState(searchParams.get("amountValue") ?? "");
+  const [categoryId, setCategoryId] = useState(
+    searchParams.get("categoryId") ?? "",
+  );
+  const [subcategoryId, setSubcategoryId] = useState(
+    searchParams.get("subcategoryId") ?? "",
+  );
+  const [description, setDescription] = useState(
+    searchParams.get("description") ?? "",
+  );
+  const [amountOperator, setAmountOperator] = useState(
+    searchParams.get("amountOperator") ?? "",
+  );
+  const [amountValue, setAmountValue] = useState(
+    searchParams.get("amountValue") ?? "",
+  );
   const [month, setMonth] = useState(searchParams.get("month") ?? "");
   const [day, setDay] = useState(searchParams.get("day") ?? "");
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const selectedCategory = categories.find((category) => category.id === categoryId);
+  const selectedCategory = categories.find(
+    (category) => category.id === categoryId,
+  );
   const subcategoryOptions = selectedCategory?.children ?? [];
 
   function applyFilters(next: Record<string, string>) {
@@ -51,7 +63,10 @@ export function TransactionFiltersBar({ categories }: TransactionFiltersProps) {
       const currentPeriod = searchParams.get("period");
       if (currentPeriod) params.set("period", currentPeriod);
     }
-    router.replace(params.size > 0 ? `${pathname}?${params.toString()}` : pathname, { scroll: false });
+    router.replace(
+      params.size > 0 ? `${pathname}?${params.toString()}` : pathname,
+      { scroll: false },
+    );
   }
 
   function scheduleApply(next: Record<string, string>) {
@@ -65,7 +80,15 @@ export function TransactionFiltersBar({ categories }: TransactionFiltersProps) {
     };
   }, []);
 
-  const currentValues = { categoryId, subcategoryId, description, amountOperator, amountValue, month, day };
+  const currentValues = {
+    categoryId,
+    subcategoryId,
+    description,
+    amountOperator,
+    amountValue,
+    month,
+    day,
+  };
 
   function handleCategoryChange(value: string) {
     setCategoryId(value);
@@ -114,13 +137,22 @@ export function TransactionFiltersBar({ categories }: TransactionFiltersProps) {
     router.replace(pathname, { scroll: false });
   }
 
-  const hasActiveFilters = Boolean(categoryId || subcategoryId || description || (amountOperator && amountValue) || month);
+  const hasActiveFilters = Boolean(
+    categoryId ||
+    subcategoryId ||
+    description ||
+    (amountOperator && amountValue) ||
+    month,
+  );
 
   return (
     <div className="flex flex-col gap-3 rounded-2xl border border-(--color-border) bg-(--color-surface) p-4">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="filter-categoryId" className="text-xs font-medium text-(--color-text-muted)">
+          <label
+            htmlFor="filter-categoryId"
+            className="text-xs font-medium text-(--color-text-muted)"
+          >
             Grupo
           </label>
           <select
@@ -139,7 +171,10 @@ export function TransactionFiltersBar({ categories }: TransactionFiltersProps) {
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="filter-subcategoryId" className="text-xs font-medium text-(--color-text-muted)">
+          <label
+            htmlFor="filter-subcategoryId"
+            className="text-xs font-medium text-(--color-text-muted)"
+          >
             Sub-grupo
           </label>
           <select
@@ -157,21 +192,31 @@ export function TransactionFiltersBar({ categories }: TransactionFiltersProps) {
             ))}
           </select>
         </div>
-
-        <Input
-          label="Descrição"
-          id="filter-description"
-          placeholder="Buscar por descrição"
-          value={description}
-          onChange={(event) => handleDescriptionChange(event.target.value)}
-        />
+        <div className="flex flex-col gap-1.5">
+          <label
+            htmlFor="filter-subcategoryId"
+            className="text-xs font-medium text-(--color-text-muted)"
+          >
+            Descrição
+          </label>
+          <Input
+            id="filter-description"
+            placeholder="Buscar por descrição"
+            value={description}
+            onChange={(event) => handleDescriptionChange(event.target.value)}
+          />
+        </div>
 
         <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-medium text-(--color-text-muted)">Valor</label>
+          <label className="text-xs font-medium text-(--color-text-muted)">
+            Valor
+          </label>
           <div className="flex gap-2">
             <select
               value={amountOperator}
-              onChange={(event) => handleAmountOperatorChange(event.target.value)}
+              onChange={(event) =>
+                handleAmountOperatorChange(event.target.value)
+              }
               className="min-w-0 w-1/2 rounded-xl border border-(--color-border) bg-(--color-bg) px-2 py-2.5 text-sm text-(--color-text) outline-none transition-colors focus:border-(--color-primary) focus:ring-2 focus:ring-(--color-primary)/20"
             >
               <option value="">--</option>
@@ -217,7 +262,12 @@ export function TransactionFiltersBar({ categories }: TransactionFiltersProps) {
 
       {hasActiveFilters && (
         <div>
-          <Button type="button" variant="ghost" onClick={clearFilters} className="px-2 py-1.5 text-xs">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={clearFilters}
+            className="px-2 py-1.5 text-xs"
+          >
             <X className="h-3.5 w-3.5" aria-hidden="true" />
             Limpar filtros
           </Button>

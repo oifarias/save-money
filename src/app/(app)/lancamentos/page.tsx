@@ -4,6 +4,7 @@ import { parseTransactionFilters } from "@/lib/validations/transaction-filters";
 import { buildTransactionWhere, getEffectivePeriod, TRANSACTIONS_PAGE_SIZE } from "@/lib/transaction-filters";
 import { getTransactionsPage } from "@/lib/transactions-query";
 import { getFixedExpensesChecklist } from "@/lib/fixed-expenses-data";
+import { getInstallmentsSummary } from "@/lib/dashboard-data";
 import type { FixedExpenseTemplatesTotals, IncomeBreakdown, ExpenseBreakdown } from "@/lib/dashboard-data";
 import { TransactionIntake } from "@/components/transactions/transaction-intake";
 import { TransactionsManager } from "@/components/transactions/transactions-manager";
@@ -31,7 +32,7 @@ export default async function LancamentosPage({ searchParams }: LancamentosPageP
   const effectivePeriod = getEffectivePeriod(filters);
   const periodLabel = effectivePeriod ? PERIOD_SUMMARY_LABELS[effectivePeriod] : "na data selecionada";
 
-  const [total, items, categories, tags, incomeAgg, expenseAgg, incomeBreakdownRows, expenseBreakdownRows, fixedExpensesChecklist] =
+  const [total, items, categories, tags, incomeAgg, expenseAgg, incomeBreakdownRows, expenseBreakdownRows, fixedExpensesChecklist, installments] =
     await Promise.all([
       prisma.transaction.count({ where }),
       getTransactionsPage(where, 1),
@@ -56,6 +57,12 @@ export default async function LancamentosPage({ searchParams }: LancamentosPageP
         _count: { _all: true },
       }),
       getFixedExpensesChecklist(userId),
+      getInstallmentsSummary(
+        userId,
+        filters.month
+          ? new Date(Number(filters.month.slice(0, 4)), Number(filters.month.slice(5, 7)) - 1, 1)
+          : new Date(new Date().getFullYear(), new Date().getMonth(), 1)
+      ),
     ]);
 
   const income = incomeAgg._sum.amount ?? 0;
@@ -122,7 +129,7 @@ export default async function LancamentosPage({ searchParams }: LancamentosPageP
         tagSuggestions={tagSuggestions}
         totalCount={total}
         pageSize={TRANSACTIONS_PAGE_SIZE}
-        summary={{ income, expense, fixedExpenseTemplates, incomeBreakdown, expenseBreakdown, periodLabel }}
+        summary={{ income, expense, fixedExpenseTemplates, incomeBreakdown, expenseBreakdown, periodLabel, installments }}
       />
     </div>
   );

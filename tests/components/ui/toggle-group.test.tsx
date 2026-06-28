@@ -2,7 +2,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { ToggleGroup } from "./toggle-group";
+import { ToggleGroup } from "@/components/ui/toggle-group";
 
 const OPTIONS = [
   { value: "EXPENSE" as const, label: "Despesa", activeColor: "--color-danger" },

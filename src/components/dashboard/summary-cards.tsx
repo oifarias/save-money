@@ -7,7 +7,7 @@ import type { FixedExpenseTemplatesTotals, IncomeBreakdown, ExpenseBreakdown } f
 type SummaryCardsProps = {
   income: number;
   expense: number;
-  installments: { currentMonth: number; currentMonthCount: number; remaining: number; lastInstallmentPlansCount: number; lastInstallmentAmount: number };
+  installments: { currentMonth: number; currentMonthCount: number; remaining: number; remainingCount: number; lastInstallmentPlansCount: number; lastInstallmentAmount: number };
   /** Mês atual no formato "YYYY-MM", usado para linkar os cards ao mesmo período exibido neles, quando `filterParams` não é informado. */
   currentMonthKey?: string;
   /** Filtros atualmente aplicados em /lancamentos (period, month, categoryId, etc.), preservados ao clicar nos cards. */
@@ -18,7 +18,7 @@ type SummaryCardsProps = {
   expenseBreakdown: ExpenseBreakdown;
 };
 
-type CardClasses = {
+export type CardClasses = {
   text: string;
   iconBg: string;
   border: string;
@@ -28,51 +28,56 @@ type CardClasses = {
 
 type SummaryCardProps = {
   title: string;
-  href: string;
+  href?: string;
   icon: LucideIcon;
   classes: CardClasses;
-  total: number;
+  total: number | string;
   left: { label: string; value: number | string };
   right: { label: string; value: number | string };
 };
 
-function SummaryCard({ title, href, icon: Icon, classes, total, left, right }: SummaryCardProps) {
-  return (
-    <Link href={href} className="block">
-      <Card className={`flex flex-col gap-2 p-4 ${classes.border} ${classes.gradient} transition-shadow hover:shadow-md`}>
-        <div className="flex items-center justify-between">
-          <p className={`text-xs font-medium uppercase tracking-wide ${classes.text}`}>{title}</p>
-          <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${classes.iconBg} ${classes.text}`}>
-            <Icon className="h-5 w-5" aria-hidden="true" />
-          </span>
-        </div>
-        <div className="flex items-baseline gap-1.5">
-          <span className="font-numeric text-2xl font-semibold text-(--color-text)">
-            <Money value={total} />
-          </span>
+export function SummaryCard({ title, href, icon: Icon, classes, total, left, right }: SummaryCardProps) {
+  const inner = (
+    <Card className={`flex flex-col gap-1 p-2 ${classes.border} ${classes.gradient} transition-shadow hover:shadow-md`}>
+      <div className="flex items-center justify-between">
+        <p className={`text-xs font-medium uppercase tracking-wide ${classes.text}`}>{title}</p>
+        <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${classes.iconBg} ${classes.text}`}>
+          <Icon className="h-5 w-5" aria-hidden="true" />
+        </span>
+      </div>
+      <div className="flex items-baseline gap-1.5">
+        <span className="font-numeric text-2xl font-semibold text-(--color-text)">
+          {typeof total === "number" ? <Money value={total} /> : total}
+        </span>
+        {typeof total === "number" && (
           <span className="text-xs text-(--color-text-muted)">(Total)</span>
+        )}
+      </div>
+      <div className={`border-t ${classes.divider}`} />
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <p className="text-xs font-medium text-(--color-text)">{left.label}</p>
+          <p className={`font-numeric text-sm font-semibold ${classes.text}`}>
+            {typeof left.value === "number" ? <Money value={left.value} /> : left.value}
+          </p>
         </div>
-        <div className={`border-t ${classes.divider}`} />
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <p className="text-xs font-medium text-(--color-text)">{left.label}</p>
-            <p className={`font-numeric text-sm font-semibold ${classes.text}`}>
-              {typeof left.value === "number" ? <Money value={left.value} /> : left.value}
-            </p>
-          </div>
-          <div>
-            <p className="text-xs font-medium text-(--color-text)">{right.label}</p>
-            <p className={`font-numeric text-sm font-semibold ${classes.text}`}>
-              {typeof right.value === "number" ? <Money value={right.value} /> : right.value}
-            </p>
-          </div>
+        <div>
+          <p className="text-xs font-medium text-(--color-text)">{right.label}</p>
+          <p className={`font-numeric text-sm font-semibold ${classes.text}`}>
+            {typeof right.value === "number" ? <Money value={right.value} /> : right.value}
+          </p>
         </div>
-      </Card>
-    </Link>
+      </div>
+    </Card>
   );
+
+  if (href) {
+    return <Link href={href} className="block">{inner}</Link>;
+  }
+  return <div>{inner}</div>;
 }
 
-const CARD_COLORS = {
+export const CARD_COLORS = {
   success: {
     text: "text-(--color-success)",
     iconBg: "bg-(--color-success)/15",
@@ -155,7 +160,7 @@ export function SummaryCards({
       icon: CreditCard,
       classes: CARD_COLORS.blue,
       total: installments.currentMonth,
-      left: { label: "Continua próx. mês", value: installments.remaining },
+      left: { label: `Continua próx. mês (${installments.remainingCount})`, value: installments.remaining },
       right: { label: `Última parcela (${lastInstallmentCount})`, value: installments.lastInstallmentAmount },
     },
     {

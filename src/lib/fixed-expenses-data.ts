@@ -6,7 +6,7 @@ export type FixedExpenseChecklistItem = {
   expectedAmount: number;
   dueDay: number;
   categoryName: string | null;
-  status: "paid" | "pending";
+  status: "paid" | "pending" | "overdue";
   transactionId: string | null;
   paidAmount: number | null;
   paidDate: string | null; // ISO
@@ -49,15 +49,21 @@ export async function getFixedExpensesChecklist(
 
   const paidByTemplateId = new Map(paidTransactions.map((t) => [t.fixedExpenseTemplateId as string, t]));
 
+  const [refYear, refMonth] = referenceMonth.split("-").map(Number);
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+
   return templates.map((template) => {
     const paid = paidByTemplateId.get(template.id);
+    const dueDate = new Date(refYear, refMonth - 1, template.dueDay);
+    const isOverdue = !paid && todayStart > dueDate;
     return {
       templateId: template.id,
       description: template.description,
       expectedAmount: template.expectedAmount,
       dueDay: template.dueDay,
       categoryName: template.category?.name ?? null,
-      status: paid ? "paid" : "pending",
+      status: paid ? "paid" : isOverdue ? "overdue" : "pending",
       transactionId: paid?.id ?? null,
       paidAmount: paid?.amount ?? null,
       paidDate: paid?.date.toISOString() ?? null,
