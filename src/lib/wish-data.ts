@@ -1,9 +1,10 @@
 import { prisma } from "@/lib/prisma";
 import {
   currentMonthKey,
-  getInstallmentCommitmentsByCategory,
+  getInstallmentCommitmentsByCategoryBatch,
   getBudgetProgress,
   getCategoryHistoricalAverages,
+  type BudgetProgress,
 } from "@/lib/budget-data";
 import { evaluateWishReadiness, type WishReadiness } from "@/lib/wish-readiness";
 import type { WishKind, WishPaymentMethod, WishPurchaseTiming, WishStatus } from "@/generated/prisma/client";
@@ -109,13 +110,19 @@ type WishRow = {
  * uma única chamada a `getBudgetProgress`/`getCategoryHistoricalAverages` por usuário — nunca uma
  * chamada redundante por desejo, mesmo que vários desejos compartilhem a mesma categoria.
  */
-async function evaluateReadinessForWishes(userId: string, wishes: WishRow[]): Promise<Map<string, WishReadiness>> {
+async function evaluateReadinessForWishes(
+  userId: string,
+  wishes: WishRow[],
+  preloadedBudgetProgress?: BudgetProgress | null
+): Promise<Map<string, WishReadiness>> {
   const currentMonth = currentMonthKey();
   const horizonMonthKeys = nextMonthsKeysFrom(currentMonth, READINESS_HORIZON_MONTHS);
 
-  const [committedByMonth, budgetProgress, historicalAverages] = await Promise.all([
-    Promise.all(horizonMonthKeys.map((monthKey) => getInstallmentCommitmentsByCategory(userId, monthKey))),
-    getBudgetProgress(userId, currentMonth),
+  const [committedByMonthMap, budgetProgress, historicalAverages] = await Promise.all([
+    getInstallmentCommitmentsByCategoryBatch(userId, horizonMonthKeys),
+    preloadedBudgetProgress !== undefined
+      ? Promise.resolve(preloadedBudgetProgress)
+      : getBudgetProgress(userId, currentMonth),
     getCategoryHistoricalAverages(userId),
   ]);
 
@@ -133,9 +140,9 @@ async function evaluateReadinessForWishes(userId: string, wishes: WishRow[]): Pr
         : null,
       budgetLimit: budgetLimitByCategory.get(wish.category.id) ?? null,
       categoryHistoricalAverage: historicalAverages.get(wish.category.id) ?? 0,
-      committedByMonth: horizonMonthKeys.map((monthKey, index) => ({
+      committedByMonth: horizonMonthKeys.map((monthKey) => ({
         monthKey,
-        committed: committedByMonth[index].get(wish.category.id) ?? 0,
+        committed: committedByMonthMap.get(monthKey)?.get(wish.category.id) ?? 0,
       })),
       monthlySavingsCapacity,
     });
@@ -188,7 +195,7 @@ function toWishSummary(wish: WishRow, readiness: WishReadiness | null): WishSumm
  * Busca todos os desejos do usuário, agrupados por desfecho (`active`/`purchased`/`abandoned`).
  * Para os `ACTIVE`, calcula a elegibilidade de compra ("pode comprar") via `evaluateWishReadiness`.
  */
-export async function getWishesPageData(userId: string): Promise<WishesPageData> {
+export async function getWishesPageData(userId: string, budgetProgress: BudgetProgress | null): Promise<WishesPageData> {
   const wishes = (await prisma.wish.findMany({
     where: { userId },
     include: WISH_INCLUDE,
@@ -196,7 +203,7 @@ export async function getWishesPageData(userId: string): Promise<WishesPageData>
   })) as WishRow[];
 
   const activeWishes = wishes.filter((w) => w.status === "ACTIVE");
-  const readinessByWishId = await evaluateReadinessForWishes(userId, activeWishes);
+  const readinessByWishId = await evaluateReadinessForWishes(userId, activeWishes, budgetProgress);
 
   const active: WishSummary[] = [];
   const purchased: WishSummary[] = [];

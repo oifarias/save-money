@@ -74,6 +74,7 @@ model User {
   installmentPlans InstallmentPlan[]
   fixedExpenseTemplates FixedExpenseTemplate[]
   wishes Wish[]
+  creditCards  CreditCard[]
 
   @@map("users")
 }
@@ -194,6 +195,7 @@ model Transaction {
   installmentPlanId String?
   installmentNumber  Int?
   fixedExpenseTemplateId String?
+  creditCardId  String?
   referenceMonth    String?         // formato "YYYY-MM" — preenchido SÓ quando a transação foi gerada via "marcar como pago" da checklist de despesa fixa; fica null para lançamentos normais, inclusive despesas fixas lançadas manualmente
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
@@ -204,15 +206,18 @@ model Transaction {
   subcategory Category?        @relation("TransactionSubcategory", fields: [subcategoryId], references: [id], onDelete: SetNull)
   installmentPlan InstallmentPlan? @relation(fields: [installmentPlanId], references: [id], onDelete: SetNull)
   fixedExpenseTemplate FixedExpenseTemplate? @relation(fields: [fixedExpenseTemplateId], references: [id], onDelete: SetNull)
+  creditCard    CreditCard?       @relation(fields: [creditCardId], references: [id], onDelete: SetNull)
   tags        TransactionTag[]
   purchasedWish Wish?
 
   @@index([userId, date])
   @@index([userId, type])
+  @@index([userId, type, date])
   @@index([categoryId])
   @@index([subcategoryId])
   @@index([installmentPlanId])
   @@index([fixedExpenseTemplateId])
+  @@index([creditCardId])
   // `referenceMonth` só é preenchido quando a transação vem da checklist de despesa fixa; nesse caso,
   // garantimos no máximo um pagamento por template/mês. Para as demais transações (fixedExpenseTemplateId
   // e referenceMonth ambos null), o Postgres NÃO considera NULLs iguais entre si em unique constraints,
@@ -245,6 +250,7 @@ model Budget {
   category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 
   @@unique([userId, categoryId, month])
+  @@index([userId, month])
   @@map("budgets")
 }
 
@@ -299,6 +305,7 @@ model Wish {
 
   @@index([userId, status])
   @@index([userId, priority])
+  @@index([userId, createdAt])
   @@index([categoryId])
   @@index([subcategoryId])
   @@map("wishes")
@@ -381,6 +388,7 @@ model InstallmentPlan {
   transactions Transaction[]
 
   @@index([userId, baseDescription, totalInstallments])
+  @@index([userId, categoryId])
   @@map("installment_plans")
 }
 
@@ -447,4 +455,21 @@ model SharedSplitParticipant {
 
   @@index([sharedSplitId])
   @@map("shared_split_participants")
+}
+
+model CreditCard {
+  id        String   @id @default(cuid())
+  userId    String
+  bankCode  String   // "btg" | "itau" | "bradesco" | "santander" | "nubank" | "neon" | "inter" | "c6"
+  nickname  String?
+  limit     Float
+  dueDay    Int      // dia de vencimento 1-28
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@index([userId])
+  @@map("credit_cards")
 }

@@ -84,25 +84,38 @@ export async function getCategoryHistoricalAverages(userId: string, monthsWindow
   const monthStart = startOfMonth(new Date());
   const historyStart = addMonths(monthStart, -monthsWindow);
 
-  const transactions = await prisma.transaction.findMany({
-    where: { userId, type: "EXPENSE", categoryId: { not: null }, date: { gte: historyStart, lt: monthStart } },
-    select: { categoryId: true, amount: true, date: true },
-  });
+  const [sumRows, monthCountRows] = await Promise.all([
+    prisma.transaction.groupBy({
+      by: ["categoryId"],
+      where: {
+        userId,
+        type: "EXPENSE",
+        categoryId: { not: null },
+        date: { gte: historyStart, lt: monthStart },
+      },
+      _sum: { amount: true },
+    }),
+    prisma.$queryRaw<{ categoryId: string; month_count: bigint }[]>`
+      SELECT "categoryId", COUNT(DISTINCT TO_CHAR(date, 'YYYY-MM')) AS month_count
+      FROM "transactions"
+      WHERE "userId" = ${userId}
+        AND type = 'EXPENSE'
+        AND "categoryId" IS NOT NULL
+        AND date >= ${historyStart}
+        AND date < ${monthStart}
+      GROUP BY "categoryId"
+    `,
+  ]);
 
-  const totalsByCategory = new Map<string, number>();
-  const monthsSeenByCategory = new Map<string, Set<string>>();
-
-  for (const tx of transactions) {
-    const categoryId = tx.categoryId as string;
-    totalsByCategory.set(categoryId, (totalsByCategory.get(categoryId) ?? 0) + tx.amount);
-    const months = monthsSeenByCategory.get(categoryId) ?? new Set<string>();
-    months.add(monthKeyOf(tx.date));
-    monthsSeenByCategory.set(categoryId, months);
-  }
+  const monthCountByCategoryId = new Map(
+    monthCountRows.map((r) => [r.categoryId, Number(r.month_count)])
+  );
 
   const averages = new Map<string, number>();
-  for (const [categoryId, total] of totalsByCategory) {
-    const monthsWithSpend = monthsSeenByCategory.get(categoryId)?.size ?? 1;
+  for (const row of sumRows) {
+    const categoryId = row.categoryId as string;
+    const total = row._sum.amount ?? 0;
+    const monthsWithSpend = monthCountByCategoryId.get(categoryId) ?? 1;
     averages.set(categoryId, total / monthsWithSpend);
   }
   return averages;
@@ -135,17 +148,13 @@ function diffInMonths(monthKey: string, startDate: Date) {
 }
 
 /**
- * Calcula, para o mês `monthKey`, o valor comprometido por categoria a partir de `InstallmentPlan`s
- * ativos com `categoryId` definido. Para cada plano, projeta o `installmentNumber` correspondente
- * àquele mês (mesma lógica do resolver: `diffInMonths(monthKey, startDate) + 1`). Se a parcela já
- * foi lançada como `Transaction` real dentro do próprio mês, o comprometido daquele plano é 0
- * (já está em `spent`, evita contar em dobro). Planos com `categoryId = null` não participam.
+ * Busca os InstallmentPlans UMA vez e calcula o comprometido por categoria para múltiplos meses
+ * em memória — elimina N queries quando chamada para um horizonte de meses.
  */
-export async function getInstallmentCommitmentsByCategory(userId: string, monthKey: string): Promise<Map<string, number>> {
-  const [year, month] = monthKey.split("-").map(Number);
-  const monthStart = new Date(year, month - 1, 1);
-  const nextMonthStart = new Date(year, month, 1);
-
+export async function getInstallmentCommitmentsByCategoryBatch(
+  userId: string,
+  monthKeys: string[]
+): Promise<Map<string, Map<string, number>>> {
   const plans = await prisma.installmentPlan.findMany({
     where: { userId, categoryId: { not: null } },
     select: {
@@ -157,22 +166,38 @@ export async function getInstallmentCommitmentsByCategory(userId: string, monthK
     },
   });
 
-  const committedByCategory = new Map<string, number>();
+  const result = new Map<string, Map<string, number>>();
+  for (const monthKey of monthKeys) {
+    const [year, month] = monthKey.split("-").map(Number);
+    const monthStart = new Date(year, month - 1, 1);
+    const nextMonthStart = new Date(year, month, 1);
+    const committedByCategory = new Map<string, number>();
 
-  for (const plan of plans) {
-    const categoryId = plan.categoryId as string;
-    const projectedInstallmentNumber = diffInMonths(monthKey, plan.startDate) + 1;
-    if (projectedInstallmentNumber < 1 || projectedInstallmentNumber > plan.totalInstallments) continue;
+    for (const plan of plans) {
+      const categoryId = plan.categoryId as string;
+      const projectedInstallmentNumber = diffInMonths(monthKey, plan.startDate) + 1;
+      if (projectedInstallmentNumber < 1 || projectedInstallmentNumber > plan.totalInstallments) continue;
 
-    const alreadyLaunchedThisMonth = plan.transactions.some(
-      (t) => t.installmentNumber === projectedInstallmentNumber && t.date >= monthStart && t.date < nextMonthStart
-    );
-    if (alreadyLaunchedThisMonth) continue;
+      const alreadyLaunchedThisMonth = plan.transactions.some(
+        (t) => t.installmentNumber === projectedInstallmentNumber && t.date >= monthStart && t.date < nextMonthStart
+      );
+      if (alreadyLaunchedThisMonth) continue;
 
-    committedByCategory.set(categoryId, (committedByCategory.get(categoryId) ?? 0) + plan.estimatedAmount);
+      committedByCategory.set(categoryId, (committedByCategory.get(categoryId) ?? 0) + plan.estimatedAmount);
+    }
+    result.set(monthKey, committedByCategory);
   }
+  return result;
+}
 
-  return committedByCategory;
+/**
+ * Calcula, para o mês `monthKey`, o valor comprometido por categoria a partir de `InstallmentPlan`s
+ * ativos com `categoryId` definido. Delega à versão batch para reuso de lógica.
+ * Planos com `categoryId = null` não participam.
+ */
+export async function getInstallmentCommitmentsByCategory(userId: string, monthKey: string): Promise<Map<string, number>> {
+  const map = await getInstallmentCommitmentsByCategoryBatch(userId, [monthKey]);
+  return map.get(monthKey) ?? new Map();
 }
 
 /** Retorna null quando o usuário ainda não definiu metas para esse mês (chamador decide mostrar o wizard). */
@@ -195,7 +220,7 @@ export async function getBudgetProgress(userId: string, monthKey: string): Promi
       _sum: { amount: true },
     }),
     prisma.budgetIncome.findUnique({ where: { userId_month: { userId, month: monthKey } } }),
-    getInstallmentCommitmentsByCategory(userId, monthKey),
+    getInstallmentCommitmentsByCategoryBatch(userId, [monthKey]).then(m => m.get(monthKey) ?? new Map<string, number>()),
   ]);
 
   const spentByCategory = new Map(spentRows.map((row) => [row.categoryId as string, row._sum.amount ?? 0]));

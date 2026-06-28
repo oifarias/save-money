@@ -60,6 +60,7 @@ export const importRowSchema = z
         message: "Formato de parcelas inválido (use x/y, ex: 3/12)",
       }),
     isFixed: z.string().trim().optional().or(z.literal("")),
+    creditCard: z.string().trim().max(60, "Nome do cartão muito longo").optional().or(z.literal("")),
   })
   .refine((data) => !(data.subcategory && !data.category), {
     message: "Sub-categoria requer uma categoria",

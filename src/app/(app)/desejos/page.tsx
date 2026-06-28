@@ -21,7 +21,7 @@ export default async function DesejosPage() {
   }
 
   const [{ active, purchased, abandoned }, categories] = await Promise.all([
-    getWishesPageData(userId),
+    getWishesPageData(userId, progress),
     prisma.category.findMany({
       where: { userId, parentId: null },
       orderBy: { name: "asc" },

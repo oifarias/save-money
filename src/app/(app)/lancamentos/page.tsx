@@ -6,6 +6,8 @@ import { getTransactionsPage } from "@/lib/transactions-query";
 import { getFixedExpensesChecklist } from "@/lib/fixed-expenses-data";
 import { getInstallmentsSummary } from "@/lib/dashboard-data";
 import type { FixedExpenseTemplatesTotals, IncomeBreakdown, ExpenseBreakdown } from "@/lib/dashboard-data";
+import Link from "next/link";
+import { CreditCard } from "lucide-react";
 import { TransactionIntake } from "@/components/transactions/transaction-intake";
 import { TransactionsManager } from "@/components/transactions/transactions-manager";
 import { FixedExpensesChecklist } from "@/components/transactions/fixed-expenses-checklist";
@@ -117,7 +119,19 @@ export default async function LancamentosPage({ searchParams }: LancamentosPageP
 
   return (
     <div className="flex flex-col gap-8">
-      <PageHeader title="Lançamentos" description="Registre um lançamento individual ou importe várias linhas de uma planilha" />
+      <PageHeader
+        title="Lançamentos"
+        description="Registre um lançamento individual ou importe várias linhas de uma planilha"
+        action={
+          <Link
+            href="/lancamentos/cartoes"
+            className="inline-flex items-center gap-2 rounded-xl border border-(--color-border) bg-(--color-surface) px-4 py-2.5 text-sm font-medium text-(--color-text) transition-all hover:border-(--color-primary)"
+          >
+            <CreditCard className="h-4 w-4" aria-hidden="true" />
+            Cartões
+          </Link>
+        }
+      />
 
       <TransactionIntake />
 

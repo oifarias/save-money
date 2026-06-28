@@ -1,7 +1,7 @@
 import { ButtonHTMLAttributes, forwardRef } from "react";
 import { clsx } from "clsx";
 
-type Variant = "primary" | "secondary" | "ghost" | "danger";
+type Variant = "primary" | "secondary" | "ghost" | "danger" | "link";
 
 const variantClasses: Record<Variant, string> = {
   primary:
@@ -10,6 +10,7 @@ const variantClasses: Record<Variant, string> = {
     "bg-(--color-surface) text-(--color-text) border border-(--color-border) hover:border-(--color-primary)",
   ghost: "bg-transparent text-(--color-text-muted) hover:text-(--color-text) hover:bg-(--color-surface)",
   danger: "bg-(--color-danger) text-white hover:brightness-105",
+  link: "bg-transparent px-0! py-0! text-xs font-medium text-(--color-primary) underline-offset-2 hover:underline",
 };
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {

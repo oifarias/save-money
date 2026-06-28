@@ -1,22 +1,26 @@
 "use client";
 
-import { useState, useTransition, useEffect } from "react";
+import { useState, useTransition } from "react";
 import toast from "react-hot-toast";
-import { ChevronDown, ChevronRight, Pencil, Plus, Trash2 } from "lucide-react";
-import { clsx } from "clsx";
+import { Layers, Pencil, Plus, Tags, Trash2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { IconBadge } from "@/components/ui/icon-badge";
 import { IconActionButton } from "@/components/ui/icon-action-button";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { CategoryForm } from "@/components/groups/category-form";
-import { getCategoryIcon, CATEGORY_ICON_SECTIONS } from "@/lib/category-icons";
-import { COLOR_SECTIONS } from "@/lib/category-colors";
-import { deleteCategoryAction, batchUpdateCategoriesAction, type BatchUpdateItem } from "@/app/(app)/grupos/actions";
+import { BatchEditModal } from "@/components/groups/batch-edit-modal";
+import { SubGroupList } from "@/components/groups/sub-group-list";
+import { GroupRenameModal } from "@/components/groups/group-rename-modal";
+import { SubGroupRenameModal } from "@/components/groups/sub-group-rename-modal";
+import { GroupStatCard } from "@/components/groups/group-stat-card";
+import { CARD_COLORS } from "@/components/dashboard/summary-cards";
+import { getCategoryIcon } from "@/lib/category-icons";
+import { deleteCategoryAction } from "@/app/(app)/grupos/actions";
 
 export type CategoryWithCount = {
   id: string;
@@ -34,180 +38,6 @@ type FormMode =
   | { kind: "create-sub"; parentId: string }
   | { kind: "edit"; category: CategoryWithCount; parentId: string | null };
 
-function BatchColorPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  return (
-    <div className="flex flex-col gap-2">
-      {COLOR_SECTIONS.map((section) => (
-        <div key={section.label}>
-          <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-(--color-text-muted)">
-            {section.label}
-          </p>
-          <div className="flex flex-wrap gap-1.5">
-            {section.colors.map((swatch) => (
-              <button
-                key={swatch}
-                type="button"
-                onClick={() => onChange(swatch)}
-                style={{ backgroundColor: swatch }}
-                className={clsx(
-                  "h-7 w-7 rounded-full ring-offset-2 ring-offset-(--color-surface) transition-all",
-                  value.toLowerCase() === swatch.toLowerCase() && "ring-2 ring-(--color-text)"
-                )}
-                aria-label={swatch}
-                title={swatch}
-              />
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function BatchIconPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  return (
-    <div className="flex max-h-40 flex-col gap-2 overflow-y-auto rounded-xl border border-(--color-border) p-2">
-      {CATEGORY_ICON_SECTIONS.map((section) => (
-        <div key={section.label}>
-          <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-(--color-text-muted)">{section.label}</p>
-          <div className="flex flex-wrap gap-1">
-            {section.icons.map((iconName) => {
-              const Icon = getCategoryIcon(iconName);
-              return (
-                <button
-                  key={iconName}
-                  type="button"
-                  title={iconName}
-                  onClick={() => onChange(iconName)}
-                  className={clsx(
-                    "flex h-8 w-8 items-center justify-center rounded-lg border transition-colors",
-                    value === iconName
-                      ? "border-(--color-primary) bg-(--color-primary)/12 text-(--color-primary)"
-                      : "border-(--color-border) text-(--color-text-muted) hover:border-(--color-primary)/50 hover:text-(--color-text)"
-                  )}
-                >
-                  <Icon className="h-4 w-4" aria-hidden="true" />
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function BatchEditModal({
-  categories,
-  open,
-  onClose,
-}: {
-  categories: CategoryWithCount[];
-  open: boolean;
-  onClose: () => void;
-}) {
-  const [items, setItems] = useState<BatchUpdateItem[]>([]);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
-
-  useEffect(() => {
-    if (open) {
-      setItems(categories.map((c) => ({ id: c.id, name: c.name, color: c.color, icon: c.icon })));
-      setExpandedId(null);
-    }
-  }, [open, categories]);
-
-  function updateItem(id: string, patch: Partial<BatchUpdateItem>) {
-    setItems((prev) => prev.map((item) => (item.id === id ? { ...item, ...patch } : item)));
-  }
-
-  function handleSave() {
-    startTransition(async () => {
-      const result = await batchUpdateCategoriesAction(items);
-      if (result.success) {
-        toast.success(result.message ?? "Grupos atualizados");
-        onClose();
-      } else {
-        toast.error(result.message ?? "Não foi possível salvar");
-      }
-    });
-  }
-
-  return (
-    <Modal open={open} title="Editar grupos em lote" onClose={onClose} size="lg">
-      <div className="flex flex-col gap-4">
-        <p className="text-sm text-(--color-text-muted)">
-          Edite nome, cor e ícone de cada grupo. Clique em "Personalizar" para alterar cor e ícone.
-        </p>
-
-        <div className="flex flex-col gap-2 overflow-y-auto" style={{ maxHeight: "60vh" }}>
-          {items.map((item) => {
-            const Icon = getCategoryIcon(item.icon);
-            const isExpanded = expandedId === item.id;
-            return (
-              <div key={item.id} className="rounded-xl border border-(--color-border) bg-(--color-bg)">
-                <div className="flex items-center gap-3 px-3 py-2.5">
-                  <div
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
-                    style={{ backgroundColor: item.color + "22", color: item.color }}
-                  >
-                    <Icon className="h-4 w-4" aria-hidden="true" />
-                  </div>
-                  <Input
-                    value={item.name}
-                    onChange={(e) => updateItem(item.id, { name: e.target.value })}
-                    className="py-1.5 text-sm"
-                    placeholder="Nome do grupo"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setExpandedId(isExpanded ? null : item.id)}
-                    className="shrink-0 text-xs font-medium text-(--color-primary) hover:underline cursor-pointer flex items-center gap-1"
-                  >
-                    {isExpanded ? (
-                      <>
-                        <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
-                        Fechar
-                      </>
-                    ) : (
-                      <>
-                        <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
-                        Personalizar
-                      </>
-                    )}
-                  </button>
-                </div>
-
-                {isExpanded && (
-                  <div className="flex flex-col gap-3 border-t border-(--color-border) px-3 pb-3 pt-2.5">
-                    <div>
-                      <p className="mb-1.5 text-xs font-medium text-(--color-text-muted)">Cor</p>
-                      <BatchColorPicker value={item.color} onChange={(color) => updateItem(item.id, { color })} />
-                    </div>
-                    <div>
-                      <p className="mb-1.5 text-xs font-medium text-(--color-text-muted)">Ícone</p>
-                      <BatchIconPicker value={item.icon} onChange={(icon) => updateItem(item.id, { icon })} />
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="flex justify-end gap-3 border-t border-(--color-border) pt-4">
-          <Button type="button" variant="secondary" onClick={onClose}>
-            Cancelar
-          </Button>
-          <Button type="button" onClick={handleSave} isLoading={isPending}>
-            Salvar alterações
-          </Button>
-        </div>
-      </div>
-    </Modal>
-  );
-}
-
 export function CategoryManager({
   categories,
   rootCategories,
@@ -219,7 +49,11 @@ export function CategoryManager({
   const [deleting, setDeleting] = useState<CategoryWithCount | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set(categories.map((c) => c.id)));
   const [batchEditOpen, setBatchEditOpen] = useState(false);
+  const [renameModalOpen, setRenameModalOpen] = useState(false);
+  const [renameSubModalOpen, setRenameSubModalOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+
+  const totalSubGroups = categories.reduce((sum, c) => sum + c.children.length, 0);
 
   function toggleCollapse(id: string) {
     setCollapsed((prev) => {
@@ -267,6 +101,28 @@ export function CategoryManager({
         }
       />
 
+      {categories.length > 0 && (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <GroupStatCard
+            icon={Tags}
+            title="Grupos"
+            count={categories.length}
+            description="Organize e categorize seus lançamentos para visualizar onde seu dinheiro vai."
+            classes={CARD_COLORS.accent}
+            onClick={() => setRenameModalOpen(true)}
+          />
+          <GroupStatCard
+            icon={Layers}
+            title="Sub-grupos"
+            count={totalSubGroups}
+            description="Subdivida grupos para um controle ainda mais detalhado dos seus gastos."
+            classes={CARD_COLORS.blue}
+            onClick={totalSubGroups > 0 ? () => setRenameSubModalOpen(true) : undefined}
+            disabled={totalSubGroups === 0}
+          />
+        </div>
+      )}
+
       {categories.length === 0 ? (
         <EmptyState
           title="Nenhum grupo ainda"
@@ -279,7 +135,7 @@ export function CategoryManager({
           }
         />
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {categories.map((category) => {
             const Icon = getCategoryIcon(category.icon);
             return (
@@ -289,12 +145,14 @@ export function CategoryManager({
                     <IconBadge icon={Icon} colorHex={category.color} />
                     <div>
                       <p className="font-medium text-(--color-text)">{category.name}</p>
-                      <p className="text-xs text-(--color-text-muted)">
-                        {category.transactionCount === 0
-                          ? "Nenhum lançamento"
-                          : `${category.transactionCount} lançamento${category.transactionCount > 1 ? "s" : ""}`}
-                        {category.isDefault && " · padrão"}
-                      </p>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-xs text-(--color-text-muted)">
+                          {category.transactionCount === 0
+                            ? "Nenhum lançamento"
+                            : `${category.transactionCount} lançamento${category.transactionCount > 1 ? "s" : ""}`}
+                        </span>
+                        {category.isDefault && <StatusBadge label="padrão" variant="muted" />}
+                      </div>
                     </div>
                   </div>
                   <div className="flex shrink-0 gap-1">
@@ -317,60 +175,23 @@ export function CategoryManager({
                 </div>
 
                 {category.children.length > 0 && (
-                  <div className="border-t border-(--color-border) pt-3">
-                    <button
-                      type="button"
-                      onClick={() => toggleCollapse(category.id)}
-                      className="flex w-full items-center justify-between gap-2 text-xs font-medium text-(--color-text-muted) hover:text-(--color-text) transition-colors cursor-pointer mb-2"
-                    >
-                      <span>
-                        {category.children.length} sub-grupo{category.children.length > 1 ? "s" : ""}
-                      </span>
-                      {collapsed.has(category.id) ? (
-                        <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
-                      ) : (
-                        <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
-                      )}
-                    </button>
-                    {!collapsed.has(category.id) && (
-                      <ul className="flex flex-col gap-1.5">
-                        {category.children.map((child) => (
-                          <li key={child.id} className="flex items-center justify-between gap-2 pl-3 text-sm">
-                            <span className="text-(--color-text-muted)">— {child.name}</span>
-                            <div className="flex shrink-0 gap-1">
-                              <IconActionButton
-                                icon={Pencil}
-                                label={`Editar sub-grupo ${child.name}`}
-                                hoverVariant="primary"
-                                size="sm"
-                                onClick={() => setFormMode({ kind: "edit", category: child, parentId: category.id })}
-                              />
-                              <IconActionButton
-                                icon={Trash2}
-                                label={`Excluir sub-grupo ${child.name}`}
-                                hoverVariant="danger"
-                                size="sm"
-                                disabled={child.transactionCount > 0}
-                                title={child.transactionCount > 0 ? "Só é possível excluir grupos vazios" : undefined}
-                                onClick={() => setDeleting(child)}
-                                className="disabled:cursor-not-allowed disabled:opacity-40"
-                              />
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
+                  <SubGroupList
+                    items={category.children}
+                    collapsed={collapsed.has(category.id)}
+                    onToggle={() => toggleCollapse(category.id)}
+                    onEdit={(child) => setFormMode({ kind: "edit", category: child, parentId: category.id })}
+                    onDelete={(child) => setDeleting(child)}
+                  />
                 )}
 
-                <button
-                  type="button"
+                <Button
+                  variant="link"
+                  className="self-start gap-1!"
                   onClick={() => setFormMode({ kind: "create-sub", parentId: category.id })}
-                  className="flex items-center gap-1 self-start text-xs font-medium text-(--color-primary) hover:underline"
                 >
                   <Plus className="h-3.5 w-3.5" aria-hidden="true" />
                   Novo sub-grupo
-                </button>
+                </Button>
               </Card>
             );
           })}
@@ -408,6 +229,18 @@ export function CategoryManager({
         isLoading={isPending}
         onConfirm={confirmDelete}
         onCancel={() => setDeleting(null)}
+      />
+
+      <GroupRenameModal
+        categories={categories}
+        open={renameModalOpen}
+        onClose={() => setRenameModalOpen(false)}
+      />
+
+      <SubGroupRenameModal
+        categories={categories}
+        open={renameSubModalOpen}
+        onClose={() => setRenameSubModalOpen(false)}
       />
     </div>
   );

@@ -35,6 +35,7 @@ export const transactionSchema = z
       .refine((value) => !value || (Number.isInteger(Number(value)) && Number(value) >= 1 && Number(value) <= 360), {
         message: "Informe um número de parcela entre 1 e 360",
       }),
+    creditCardId: z.string().trim().optional().or(z.literal("")),
   })
   .superRefine((data, ctx) => {
     if (data.isInstallment && !data.totalInstallments) {

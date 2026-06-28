@@ -2,18 +2,18 @@
 
 import { useActionState, useEffect } from "react";
 import toast from "react-hot-toast";
-import { clsx } from "clsx";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SelectField } from "@/components/ui/select-field";
-import { CATEGORY_ICON_SECTIONS, getCategoryIcon } from "@/lib/category-icons";
+import { ColorPicker } from "@/components/groups/color-picker";
+import { IconPicker } from "@/components/groups/icon-picker";
+import { CATEGORY_ICON_SECTIONS } from "@/lib/category-icons";
 import { COLOR_SECTIONS } from "@/lib/category-colors";
-
-const DEFAULT_ICON = CATEGORY_ICON_SECTIONS[0].icons[0];
 import { createCategoryAction, updateCategoryAction, type ActionResult } from "@/app/(app)/grupos/actions";
 
-const initialState: ActionResult = { success: false };
+const DEFAULT_ICON = CATEGORY_ICON_SECTIONS[0].icons[0];
 
+const initialState: ActionResult = { success: false };
 
 type CategoryFormProps = {
   category?: { id: string; name: string; color: string; icon: string; parentId?: string | null };
@@ -73,9 +73,17 @@ export function CategoryForm({ category, rootCategories = [], lockParent = false
         )
       )}
 
-      <ColorPicker defaultValue={category?.color || COLOR_SECTIONS[0].colors[0]} error={state.fieldErrors?.color} />
+      <ColorPicker
+        mode="form"
+        defaultValue={category?.color || COLOR_SECTIONS[0].colors[0]}
+        error={state.fieldErrors?.color}
+      />
 
-      <IconPicker defaultValue={category?.icon || DEFAULT_ICON} error={state.fieldErrors?.icon} />
+      <IconPicker
+        mode="form"
+        defaultValue={category?.icon || DEFAULT_ICON}
+        error={state.fieldErrors?.icon}
+      />
 
       <div className="mt-1 flex justify-end gap-2">
         <Button type="button" variant="ghost" onClick={onDone}>
@@ -86,85 +94,5 @@ export function CategoryForm({ category, rootCategories = [], lockParent = false
         </Button>
       </div>
     </form>
-  );
-}
-
-function ColorPicker({ defaultValue, error }: { defaultValue: string; error?: string }) {
-  return (
-    <fieldset className="flex flex-col gap-1.5">
-      <legend className="text-sm font-medium text-(--color-text)">Cor</legend>
-      <div className="flex flex-col gap-2 rounded-xl border border-(--color-border) p-3">
-        {COLOR_SECTIONS.map((section) => (
-          <div key={section.label}>
-            <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-(--color-text-muted)">
-              {section.label}
-            </p>
-            <div className="flex flex-wrap gap-2" role="radiogroup" aria-label={section.label}>
-              {section.colors.map((swatch) => (
-                <label key={swatch} className="cursor-pointer" title={swatch}>
-                  <input
-                    type="radio"
-                    name="color"
-                    value={swatch}
-                    defaultChecked={swatch.toLowerCase() === defaultValue.toLowerCase()}
-                    className="peer sr-only"
-                  />
-                  <span
-                    style={{ backgroundColor: swatch }}
-                    className="block h-7 w-7 rounded-full ring-offset-2 ring-offset-(--color-surface) transition-all peer-checked:ring-2 peer-checked:ring-(--color-text) peer-focus-visible:ring-2"
-                    aria-hidden="true"
-                  />
-                </label>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-      {error && <p className="text-xs text-(--color-danger)">{error}</p>}
-    </fieldset>
-  );
-}
-
-function IconPicker({ defaultValue, error }: { defaultValue: string; error?: string }) {
-  return (
-    <fieldset className="flex flex-col gap-2">
-      <legend className="text-sm font-medium text-(--color-text)">Ícone</legend>
-      <div className="flex max-h-64 flex-col gap-3 overflow-y-auto rounded-xl border border-(--color-border) p-3">
-        {CATEGORY_ICON_SECTIONS.map((section) => (
-          <div key={section.label}>
-            <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-(--color-text-muted)">
-              {section.label}
-            </p>
-            <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label={section.label}>
-              {section.icons.map((iconName) => {
-                const Icon = getCategoryIcon(iconName);
-                return (
-                  <label key={iconName} className="cursor-pointer" title={iconName}>
-                    <input
-                      type="radio"
-                      name="icon"
-                      value={iconName}
-                      defaultChecked={iconName === defaultValue}
-                      className="peer sr-only"
-                    />
-                    <span
-                      className={clsx(
-                        "flex h-9 w-9 items-center justify-center rounded-lg border border-(--color-border) text-(--color-text-muted) transition-colors",
-                        "peer-checked:border-(--color-primary) peer-checked:bg-(--color-primary)/12 peer-checked:text-(--color-primary)",
-                        "peer-focus-visible:ring-2 peer-focus-visible:ring-(--color-primary)/30",
-                        "hover:border-(--color-primary)/50 hover:text-(--color-text)"
-                      )}
-                    >
-                      <Icon className="h-4.5 w-4.5" aria-hidden="true" />
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-          </div>
-        ))}
-      </div>
-      {error && <p className="text-xs text-(--color-danger)">{error}</p>}
-    </fieldset>
   );
 }
