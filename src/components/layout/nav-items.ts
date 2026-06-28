@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { ArrowLeftRight, BarChart3, LayoutDashboard, Lightbulb, Sparkles, Tags, Target } from "lucide-react";
+import { ArrowLeftRight, BarChart3, LayoutDashboard, Lightbulb, ShoppingCart, Tags, Target } from "lucide-react";
 
 export type NavItem = {
   href: string;
@@ -11,7 +11,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/lancamentos", label: "Lançamentos", icon: ArrowLeftRight },
   { href: "/metas", label: "Metas", icon: Target },
-  { href: "/desejos", label: "Compras", icon: Sparkles },
+  { href: "/desejos", label: "Compras", icon: ShoppingCart },
   { href: "/comparativo", label: "Comparativo", icon: BarChart3 },
   { href: "/insights", label: "Insights", icon: Lightbulb },
   { href: "/grupos", label: "Grupos", icon: Tags },

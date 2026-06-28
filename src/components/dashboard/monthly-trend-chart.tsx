@@ -46,8 +46,8 @@ export function MonthlyTrendChart({ data }: { data: MonthlyTrendPoint[] }) {
               formatter={(value) => (value === "income" ? "Entradas" : "Saídas")}
               wrapperStyle={{ fontSize: 12, color: "var(--color-text-muted)" }}
             />
-            <Bar dataKey="income" name="income" fill="var(--color-success)" radius={[6, 6, 0, 0]} animationDuration={700} />
-            <Bar dataKey="expense" name="expense" fill="var(--color-danger)" radius={[6, 6, 0, 0]} animationDuration={700} />
+            <Bar dataKey="income" name="income" fill="var(--color-success)" radius={[6, 6, 0, 0]} isAnimationActive animationBegin={300} animationDuration={900} animationEasing="ease-out" />
+            <Bar dataKey="expense" name="expense" fill="var(--color-danger)" radius={[6, 6, 0, 0]} isAnimationActive animationBegin={420} animationDuration={900} animationEasing="ease-out" />
           </BarChart>
         </ResponsiveContainer>
       </div>

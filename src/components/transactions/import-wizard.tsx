@@ -23,6 +23,11 @@ import {
   Tag,
   Layers,
   Hash,
+  Target,
+  ShoppingCart,
+  BarChart2,
+  ArrowLeftRight,
+  ArrowRight,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { Card } from "@/components/ui/card";
@@ -1109,26 +1114,86 @@ export function ImportWizard({ existingCategories, existingTagNames = [] }: Impo
       )}
 
       {step === "result" && result && (
-        <Card className="flex flex-col items-center justify-center gap-4 py-14 text-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-(--color-success)/10 text-(--color-success)">
-            <CheckCircle2 size={28} aria-hidden="true" />
-          </div>
+        <div className="flex flex-col gap-6">
+          <Card className="flex flex-col items-center gap-4 py-10 text-center">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-(--color-success)/10 text-(--color-success)">
+              <CheckCircle2 size={28} aria-hidden="true" />
+            </div>
+            <div>
+              <h2 className="font-display text-lg font-semibold text-(--color-text)">Importação concluída!</h2>
+              <p className="mt-1 text-sm text-(--color-text-muted)">
+                {result.imported} lançamento{result.imported !== 1 ? "s" : ""} importado{result.imported !== 1 ? "s" : ""} com sucesso
+                {result.skipped > 0 && ` · ${result.skipped} ignorado${result.skipped !== 1 ? "s" : ""} por erro`}
+              </p>
+            </div>
+            <div className="flex flex-wrap justify-center gap-3">
+              <Button type="button" variant="secondary" onClick={handleReset}>
+                Importar outro arquivo
+              </Button>
+              <Button type="button" onClick={() => router.push("/lancamentos")}>
+                Ver lançamentos
+              </Button>
+            </div>
+          </Card>
+
           <div>
-            <h2 className="font-display text-lg font-semibold text-(--color-text)">Importação concluída</h2>
-            <p className="mt-1 text-sm text-(--color-text-muted)">
-              {result.imported} lançamento(s) importado(s) com sucesso
-              {result.skipped > 0 && ` · ${result.skipped} ignorado(s) por erro`}
-            </p>
+            <p className="mb-3 text-sm font-medium text-(--color-text-muted)">O que fazer agora?</p>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {[
+                {
+                  href: "/dashboard",
+                  icon: BarChart2,
+                  title: "Acompanhar nos gráficos",
+                  description: "Veja entradas, despesas e saldo do período nos painéis do dashboard.",
+                  color: "text-blue-500",
+                  bg: "bg-blue-500/10",
+                },
+                {
+                  href: "/comparativo",
+                  icon: ArrowLeftRight,
+                  title: "Comparar meses",
+                  description: "Compare dois períodos e veja como seus gastos evoluíram.",
+                  color: "text-(--color-accent)",
+                  bg: "bg-(--color-accent)/10",
+                },
+                {
+                  href: "/metas",
+                  icon: Target,
+                  title: "Criar metas",
+                  description: "Defina objetivos financeiros e acompanhe o progresso mês a mês.",
+                  color: "text-(--color-success)",
+                  bg: "bg-(--color-success)/10",
+                },
+                {
+                  href: "/desejos",
+                  icon: ShoppingCart,
+                  title: "Lista de desejos",
+                  description: "Organize compras planejadas e veja se cabem no seu orçamento.",
+                  color: "text-(--color-primary)",
+                  bg: "bg-(--color-primary)/10",
+                },
+              ].map(({ href, icon: Icon, title, description, color, bg }) => (
+                <a
+                  key={href}
+                  href={href}
+                  className="group flex flex-col gap-3 rounded-2xl border border-(--color-border) bg-(--color-surface) p-4 transition-shadow hover:shadow-md"
+                >
+                  <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${bg} ${color}`}>
+                    <Icon size={20} aria-hidden="true" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-(--color-text)">{title}</p>
+                    <p className="mt-0.5 text-xs text-(--color-text-muted)">{description}</p>
+                  </div>
+                  <span className={`inline-flex items-center gap-1 text-xs font-medium ${color}`}>
+                    Acessar
+                    <ArrowRight size={12} className="transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+                  </span>
+                </a>
+              ))}
+            </div>
           </div>
-          <div className="flex gap-3">
-            <Button type="button" variant="secondary" onClick={handleReset}>
-              Importar outro arquivo
-            </Button>
-            <Button type="button" onClick={() => router.push("/lancamentos")}>
-              Ver lançamentos importados
-            </Button>
-          </div>
-        </Card>
+        </div>
       )}
 
       {isParsing && step === "upload" && (

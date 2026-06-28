@@ -92,6 +92,37 @@ h1, h2, h3, h4, .font-display {
   animation: fade-grow 320ms ease-out both;
 }
 
+@keyframes chart-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-chart-in {
+  animation: chart-in 500ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-chart-in-delay-1 {
+  animation: chart-in 500ms cubic-bezier(0.16, 1, 0.3, 1) 120ms both;
+}
+
+.animate-chart-in-delay-2 {
+  animation: chart-in 500ms cubic-bezier(0.16, 1, 0.3, 1) 240ms both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-chart-in,
+  .animate-chart-in-delay-1,
+  .animate-chart-in-delay-2 {
+    animation: none;
+  }
+}
+
 /* Extrato vivo: rolagem contínua da lista de lançamentos na landing page */
 @keyframes ledger-scroll {
   from {

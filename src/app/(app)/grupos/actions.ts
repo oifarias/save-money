@@ -44,6 +44,7 @@ export async function createCategoryAction(_prev: ActionResult, formData: FormDa
   }
 
   const { parentId, ...data } = parsed.data;
+  data.name = data.name.trim().toUpperCase();
 
   if (parentId) {
     const parent = await prisma.category.findFirst({ where: { id: parentId, userId, parentId: null } });
@@ -85,6 +86,7 @@ export async function updateCategoryAction(_prev: ActionResult, formData: FormDa
   }
 
   const { parentId, ...data } = parsed.data;
+  data.name = data.name.trim().toUpperCase();
 
   const category = await prisma.category.findFirst({ where: { id, userId } });
   if (!category) {
@@ -117,6 +119,38 @@ export async function updateCategoryAction(_prev: ActionResult, formData: FormDa
   revalidatePath("/lancamentos");
   invalidateAggregateCaches(userId);
   return { success: true, message: "Grupo atualizado com sucesso" };
+}
+
+export type BatchUpdateItem = { id: string; name: string; color: string; icon: string };
+
+export async function batchUpdateCategoriesAction(items: BatchUpdateItem[]): Promise<ActionResult> {
+  const userId = await requireUserId();
+
+  if (items.length === 0) return { success: false, message: "Nenhum grupo selecionado" };
+
+  const ids = items.map((item) => item.id);
+  const existing = await prisma.category.findMany({ where: { id: { in: ids }, userId }, select: { id: true } });
+  const validIds = new Set(existing.map((c) => c.id));
+
+  const updates = items
+    .filter((item) => validIds.has(item.id))
+    .map((item) => {
+      const parsed = categorySchema.safeParse({ name: item.name, color: item.color, icon: item.icon, parentId: "" });
+      if (!parsed.success) return null;
+      const { parentId: _parentId, ...data } = parsed.data;
+      data.name = data.name.trim().toUpperCase();
+      return { id: item.id, data };
+    })
+    .filter((u): u is { id: string; data: { name: string; color: string; icon: string } } => u !== null);
+
+  if (updates.length === 0) return { success: false, message: "Nenhum dado válido para salvar" };
+
+  await prisma.$transaction(updates.map((u) => prisma.category.update({ where: { id: u.id }, data: u.data })));
+
+  revalidatePath("/grupos");
+  revalidatePath("/lancamentos");
+  invalidateAggregateCaches(userId);
+  return { success: true, message: `${updates.length} grupo${updates.length > 1 ? "s" : ""} atualizado${updates.length > 1 ? "s" : ""} com sucesso` };
 }
 
 export async function deleteCategoryAction(id: string): Promise<ActionResult> {

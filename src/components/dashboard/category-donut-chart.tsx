@@ -7,9 +7,26 @@ import { Money } from "@/components/ui/money";
 import { useValuesVisibility } from "@/contexts/values-visibility";
 import type { CategorySlice } from "@/lib/dashboard-data";
 
+const CHART_PALETTE = [
+  "#2563EB", "#16A34A", "#DC2626", "#D97706", "#7C3AED",
+  "#0D9488", "#DB2777", "#EA580C", "#0284C7", "#4C1D95",
+  "#15803D", "#991B1B", "#1D4ED8", "#9333EA", "#0F766E",
+];
+
+function resolveColors(data: CategorySlice[]): string[] {
+  const colorCount = new Map<string, number>();
+  for (const slice of data) colorCount.set(slice.color, (colorCount.get(slice.color) ?? 0) + 1);
+  let paletteIndex = 0;
+  return data.map((slice) => {
+    if ((colorCount.get(slice.color) ?? 0) === 1) return slice.color;
+    return CHART_PALETTE[paletteIndex++ % CHART_PALETTE.length];
+  });
+}
+
 export function CategoryDonutChart({ data }: { data: CategorySlice[] }) {
   const total = data.reduce((sum, slice) => sum + slice.value, 0);
   const { showValues } = useValuesVisibility();
+  const colors = resolveColors(data);
 
   return (
     <Card>
@@ -31,11 +48,13 @@ export function CategoryDonutChart({ data }: { data: CategorySlice[] }) {
                 innerRadius="62%"
                 outerRadius="85%"
                 paddingAngle={2}
-                animationDuration={700}
+                isAnimationActive
+                animationBegin={180}
+                animationDuration={900}
                 animationEasing="ease-out"
               >
-                {data.map((slice) => (
-                  <Cell key={slice.id} fill={slice.color} stroke="var(--color-surface)" strokeWidth={2} />
+                {data.map((slice, index) => (
+                  <Cell key={slice.id} fill={colors[index]} stroke="var(--color-surface)" strokeWidth={2} />
                 ))}
               </Pie>
               <Tooltip

@@ -77,8 +77,12 @@ export default async function DashboardPage() {
       />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <CategoryDonutChart data={dashboardData.categoryDistribution} />
-        <MonthlyTrendChart data={dashboardData.monthlyTrend} />
+        <div className="animate-chart-in-delay-1">
+          <CategoryDonutChart data={dashboardData.categoryDistribution} />
+        </div>
+        <div className="animate-chart-in-delay-2">
+          <MonthlyTrendChart data={dashboardData.monthlyTrend} />
+        </div>
       </div>
 
       <InsightsPanel insights={dashboardData.insights} />

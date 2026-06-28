@@ -31,31 +31,31 @@ export async function resolveCategoryAndSubcategory(
 
 /** Busca uma categoria raiz do usuário pelo nome ou cria uma nova com cor/ícone padrão. */
 export async function findOrCreateRootCategory(db: Db, userId: string, name: string) {
-  const trimmed = name.trim();
-  if (!trimmed) return null;
+  const normalized = name.trim().toUpperCase();
+  if (!normalized) return null;
 
   const existing = await db.category.findFirst({
-    where: { userId, name: trimmed, parentId: null },
+    where: { userId, name: normalized, parentId: null },
   });
   if (existing) return existing;
 
   return db.category.create({
-    data: { userId, name: trimmed },
+    data: { userId, name: normalized },
   });
 }
 
 /** Busca uma sub-categoria do usuário sob o pai informado pelo nome ou cria uma nova. */
 export async function findOrCreateSubcategory(db: Db, userId: string, parentId: string, name: string) {
-  const trimmed = name.trim();
-  if (!trimmed) return null;
+  const normalized = name.trim().toUpperCase();
+  if (!normalized) return null;
 
   const existing = await db.category.findFirst({
-    where: { userId, name: trimmed, parentId },
+    where: { userId, name: normalized, parentId },
   });
   if (existing) return existing;
 
   return db.category.create({
-    data: { userId, name: trimmed, parentId },
+    data: { userId, name: normalized, parentId },
   });
 }
 
@@ -65,7 +65,7 @@ export async function findOrCreateSubcategory(db: Db, userId: string, parentId: 
  * quantidade de linhas de origem. Nomes vazios/duplicados são ignorados/deduplicados.
  */
 export async function batchResolveRootCategories(db: Db, userId: string, names: string[]): Promise<Map<string, Category>> {
-  const uniqueNames = Array.from(new Set(names.map((name) => name.trim()).filter(Boolean)));
+  const uniqueNames = Array.from(new Set(names.map((name) => name.trim().toUpperCase()).filter(Boolean)));
   if (uniqueNames.length === 0) return new Map();
 
   const existing = await db.category.findMany({
@@ -106,7 +106,7 @@ export async function batchResolveSubcategories(
 ): Promise<Map<string, Category>> {
   const uniqueItems = new Map<string, { parentId: string; name: string }>();
   for (const item of items) {
-    const name = item.name.trim();
+    const name = item.name.trim().toUpperCase();
     if (!name) continue;
     uniqueItems.set(subcategoryKey(item.parentId, name), { parentId: item.parentId, name });
   }

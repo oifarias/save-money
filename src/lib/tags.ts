@@ -3,7 +3,7 @@ import type { Prisma, PrismaClient, Tag } from "@/generated/prisma/client";
 type Db = PrismaClient | Prisma.TransactionClient;
 
 export function cleanTagName(raw: string): string {
-  return raw.trim().replace(/^#/, "");
+  return raw.trim().replace(/^#/, "").trim().toUpperCase();
 }
 
 /** Substitui as tags de um lançamento, criando as que ainda não existem para o usuário. */
