@@ -27,6 +27,7 @@ export default async function DashboardPage() {
           subcategory: { select: { id: true, name: true, color: true, icon: true } },
           tags: { include: { tag: { select: { name: true } } } },
           installmentPlan: { select: { totalInstallments: true } },
+          creditCard: { select: { id: true, bankCode: true, nickname: true } },
         },
       }),
       prisma.category.findMany({
@@ -60,6 +61,9 @@ export default async function DashboardPage() {
       transaction.installmentNumber && transaction.installmentPlan
         ? { number: transaction.installmentNumber, total: transaction.installmentPlan.totalInstallments }
         : null,
+    creditCard: transaction.creditCard
+      ? { id: transaction.creditCard.id, bankCode: transaction.creditCard.bankCode, nickname: transaction.creditCard.nickname }
+      : null,
   }));
 
   return (

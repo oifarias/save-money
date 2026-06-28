@@ -26,4 +26,10 @@ FLUXO:
 
 8. Ao concluir tarefa que toque UI: suba app, navegue à tela afetada, envie print via SendUserFile antes de declarar concluído. Pule só quando a mudança for puramente backend sem reflexo visual.
 
+REGRA CRÍTICA — FLUXOS DE LANÇAMENTO: Toda nova funcionalidade que afete a criação ou edição de lançamentos DEVE considerar e cobrir os três fluxos obrigatoriamente:
+1. **Batch** (`src/components/transactions/transaction-batch-panel.tsx` + `/lancamentos/novo`) — formulário de múltiplos lançamentos, estado gerenciado via `ItemDraft`; novos campos precisam ser adicionados ao tipo, ao `createItem()`, à UI e ao `payload` enviado para `createTransactionBatchAction`.
+2. **Excel/Import** (`src/components/transactions/import-wizard.tsx` + `src/lib/import-helpers.ts` + `src/app/(app)/lancamentos/import-actions.ts`) — mapeamento de colunas, `MappedRow`, `IMPORT_FIELDS` e persistência na action.
+3. **Edição via modal** (`src/components/transactions/transactions-manager.tsx` + `transaction-list.tsx`) — `editingValues`, repasse de props e exibição na linha da transação (`transaction-row.tsx`).
+Nunca feche uma tarefa de feature em lançamentos sem ter verificado e atualizado os três fluxos.
+
 NÃO FAZ: reescrever código nas áreas dos especialistas; pular validação de especialistas em pedidos não-triviais; despachar por hábito sem necessidade real; aceitar ambiguidade de requisito sem perguntar.

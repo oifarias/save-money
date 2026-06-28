@@ -34,7 +34,7 @@ export default async function LancamentosPage({ searchParams }: LancamentosPageP
   const effectivePeriod = getEffectivePeriod(filters);
   const periodLabel = effectivePeriod ? PERIOD_SUMMARY_LABELS[effectivePeriod] : "na data selecionada";
 
-  const [total, items, categories, tags, incomeAgg, expenseAgg, incomeBreakdownRows, expenseBreakdownRows, fixedExpensesChecklist, installments] =
+  const [total, items, categories, tags, incomeAgg, expenseAgg, incomeBreakdownRows, expenseBreakdownRows, fixedExpensesChecklist, installments, creditCards] =
     await Promise.all([
       prisma.transaction.count({ where }),
       getTransactionsPage(where, 1),
@@ -65,6 +65,11 @@ export default async function LancamentosPage({ searchParams }: LancamentosPageP
           ? new Date(Number(filters.month.slice(0, 4)), Number(filters.month.slice(5, 7)) - 1, 1)
           : new Date(new Date().getFullYear(), new Date().getMonth(), 1)
       ),
+      prisma.creditCard.findMany({
+        where: { userId },
+        orderBy: { createdAt: "asc" },
+        select: { id: true, bankCode: true, nickname: true },
+      }),
     ]);
 
   const income = incomeAgg._sum.amount ?? 0;
@@ -144,6 +149,7 @@ export default async function LancamentosPage({ searchParams }: LancamentosPageP
         totalCount={total}
         pageSize={TRANSACTIONS_PAGE_SIZE}
         summary={{ income, expense, fixedExpenseTemplates, incomeBreakdown, expenseBreakdown, periodLabel, installments }}
+        creditCards={creditCards}
       />
     </div>
   );

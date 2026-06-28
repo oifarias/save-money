@@ -21,8 +21,14 @@ describe("import-helpers (regras de frontend) — guessColumnMapping nos 3 fixtu
     expect(mapping.subcategory).toBe("Sub-categoria");
     expect(mapping.tags).toBe("Tags");
     expect(mapping.installments).toBe("Parcelas (x/y)");
+    // Fixtures legados usavam "Despesa fixa" — ainda reconhecido via COLUMN_GUESSES para retrocompatibilidade.
+    // O novo template usa "Fixa", mas ambos os formatos são aceitos.
     expect(mapping.isFixed).toBe("Despesa fixa");
-    expect(Object.values(mapping)).not.toContain(NONE_COLUMN);
+    // creditCard é opcional e os fixtures foram criados antes desta coluna existir; por isso pode ser NONE_COLUMN.
+    const mappingWithoutCreditCard = Object.entries(mapping)
+      .filter(([key]) => key !== "creditCard")
+      .map(([, value]) => value);
+    expect(mappingWithoutCreditCard).not.toContain(NONE_COLUMN);
   });
 
   it("planilha de cenários de erro e mista também têm o mapeamento totalmente reconhecido (mesmos headers do modelo)", () => {
@@ -36,9 +42,11 @@ describe("import-helpers (regras de frontend) — guessColumnMapping nos 3 fixtu
     const erroMapping = guessColumnMapping(erroSheet.headers);
     const mistosMapping = guessColumnMapping(mistosSheet.headers);
 
-    // Assert
-    expect(Object.values(erroMapping)).not.toContain(NONE_COLUMN);
-    expect(Object.values(mistosMapping)).not.toContain(NONE_COLUMN);
+    // Assert — creditCard é opcional e os fixtures legados não têm essa coluna
+    const withoutCreditCard = (m: Record<string, string>) =>
+      Object.entries(m).filter(([k]) => k !== "creditCard").map(([, v]) => v);
+    expect(withoutCreditCard(erroMapping)).not.toContain(NONE_COLUMN);
+    expect(withoutCreditCard(mistosMapping)).not.toContain(NONE_COLUMN);
   });
 });
 

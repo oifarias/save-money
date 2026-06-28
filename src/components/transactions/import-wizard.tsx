@@ -345,6 +345,7 @@ export function ImportWizard({ existingCategories, existingTagNames = [] }: Impo
     tags: NONE,
     installments: NONE,
     isFixed: NONE,
+    creditCard: NONE,
   });
   const [isParsing, setIsParsing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -614,7 +615,7 @@ export function ImportWizard({ existingCategories, existingTagNames = [] }: Impo
     setIsSubmitting(true);
     try {
       const response = await importTransactionsAction(
-        validRows.map(({ date, description, amount, type, category, subcategory, tags, installments, isFixed }) => ({
+        validRows.map(({ date, description, amount, type, category, subcategory, tags, installments, isFixed, creditCard }) => ({
           date,
           description,
           amount,
@@ -624,6 +625,7 @@ export function ImportWizard({ existingCategories, existingTagNames = [] }: Impo
           tags,
           installments,
           isFixed,
+          creditCard: creditCard ?? "",
         }))
       );
 
@@ -656,6 +658,7 @@ export function ImportWizard({ existingCategories, existingTagNames = [] }: Impo
       tags: NONE,
       installments: NONE,
       isFixed: NONE,
+      creditCard: NONE,
     });
     setResult(null);
     setIsMappingExpanded(false);

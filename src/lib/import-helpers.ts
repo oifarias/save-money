@@ -175,6 +175,7 @@ export type MappedRow = {
   tags: string;
   installments: string;
   isFixed: string;
+  creditCard: string;
   error?: string;
 };
 
@@ -202,6 +203,7 @@ export function buildMappedRows(sheet: ParsedSheet, mapping: Record<ImportFieldK
     const rawTags = columnIndex.tags >= 0 ? row[columnIndex.tags] : "";
     const rawInstallments = columnIndex.installments >= 0 ? row[columnIndex.installments] : "";
     const rawIsFixed = columnIndex.isFixed >= 0 ? row[columnIndex.isFixed] : "";
+    const rawCreditCard = columnIndex.creditCard >= 0 ? row[columnIndex.creditCard] : "";
 
     const date = normalizeDate(rawDate) ?? "";
     const amount = normalizeAmount(rawAmount) ?? "";
@@ -225,6 +227,7 @@ export function buildMappedRows(sheet: ParsedSheet, mapping: Record<ImportFieldK
       tags: rawTags.trim(),
       installments: rawInstallments.trim(),
       isFixed: rawIsFixed.trim(),
+      creditCard: rawCreditCard.trim(),
     };
 
     const parsed = importRowSchema.safeParse(candidate);
@@ -244,6 +247,7 @@ const COLUMN_GUESSES: Record<ImportFieldKey, string[]> = {
   tags: ["tags", "hashtags", "etiquetas"],
   installments: ["parcelas (x/y)", "parcelas", "parcela", "installments", "parcelamento"],
   isFixed: ["despesa fixa", "entrada fixa", "fixa", "fixed", "is fixed", "recorrente"],
+  creditCard: ["cartão", "cartao", "cartão de crédito", "cartao de credito", "credit card", "creditcard"],
 };
 
 /** Tenta adivinhar o mapeamento de colunas a partir dos headers da planilha (mesmos nomes do modelo). */

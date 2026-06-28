@@ -12,7 +12,7 @@ import { TagInput } from "@/components/transactions/tag-input";
 import { CategoryForm } from "@/components/groups/category-form";
 import { formatCurrency } from "@/lib/format";
 import { createTransactionBatchAction } from "@/app/(app)/lancamentos/actions";
-import type { TransactionFormCategory } from "@/components/transactions/transaction-form";
+import type { TransactionFormCategory, CreditCardOption } from "@/components/transactions/transaction-form";
 
 type ItemDraft = {
   key: string;
@@ -29,6 +29,8 @@ type ItemDraft = {
   totalInstallments: string;
   currentInstallment: string;
   createPastInstallments: boolean;
+  usesCreditCard: boolean;
+  selectedCreditCardId: string;
 };
 
 function todayISODate() {
@@ -51,15 +53,18 @@ function createItem(): ItemDraft {
     totalInstallments: "",
     currentInstallment: "1",
     createPastInstallments: false,
+    usesCreditCard: false,
+    selectedCreditCardId: "",
   };
 }
 
 type TransactionBatchPanelProps = {
   categories: TransactionFormCategory[];
   tagSuggestions: string[];
+  creditCards?: CreditCardOption[];
 };
 
-export function TransactionBatchPanel({ categories, tagSuggestions }: TransactionBatchPanelProps) {
+export function TransactionBatchPanel({ categories, tagSuggestions, creditCards }: TransactionBatchPanelProps) {
   const router = useRouter();
   const [items, setItems] = useState<ItemDraft[]>([createItem()]);
   const [expandedKey, setExpandedKey] = useState<string | null>(items[0]?.key ?? null);
@@ -124,6 +129,7 @@ export function TransactionBatchPanel({ categories, tagSuggestions }: Transactio
       isInstallment: item.isInstallment,
       totalInstallments: item.totalInstallments,
       currentInstallment: item.createPastInstallments && parseInt(item.currentInstallment, 10) > 1 ? "1" : item.currentInstallment,
+      creditCardId: item.usesCreditCard ? item.selectedCreditCardId : "",
     }));
 
     startTransition(async () => {
@@ -359,6 +365,41 @@ export function TransactionBatchPanel({ categories, tagSuggestions }: Transactio
                       </span>
                       </div>
                     </label>
+
+                    {creditCards && creditCards.length > 0 && (
+                      <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-(--color-border) bg-(--color-bg) p-3.5 transition-colors has-[:checked]:border-(--color-primary) has-[:checked]:ring-1 has-[:checked]:ring-(--color-primary)">
+                        <input
+                          type="checkbox"
+                          checked={item.usesCreditCard}
+                          onChange={(e) => updateItem(item.key, { usesCreditCard: e.target.checked, selectedCreditCardId: "" })}
+                          className="mt-0.5 h-4 w-4 shrink-0 accent-(--color-primary)"
+                        />
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-sm font-medium text-(--color-text)">Pago no cartão de crédito</span>
+                          <span className="text-xs text-(--color-text-muted)">
+                            O valor não sairá da conta agora — será debitado no próximo ciclo do cartão.
+                          </span>
+                        </div>
+                      </label>
+                    )}
+
+                    {item.usesCreditCard && creditCards && creditCards.length > 0 && (
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-sm font-medium text-(--color-text)">Cartão utilizado</label>
+                        <select
+                          value={item.selectedCreditCardId}
+                          onChange={(e) => updateItem(item.key, { selectedCreditCardId: e.target.value })}
+                          className="rounded-xl border border-(--color-border) bg-(--color-surface) px-3.5 py-2.5 text-sm text-(--color-text) outline-none transition-colors focus:border-(--color-primary) focus:ring-2 focus:ring-(--color-primary)/20"
+                        >
+                          <option value="">Selecione um cartão</option>
+                          {creditCards.map((card) => (
+                            <option key={card.id} value={card.id}>
+                              {card.nickname ?? card.bankCode}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
 
                     <div className="flex flex-col gap-3 rounded-xl border border-(--color-border) bg-(--color-bg) p-3.5">
                       <label className="flex cursor-pointer items-center gap-2.5">

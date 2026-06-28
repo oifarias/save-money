@@ -18,6 +18,12 @@ import {
   type ActionResult,
 } from "@/app/(app)/lancamentos/actions";
 
+export type CreditCardOption = {
+  id: string;
+  bankCode: string;
+  nickname: string | null;
+};
+
 const initialState: ActionResult = { success: false };
 
 export type TransactionFormCategory = { id: string; name: string; children: { id: string; name: string }[] };
@@ -35,6 +41,7 @@ export type TransactionFormValues = {
   tags: string[];
   installmentNumber?: number;
   installmentTotal?: number;
+  creditCardId?: string;
 };
 
 type TransactionFormProps = {
@@ -42,13 +49,14 @@ type TransactionFormProps = {
   tagSuggestions: string[];
   transaction?: TransactionFormValues;
   onDone: () => void;
+  creditCards?: CreditCardOption[];
 };
 
 function todayISODate() {
   return new Date().toISOString().slice(0, 10);
 }
 
-export function TransactionForm({ categories, tagSuggestions, transaction, onDone }: TransactionFormProps) {
+export function TransactionForm({ categories, tagSuggestions, transaction, onDone, creditCards = [] }: TransactionFormProps) {
   const router = useRouter();
   const action = transaction ? updateTransactionAction : createTransactionAction;
   const [state, formAction, isPending] = useActionState(action, initialState);
@@ -63,6 +71,8 @@ export function TransactionForm({ categories, tagSuggestions, transaction, onDon
   const [totalInstallments, setTotalInstallments] = useState("");
   const [currentInstallment, setCurrentInstallment] = useState("1");
   const [createPastInstallments, setCreatePastInstallments] = useState(false);
+  const [usesCreditCard, setUsesCreditCard] = useState(Boolean(transaction?.creditCardId));
+  const [selectedCreditCardId, setSelectedCreditCardId] = useState(transaction?.creditCardId ?? "");
 
   const selectedCategory = categories.find((category) => category.id === categoryId);
   const subcategoryOptions = selectedCategory?.children ?? [];
@@ -201,10 +211,64 @@ export function TransactionForm({ categories, tagSuggestions, transaction, onDon
               <span className="text-sm font-medium text-(--color-text)">Despesa fixa</span>
               <span className="text-xs text-(--color-text-muted)">
                Marque essa opção para que ela apareça todo mês na checklist de despesas fixas leve em consideração despesas que se repetem todo mês.
-                     
+
               </span>
             </div>
           </label>
+        )}
+
+        {type === "EXPENSE" && (
+          <div className="flex flex-col gap-3 rounded-xl border border-(--color-border) bg-(--color-bg) p-3.5">
+            <label className="flex cursor-pointer items-center gap-2.5">
+              <input
+                type="checkbox"
+                checked={usesCreditCard}
+                onChange={(e) => {
+                  setUsesCreditCard(e.target.checked);
+                  if (!e.target.checked) setSelectedCreditCardId("");
+                }}
+                className="h-4 w-4 rounded accent-(--color-primary)"
+              />
+              <div className="flex flex-col gap-0.5">
+                <span className="text-sm font-medium text-(--color-text)">Pago no cartão de crédito</span>
+                <span className="text-xs text-(--color-text-muted)">
+                  O valor não sai da conta agora — será cobrado na fatura do próximo mês.
+                </span>
+              </div>
+            </label>
+
+            {usesCreditCard && creditCards.length === 0 && (
+              <p className="text-xs text-(--color-text-muted)">
+                Nenhum cartão cadastrado.{" "}
+                <a href="/lancamentos/cartoes" className="text-(--color-primary) hover:underline">
+                  Cadastre um cartão
+                </a>{" "}
+                para selecionar aqui.
+              </p>
+            )}
+
+            {usesCreditCard && creditCards.length > 0 && (
+              <SelectField
+                label="Cartão utilizado"
+                name="creditCardId"
+                value={selectedCreditCardId}
+                onChange={(e) => setSelectedCreditCardId(e.target.value)}
+              >
+                <option value="">Selecione o cartão</option>
+                {creditCards.map((card) => (
+                  <option key={card.id} value={card.id}>
+                    {card.nickname
+                      ? `${card.nickname} · ${card.bankCode.toUpperCase()}`
+                      : card.bankCode.toUpperCase()}
+                  </option>
+                ))}
+              </SelectField>
+            )}
+
+            {(!usesCreditCard || creditCards.length === 0) && (
+              <input type="hidden" name="creditCardId" value="" />
+            )}
+          </div>
         )}
 
         {type === "INCOME" && (

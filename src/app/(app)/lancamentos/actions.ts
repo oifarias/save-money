@@ -75,6 +75,7 @@ function parseFormData(formData: FormData) {
     isInstallment: formData.get("isInstallment") === "on",
     totalInstallments: String(formData.get("totalInstallments") ?? ""),
     currentInstallment: String(formData.get("currentInstallment") ?? ""),
+    creditCardId: String(formData.get("creditCardId") ?? ""),
   });
 }
 
@@ -86,7 +87,7 @@ export async function createTransactionAction(_prev: ActionResult, formData: For
     return { success: false, fieldErrors: flattenZodErrors(parsed.error) };
   }
 
-  const { type, date, description, amount, categoryId, subcategoryId, isFixed, recurrence, tags, isInstallment, totalInstallments, currentInstallment } =
+  const { type, date, description, amount, categoryId, subcategoryId, isFixed, recurrence, tags, isInstallment, totalInstallments, currentInstallment, creditCardId } =
     parsed.data;
 
   const accountId = await getDefaultAccountId(userId);
@@ -154,6 +155,7 @@ export async function createTransactionAction(_prev: ActionResult, formData: For
         installmentPlanId: null,
         installmentNumber: null,
         fixedExpenseTemplateId: fixedExpenseInfo.fixedExpenseTemplateId,
+        creditCardId: creditCardId || null,
       },
     });
 
@@ -181,7 +183,7 @@ export async function updateTransactionAction(_prev: ActionResult, formData: For
     return { success: false, message: "Lançamento não encontrado" };
   }
 
-  const { type, date, description, amount, categoryId, subcategoryId, isFixed, recurrence, tags } = parsed.data;
+  const { type, date, description, amount, categoryId, subcategoryId, isFixed, recurrence, tags, creditCardId } = parsed.data;
 
   const { error } = await resolveCategoryAndSubcategory(userId, categoryId ?? "", subcategoryId ?? "");
   if (error) {
@@ -221,6 +223,7 @@ export async function updateTransactionAction(_prev: ActionResult, formData: For
         installmentPlanId: installmentInfo?.installmentPlanId ?? null,
         installmentNumber: installmentInfo?.installmentNumber ?? null,
         fixedExpenseTemplateId: fixedExpenseInfo.fixedExpenseTemplateId,
+        creditCardId: creditCardId || null,
       },
     });
 
@@ -653,7 +656,7 @@ export async function createTransactionBatchAction(items: unknown): Promise<Acti
   try {
     await prisma.$transaction(async (tx) => {
       for (const item of parsed.data.items) {
-        const { type, date, description, amount, categoryId, subcategoryId, isFixed, recurrence, tags, isInstallment, totalInstallments, currentInstallment } = item;
+        const { type, date, description, amount, categoryId, subcategoryId, isFixed, recurrence, tags, isInstallment, totalInstallments, currentInstallment, creditCardId } = item;
 
         if (isInstallment && totalInstallments) {
           const startInstallmentNumber = currentInstallment ? Number(currentInstallment) : 1;
@@ -701,6 +704,7 @@ export async function createTransactionBatchAction(items: unknown): Promise<Acti
               installmentPlanId: null,
               installmentNumber: null,
               fixedExpenseTemplateId: fixedExpenseInfo.fixedExpenseTemplateId,
+              creditCardId: creditCardId || null,
             },
           });
 

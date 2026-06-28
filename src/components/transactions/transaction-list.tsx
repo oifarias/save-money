@@ -14,6 +14,7 @@ import {
   TransactionForm,
   type TransactionFormCategory,
   type TransactionFormValues,
+  type CreditCardOption,
 } from "@/components/transactions/transaction-form";
 import { TransactionRow } from "@/components/transactions/transaction-row";
 import { toInputDate } from "@/lib/format";
@@ -32,6 +33,7 @@ export type TransactionListItem = {
   tags: string[];
   /** Identifica a que parcelamento esta transação pertence, para exibir o badge "Parcela X/N". */
   installment: { number: number; total: number } | null;
+  creditCard: { id: string; bankCode: string; nickname: string | null } | null;
 };
 
 type TransactionListProps = {
@@ -42,6 +44,7 @@ type TransactionListProps = {
   description?: string;
   viewAllHref?: string;
   showHeaderAction?: boolean;
+  creditCards?: CreditCardOption[];
 };
 
 export function TransactionList({
@@ -52,6 +55,7 @@ export function TransactionList({
   description = "Registre e acompanhe suas entradas e despesas",
   viewAllHref,
   showHeaderAction = true,
+  creditCards,
 }: TransactionListProps) {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<TransactionListItem | null>(null);
@@ -100,6 +104,7 @@ export function TransactionList({
         tags: editing.tags,
         installmentNumber: editing.installment?.number,
         installmentTotal: editing.installment?.total,
+        creditCardId: editing.creditCard?.id ?? "",
       }
     : undefined;
 
@@ -157,6 +162,7 @@ export function TransactionList({
           tagSuggestions={tagSuggestions}
           transaction={editingValues}
           onDone={closeForm}
+          creditCards={creditCards ?? []}
         />
       </Modal>
 

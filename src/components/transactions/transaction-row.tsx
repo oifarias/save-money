@@ -8,6 +8,7 @@ import { Money } from "@/components/ui/money";
 import { IconBadge } from "@/components/ui/icon-badge";
 import { IconActionButton } from "@/components/ui/icon-action-button";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { BankIcon, getBankByCode } from "@/lib/bank-icons";
 import type { TransactionListItem } from "@/components/transactions/transaction-list";
 
 type TransactionRowProps = {
@@ -72,6 +73,16 @@ export function TransactionRow({ transaction, onEdit, onDelete, selectable, sele
               #{tag}
             </span>
           ))}
+          {transaction.creditCard && (
+            <span className="flex items-center gap-1">
+              <BankIcon bankCode={transaction.creditCard.bankCode} size="sm" />
+              <span>
+                {transaction.creditCard.nickname ??
+                  getBankByCode(transaction.creditCard.bankCode)?.name ??
+                  transaction.creditCard.bankCode}
+              </span>
+            </span>
+          )}
         </div>
       </div>
 

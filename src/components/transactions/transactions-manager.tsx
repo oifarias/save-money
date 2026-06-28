@@ -13,6 +13,7 @@ import {
   TransactionForm,
   type TransactionFormCategory,
   type TransactionFormValues,
+  type CreditCardOption,
 } from "@/components/transactions/transaction-form";
 import { TransactionRow } from "@/components/transactions/transaction-row";
 import { FiltersPanel } from "@/components/transactions/filters-panel";
@@ -50,6 +51,7 @@ type TransactionsManagerProps = {
   totalCount: number;
   pageSize: number;
   summary: TransactionsSummary;
+  creditCards?: CreditCardOption[];
 };
 
 export function TransactionsManager({
@@ -59,6 +61,7 @@ export function TransactionsManager({
   totalCount,
   pageSize,
   summary,
+  creditCards,
 }: TransactionsManagerProps) {
   const searchParams = useSearchParams();
 
@@ -89,7 +92,7 @@ export function TransactionsManager({
   const transactionsSignature = transactions
     .map(
       (t) =>
-        `${t.id}:${t.amount}:${t.description}:${t.category?.id ?? ""}:${t.subcategory?.id ?? ""}:${t.date}`,
+        `${t.id}:${t.amount}:${t.description}:${t.category?.id ?? ""}:${t.subcategory?.id ?? ""}:${t.date}:${t.creditCard?.id ?? ""}`,
     )
     .join("|");
   const resetKey = `${filtersKey}::${transactionsSignature}`;
@@ -230,6 +233,7 @@ export function TransactionsManager({
         tags: editing.tags,
         installmentNumber: editing.installment?.number,
         installmentTotal: editing.installment?.total,
+        creditCardId: editing.creditCard?.id ?? "",
       }
     : undefined;
 
@@ -408,6 +412,7 @@ export function TransactionsManager({
           tagSuggestions={tagSuggestions}
           transaction={editingValues}
           onDone={closeForm}
+          creditCards={creditCards ?? []}
         />
       </Modal>
 

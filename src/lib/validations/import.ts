@@ -81,6 +81,7 @@ export const IMPORT_FIELDS = [
   { key: "tags", label: "Tags", required: false },
   { key: "installments", label: "Parcelas (x/y)", required: false },
   { key: "isFixed", label: "Fixa", required: false },
+  { key: "creditCard", label: "Cartão de crédito", required: false },
 ] as const;
 
 export type ImportFieldKey = (typeof IMPORT_FIELDS)[number]["key"];

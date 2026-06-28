@@ -10,13 +10,18 @@ export default async function NovoLancamentoPage() {
   const session = await auth();
   const userId = session!.user.id;
 
-  const [categories, tags] = await Promise.all([
+  const [categories, tags, creditCards] = await Promise.all([
     prisma.category.findMany({
       where: { userId, parentId: null },
       orderBy: { name: "asc" },
       include: { children: { orderBy: { name: "asc" }, select: { id: true, name: true } } },
     }),
     prisma.tag.findMany({ where: { userId }, orderBy: { name: "asc" }, select: { name: true } }),
+    prisma.creditCard.findMany({
+      where: { userId },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, bankCode: true, nickname: true },
+    }),
   ]);
 
   const formCategories = categories.map((category) => ({
@@ -42,7 +47,7 @@ export default async function NovoLancamentoPage() {
         </div>
       </div>
 
-      <TransactionBatchPanel categories={formCategories} tagSuggestions={tagSuggestions} />
+      <TransactionBatchPanel categories={formCategories} tagSuggestions={tagSuggestions} creditCards={creditCards} />
     </div>
   );
 }

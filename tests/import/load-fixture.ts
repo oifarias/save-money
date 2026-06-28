@@ -37,6 +37,7 @@ export function identityMapping(): Record<ImportFieldKey, string> {
     tags: "Tags",
     installments: "Parcelas (x/y)",
     isFixed: "Despesa fixa",
+    creditCard: "Cartão de crédito",
   };
   return Object.fromEntries(IMPORT_FIELDS.map((field) => [field.key, headerByField[field.key]])) as Record<
     ImportFieldKey,

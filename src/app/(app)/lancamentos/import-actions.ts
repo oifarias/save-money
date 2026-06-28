@@ -40,6 +40,7 @@ export type ImportRowPayload = {
   tags: string;
   installments: string;
   isFixed: string;
+  creditCard?: string;
 };
 
 // Timeout da mini-tx por linha de parcelamento (plan + N transactions devem ser atômicos entre
@@ -57,9 +58,10 @@ type ParsedRow = {
   tagNames: string[];
   installments: NormalizedInstallments | null;
   isFixed: boolean;
+  creditCardName: string;
 };
 
-type ResolvedRow = ParsedRow & { categoryId: string | null; subcategoryId: string | null };
+type ResolvedRow = ParsedRow & { categoryId: string | null; subcategoryId: string | null; creditCardId: string | null };
 
 export async function importTransactionsAction(rows: ImportRowPayload[]): Promise<ImportActionResult> {
   const userId = await requireUserId();
@@ -82,7 +84,7 @@ export async function importTransactionsAction(rows: ImportRowPayload[]): Promis
       continue;
     }
 
-    const { date, description, amount, type, category, subcategory, tags, installments, isFixed } = parsed.data;
+    const { date, description, amount, type, category, subcategory, tags, installments, isFixed, creditCard } = parsed.data;
     parsedRows.push({
       date: new Date(date),
       description,
@@ -93,6 +95,7 @@ export async function importTransactionsAction(rows: ImportRowPayload[]): Promis
       tagNames: tags ? normalizeTags(tags) : [],
       installments: normalizeInstallments(installments ?? ""),
       isFixed: normalizeFixedFlag(isFixed ?? ""),
+      creditCardName: (creditCard ?? "").trim(),
     });
   }
 
@@ -101,6 +104,27 @@ export async function importTransactionsAction(rows: ImportRowPayload[]): Promis
   }
 
   const accountId = await ensureDefaultAccountId(userId);
+
+  // Fase 0.5: cartões de crédito (1 query).
+  const BANK_NAMES: Record<string, string> = {
+    btg: "btg pactual", itau: "itaú", bradesco: "bradesco",
+    santander: "santander", nubank: "nubank", neon: "neon",
+    inter: "inter", c6: "c6 bank",
+  };
+  const creditCardMap = new Map<string, string>(); // chave normalizada → id
+  const hasCreditCardRows = parsedRows.some((r) => r.creditCardName);
+  if (hasCreditCardRows) {
+    const userCards = await prisma.creditCard.findMany({
+      where: { userId },
+      select: { id: true, bankCode: true, nickname: true },
+    });
+    for (const card of userCards) {
+      const bankName = BANK_NAMES[card.bankCode] ?? card.bankCode;
+      creditCardMap.set(bankName.toLowerCase(), card.id);
+      creditCardMap.set(card.bankCode.toLowerCase(), card.id);
+      if (card.nickname) creditCardMap.set(card.nickname.toLowerCase(), card.id);
+    }
+  }
 
   // Fase 1: categorias raiz (2 queries totais, independente do nº de linhas).
   const rootCategoryNames = parsedRows.map((row) => row.category).filter(Boolean);
@@ -120,7 +144,10 @@ export async function importTransactionsAction(rows: ImportRowPayload[]): Promis
     const categoryId = row.category ? rootCategoryMap.get(row.category)?.id ?? null : null;
     const subcategoryId =
       categoryId && row.subcategory ? subcategoryMap.get(subcategoryKey(categoryId, row.subcategory))?.id ?? null : null;
-    return { ...row, categoryId, subcategoryId };
+    const creditCardId = row.creditCardName
+      ? (creditCardMap.get(row.creditCardName.toLowerCase()) ?? null)
+      : null;
+    return { ...row, categoryId, subcategoryId, creditCardId };
   });
 
   const installmentRows = resolvedRows.filter((row) => row.installments);
@@ -190,6 +217,7 @@ export async function importTransactionsAction(rows: ImportRowPayload[]): Promis
                   description: `${row.description} (${n}/${installments.total})`,
                   installmentPlanId: plan.id,
                   installmentNumber: n,
+                  creditCardId: row.creditCardId,
                 },
                 select: { id: true },
               });
@@ -229,6 +257,7 @@ export async function importTransactionsAction(rows: ImportRowPayload[]): Promis
         fixedExpenseTemplateId:
           row.isFixed && row.type === "EXPENSE" ? fixedTemplateMap.get(fixedExpenseTemplateKey(row.categoryId, row.description)) ?? null : null,
         recurrence: "NONE",
+        creditCardId: row.creditCardId,
       })),
       select: { id: true },
     });
