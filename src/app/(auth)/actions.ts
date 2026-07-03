@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { signIn } from "@/lib/auth";
 import { setupNewUserDefaults } from "@/lib/onboarding";
 import { loginSchema, recoverSchema, registerSchema } from "@/lib/validations/auth";
+import { checkLoginRateLimit } from "@/lib/rate-limit";
 
 export type ActionResult = {
   success: boolean;
@@ -27,8 +28,13 @@ export async function registerAction(_prev: ActionResult, formData: FormData): P
 
   const { name, email, password } = parsed.data;
 
+  const rateLimit = await checkLoginRateLimit(email, { limit: 5, windowMs: 60_000 });
+  if (!rateLimit.allowed) {
+    return { success: false, message: "Muitas tentativas. Aguarde um pouco antes de tentar novamente." };
+  }
+
   try {
-    const existing = await prisma.user.findUnique({ where: { email } });
+    const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } });
     if (existing) {
       return {
         success: false,
@@ -73,6 +79,11 @@ export async function loginAction(_prev: ActionResult, formData: FormData): Prom
     return { success: false, fieldErrors: flattenZodErrors(parsed.error) };
   }
 
+  const rateLimit = await checkLoginRateLimit(parsed.data.email, { limit: 5, windowMs: 60_000 });
+  if (!rateLimit.allowed) {
+    return { success: false, message: "Muitas tentativas. Aguarde um pouco antes de tentar novamente." };
+  }
+
   try {
     await signIn("credentials", {
       email: parsed.data.email,
@@ -100,6 +111,16 @@ export async function recoverPasswordAction(_prev: ActionResult, formData: FormD
   const parsed = recoverSchema.safeParse(raw);
   if (!parsed.success) {
     return { success: false, fieldErrors: flattenZodErrors(parsed.error) };
+  }
+
+  // Limite mais generoso que login (não é brute force de senha), mas evita
+  // spam de e-mail de recuperação / varredura de enumeração via timing.
+  const rateLimit = await checkLoginRateLimit(parsed.data.email, { limit: 3, windowMs: 60_000 });
+  if (!rateLimit.allowed) {
+    return {
+      success: true,
+      message: "Se o e-mail existir em nossa base, você receberá um link de recuperação em instantes.",
+    };
   }
 
   // Em produção: gerar token temporário e enviar e-mail via Nodemailer.

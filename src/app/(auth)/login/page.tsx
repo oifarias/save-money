@@ -11,6 +11,19 @@ import { GoogleIcon } from "@/components/icons/google-icon";
 
 const initialState: ActionResult = { success: false };
 
+/**
+ * Só aceita paths internos relativos ("/dashboard"). Rejeita URLs absolutas
+ * e variantes de bypass de open redirect ("//evil.com", "/\evil.com",
+ * "https:/evil.com") que um atacante poderia colocar em ?callbackUrl=.
+ */
+function sanitizeCallbackUrl(value: string | null): string {
+  if (!value) return "/dashboard";
+  if (!value.startsWith("/") || value.startsWith("//") || value.startsWith("/\\")) {
+    return "/dashboard";
+  }
+  return value;
+}
+
 export default function LoginPage() {
   return (
     <Suspense>
@@ -27,7 +40,7 @@ function LoginForm() {
   useEffect(() => {
     if (state.success) {
       toast.success("Login realizado com sucesso!");
-      router.push(searchParams.get("callbackUrl") ?? "/dashboard");
+      router.push(sanitizeCallbackUrl(searchParams.get("callbackUrl")));
       router.refresh();
     } else if (state.message) {
       toast.error(state.message);

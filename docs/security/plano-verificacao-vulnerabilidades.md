@@ -2,12 +2,15 @@
 
 Origem: checklist de pentest/scan recebido (7 achados). Este documento traduz cada
 item em passos concretos de verificação **neste código específico**, com arquivos,
-comandos e critérios de aceite. Nenhum item foi corrigido ainda — este é só o plano
-de checagem/reprodução.
+comandos e critérios de aceite.
 
 Stack relevante: Next.js 16 (App Router) + NextAuth v5 (`session: { strategy: "jwt" }`)
 + Prisma + Postgres. Middleware em `src/proxy.ts`. Server Actions em `**/actions.ts`.
 Rotas de API "de verdade" em `src/app/api/**`.
+
+**Status:** plano executado — ver [Parte 3](#parte-3--execução-correções-aplicadas)
+para o resumo do que foi corrigido, verificado como não-vulnerável, ou deliberadamente
+deixado para depois (com o motivo).
 
 ---
 
@@ -516,3 +519,64 @@ e confirmação de que o lockfile pina integridade do tarball externo do xlsx.
    não basta testar um e assumir os outros.
 5. Repetir a auditoria do item 12 (Server Actions sem auth redundante) para
    **todo** arquivo `actions.ts`, não só o exemplo usado (`grupos`).
+
+---
+
+# Parte 3 — Execução (correções aplicadas)
+
+Rodada de execução deste plano: leitura de todo o código relevante, aplicação das
+correções viáveis, e validação com `npx tsc --noEmit`, `npm run lint`, `npx next
+build` e teste manual de CSP num browser real (Playwright) contra `/login`,
+`/cadastro` e `/recuperar-senha`. **Não foi possível rodar `npm test` nem exercitar
+os fluxos autenticados de ponta a ponta** — o ambiente onde a execução rodou não
+tem `DATABASE_URL`/Postgres disponível. Testar login/logout/rate-limit/IDOR de
+verdade contra um banco real antes de ir pra produção.
+
+| # | Item | Resultado |
+|---|------|-----------|
+| 1 | Rate limit ausente | **Corrigido** — `src/lib/rate-limit.ts` (sliding window em memória, por IP+conta), aplicado em `loginAction`, `registerAction`, `recoverPasswordAction` e `adminLoginAction`. |
+| 2 | CORS refletindo Origin | **Verificado — não reproduzido.** Não existe nenhum header CORS customizado no código (grep confirmou); Next.js não adiciona `Access-Control-Allow-Origin` por padrão, então não há reflexo de Origin a corrigir. Nenhuma mudança necessária. |
+| 3 | PII/hash na resposta | **Corrigido** — `select` explícito adicionado em `prisma.user.findUnique` de `src/lib/auth.ts` (authorize) e `src/app/(auth)/actions.ts` (checagem de e-mail duplicado). Demais queries de `user` no repo já usavam `select` restrito. |
+| 4 | JWT vivo pós-logout | **Corrigido** — campo `tokenVersion` no `User` (migration `20260703023201_add_user_token_version`), incrementado em `events.signOut` (`src/lib/auth.ts`), propagado via `jwt`/`session` callbacks, e comparado contra o banco em `(app)/layout.tsx`; mismatch força logout via `src/app/api/auth/force-signout/route.ts`. Sessões emitidas antes do deploy continuam válidas (ambas partem de `tokenVersion = 0`) — só é revogada a partir do primeiro logout de cada usuário depois do deploy. Admin (`admin-auth.ts`) **não** recebeu o mesmo mecanismo — não há registro de usuário no banco pra versionar (credenciais vêm de env var) e o cookie já é httpOnly+assinado+expira em 12h; ver justificativa completa abaixo. |
+| 5 | Enumeração de usuário | **Parcialmente corrigido.** Login e recuperação de senha já respondiam com mensagem genérica (nenhuma mudança necessária ali). Adicionado `bcrypt.compare` contra hash dummy em `authorize()` (`src/lib/auth.ts`) quando o e-mail não existe, pra normalizar timing. `registerAction` continua informando "e-mail já cadastrado" — decisão de produto mantida como estava (enumeração aceitável nesse fluxo específico), não alterada. |
+| 6 | Clickjacking | **Corrigido** — `X-Frame-Options: DENY` + `Content-Security-Policy: frame-ancestors 'none'` em `next.config.ts`. |
+| 7a | SQL Injection | **Verificado — não reproduzido.** As três raw queries (`admin-data.ts`, `budget-data.ts`, `dashboard-data.ts`) usam tagged template do Prisma (`` prisma.$queryRaw`...${valor}...` ``), que parametriza automaticamente. Nenhum `$queryRawUnsafe`/concatenação de string encontrado. Nenhuma mudança necessária. |
+| 7b | IDOR | **Verificado — não reproduzido.** Toda escrita por `id` em `lancamentos`, `metas`, `desejos`, `cartoes` e `grupos` é precedida por um `findFirst`/`findMany` escopado por `userId`. Único ponto fraco encontrado (`batchUpdateCategoriesAction`) foi endurecido — ver item 13. |
+| 8 | Open redirect (`callbackUrl`) | **Corrigido** — `sanitizeCallbackUrl()` em `src/app/(auth)/login/page.tsx` rejeita qualquer valor que não seja um path relativo interno (`//`, `/\`, URLs absolutas caem no fallback `/dashboard`). |
+| 9 | Formula/CSV Injection no export XLSX | **Corrigido** — `sanitizeForSpreadsheet()` em `src/app/api/export/transactions/route.ts` prefixa com `'` valores que comecem com `= + - @ \t \r` (descrição, categoria, subcategoria, tags). |
+| 10 | CVE-2025-29927 (bypass de middleware) | **Verificado.** `next@16.2.7` está muito além das versões corrigidas (12.3.5/13.5.9/14.2.25/15.2.3). Defesa em profundidade confirmada: `(app)/layout.tsx` e `admin/(dashboard)/layout.tsx` já revalidam sessão no server independente do middleware. Nenhuma mudança de código necessária, só manter o Next.js atualizado. |
+| 11 | Headers de segurança incompletos | **Corrigido** — `next.config.ts` agora envia `X-Frame-Options`, `Content-Security-Policy`, `Strict-Transport-Security`, `X-Content-Type-Options`, `Referrer-Policy` e `Permissions-Policy` em todas as rotas. **Ressalva:** `script-src` precisou incluir `'unsafe-inline'` (testado com Playwright: sem isso, o Next.js App Router quebra a hidratação — usa scripts inline para streaming do RSC payload) e o domínio `https://va.vercel-scripts.com` (script do Vercel Web Analytics). Um CSP com nonce por requisição eliminaria o `'unsafe-inline'` de forma mais rigorosa, mas exige gerar/propagar o nonce no middleware (`src/proxy.ts`) — deixado como melhoria futura para não mexer no middleware nesta rodada. |
+| 12 | Server Actions sem auth redundante | **Verificado — não reproduzido.** Toda função exportada em todo `actions.ts` do projeto (`lancamentos`, `metas`, `desejos`, `cartoes`, `grupos`, `import-actions`, auth, admin) já chama `requireUserId()`/`auth()` como primeira linha. Nenhuma mudança necessária. |
+| 13 | Race condition/TOCTOU | **Parcialmente endurecido.** `batchUpdateCategoriesAction` (`src/app/(app)/grupos/actions.ts`) trocou os `update` finais por `updateMany({ where: { id, userId } })`, fechando a janela entre a checagem de posse e a escrita. Os demais padrões `findFirst` → `update` (ex.: `updateTransactionAction`) não foram alterados — mesmo request, janela desprezível, não é uma brecha entre usuários diferentes. Proteção de double-submit/idempotência para operações financeiras (parcelamento, contribuição de meta) **não foi implementada** — é uma decisão de produto sobre UX (bloquear botão? idempotency key? constraint no banco?) que exige mais contexto do time antes de mudar comportamento. |
+| 14 | Dependências vulneráveis | **Documentado, não aplicado automaticamente.** `npm audit` confirma as 10 vulnerabilidades já listadas na Parte 2. Tentativa de `npm audit fix` falhou neste ambiente de execução porque a política de rede do sandbox bloqueia `cdn.sheetjs.com` (de onde vem o `xlsx`, dependência real do projeto) — qualquer `npm install`/`npm audit fix` precisa resolver essa URL e falha com 403 antes de conseguir tocar nas outras dependências. Investigação adicional: `hono`/`@hono/node-server` (o único de severidade alta) entram via `@prisma/dev` (tooling local do `prisma dev`, nunca roda em produção — risco real baixo apesar do label "high"); `postcss <8.5.10` é bundlado **dentro do próprio `next@16.2.7`** (`node_modules/next/node_modules/postcss`) — só processa CSS em build-time, não em runtime por requisição, mas é a única das quatro cadeias que toca o build de produção diretamente; `uuid <11.1.1` vem de `exceljs` (dependência de produção real, usada em paralelo ao `xlsx` — confirmar por que o projeto tem as duas libs de planilha). **Recomendação para rodar com acesso de rede completo:** `npm audit fix` (só resolve `hono`, sem breaking change) e considerar `"overrides": { "postcss": "^8.5.10" }` no `package.json` pra forçar a versão corrigida sem depender de um upgrade do Next — testar o build depois de qualquer uma dessas mudanças. |
+
+## Por que a estratégia de sessão do admin não foi alterada (item 4, admin)
+
+O mesmo teste teórico de "cookie continua válido depois do logout" existe para o
+`admin_session` (`src/lib/admin-auth.ts`): o cookie é um HMAC assinado com `exp`
+embutido, e `adminLogoutAction` só deleta o cookie do browser, sem revogação
+server-side. Diferente do usuário comum, o admin não tem uma linha na tabela
+`User` pra guardar um `tokenVersion` (as credenciais vêm de `ADMIN_USERNAME`/
+`ADMIN_PASSWORD_HASH` via env var) — implementar revogação exigiria um store de
+estado adicional (Redis, ou reaproveitar o `Map` em memória de `rate-limit.ts` com
+as mesmas limitações de instância única). Dado que é uma única conta administrativa
+de alto controle (não multi-tenant), o cookie já expira sozinho em 12h, e é
+httpOnly+assinado (não roubável por XSS simples nem falsificável sem o segredo),
+o custo de implementar isso agora não parece proporcional ao risco residual.
+Deixado como item conhecido e documentado, não como "resolvido".
+
+## O que ainda precisa de decisão humana / teste com banco real
+
+- **Item 13 (idempotência financeira):** decidir a estratégia (idempotency key,
+  desabilitar botão + debounce no client, constraint única no banco) antes de mexer
+  no fluxo de lançamentos parcelados/recorrentes.
+- **Item 14 (dependências):** rodar `npm audit fix` com rede completa e avaliar o
+  `overrides` de `postcss` sugerido acima.
+- **Testar com Postgres real:** login/logout end-to-end (o `tokenVersion` do item 4
+  nunca foi exercitado contra um banco de verdade), rate limit do item 1 sob carga,
+  e os testes automatizados existentes (`npm test`) — nada disso rodou nesta
+  execução por falta de `DATABASE_URL` no ambiente.
+- **CSP com nonce (item 11):** se o time quiser eliminar `'unsafe-inline'` de
+  `script-src`, é preciso gerar um nonce por requisição no middleware
+  (`src/proxy.ts`) — mudança maior, não incluída aqui por tocar o mesmo arquivo
+  discutido no item 10 (CVE de bypass de middleware).
