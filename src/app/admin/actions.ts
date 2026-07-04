@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { ADMIN_SESSION_COOKIE, createAdminSessionCookieValue, verifyAdminCredentials } from "@/lib/admin-auth";
+import { checkLoginRateLimit } from "@/lib/rate-limit";
 
 export type AdminActionResult = {
   success: boolean;
@@ -26,6 +27,11 @@ export async function adminLoginAction(
 
   if (!parsed.success) {
     return { success: false, message: "Informe usuário e senha" };
+  }
+
+  const rateLimit = await checkLoginRateLimit(parsed.data.username, { limit: 5, windowMs: 60_000 });
+  if (!rateLimit.allowed) {
+    return { success: false, message: "Muitas tentativas. Aguarde um pouco antes de tentar novamente." };
   }
 
   const isValid = await verifyAdminCredentials(parsed.data.username, parsed.data.password);

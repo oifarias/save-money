@@ -58,6 +58,11 @@ model User {
   // com o mesmo e-mail; consumido (e resetado) uma única vez para disparar o aviso ao usuário.
   pendingLinkNotice Boolean @default(false)
 
+  // Incrementado a cada logout (ver events.signOut em src/lib/auth.ts). Sessões JWT emitidas
+  // antes do incremento carregam a versão antiga e são derrubadas na checagem em (app)/layout.tsx,
+  // já que a estratégia "jwt" não tem revogação nativa no servidor.
+  tokenVersion Int @default(0)
+
   accounts        FinancialAccount[]
   oauthAccounts   Account[]
   sessions        Session[]

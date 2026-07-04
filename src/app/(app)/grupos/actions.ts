@@ -145,7 +145,12 @@ export async function batchUpdateCategoriesAction(items: BatchUpdateItem[]): Pro
 
   if (updates.length === 0) return { success: false, message: "Nenhum dado válido para salvar" };
 
-  await prisma.$transaction(updates.map((u) => prisma.category.update({ where: { id: u.id }, data: u.data })));
+  // updateMany com userId no where (em vez de update por id puro) mantém a
+  // posse checada atomicamente em cada escrita, fechando a janela entre o
+  // findMany de posse acima e as escritas da transação.
+  await prisma.$transaction(
+    updates.map((u) => prisma.category.updateMany({ where: { id: u.id, userId }, data: u.data }))
+  );
 
   revalidatePath("/grupos");
   revalidatePath("/lancamentos");

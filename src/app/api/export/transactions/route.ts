@@ -4,6 +4,18 @@ import { prisma } from "@/lib/prisma";
 import { parseTransactionFilters } from "@/lib/validations/transaction-filters";
 import { buildTransactionWhere } from "@/lib/transaction-filters";
 
+// Mitigação de CSV/Formula Injection (OWASP): células que comecem com um
+// desses caracteres são interpretadas como fórmula por Excel/LibreOffice ao
+// abrir o arquivo exportado. Prefixamos com apóstrofo para forçar texto puro.
+const FORMULA_TRIGGER_CHARS = ["=", "+", "-", "@", "\t", "\r"];
+
+function sanitizeForSpreadsheet(value: string): string {
+  if (value.length > 0 && FORMULA_TRIGGER_CHARS.includes(value[0]!)) {
+    return `'${value}`;
+  }
+  return value;
+}
+
 function formatDateBR(date: Date) {
   const day = String(date.getUTCDate()).padStart(2, "0");
   const month = String(date.getUTCMonth() + 1).padStart(2, "0");
@@ -36,11 +48,11 @@ export async function GET(request: Request) {
   const rows = transactions.map((transaction) => [
     formatDateBR(transaction.date),
     transaction.type === "EXPENSE" ? "despesa" : "entrada",
-    transaction.description,
-    transaction.category?.name ?? "",
-    transaction.subcategory?.name ?? "",
+    sanitizeForSpreadsheet(transaction.description),
+    sanitizeForSpreadsheet(transaction.category?.name ?? ""),
+    sanitizeForSpreadsheet(transaction.subcategory?.name ?? ""),
     transaction.amount.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-    transaction.tags.map((t) => t.tag.name).join(","),
+    sanitizeForSpreadsheet(transaction.tags.map((t) => t.tag.name).join(",")),
   ]);
 
   const worksheet = XLSX.utils.aoa_to_sheet([

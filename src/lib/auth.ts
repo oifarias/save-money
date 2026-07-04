@@ -6,6 +6,11 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { setupNewUserDefaults } from "@/lib/onboarding";
 
+// Hash dummy fixo (mesmo custo do usado no cadastro) só para o bcrypt.compare
+// rodar mesmo quando o e-mail não existe — evita vazar por timing se a conta
+// existe, complementando a mensagem de erro que já é genérica.
+const DUMMY_PASSWORD_HASH = bcrypt.hashSync("dummy-password-for-timing", 12);
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma),
   session: { strategy: "jwt" },
@@ -26,13 +31,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return null;
         }
 
-        const user = await prisma.user.findUnique({ where: { email } });
-        if (!user || !user.passwordHash) return null;
+        const user = await prisma.user.findUnique({
+          where: { email },
+          select: { id: true, name: true, email: true, passwordHash: true, tokenVersion: true },
+        });
 
-        const isValid = await bcrypt.compare(password, user.passwordHash);
-        if (!isValid) return null;
+        const isValid = await bcrypt.compare(password, user?.passwordHash ?? DUMMY_PASSWORD_HASH);
+        if (!user || !user.passwordHash || !isValid) return null;
 
-        return { id: user.id, name: user.name, email: user.email };
+        return { id: user.id, name: user.name, email: user.email, tokenVersion: user.tokenVersion };
       },
     }),
     Google({
@@ -62,17 +69,34 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         await setupNewUserDefaults(prisma, user.id);
       }
     },
+    // Estratégia "jwt" não tem revogação nativa: um token roubado continuaria válido até expirar
+    // mesmo após logout. Para fechar essa brecha, incrementamos tokenVersion no logout; sessões
+    // com a versão antiga são derrubadas na checagem feita em (app)/layout.tsx.
+    async signOut(message) {
+      const tokenId = "token" in message ? message.token?.id : undefined;
+      const userId = typeof tokenId === "string" ? tokenId : undefined;
+      if (!userId) return;
+      try {
+        await prisma.user.update({ where: { id: userId }, data: { tokenVersion: { increment: 1 } } });
+      } catch (error) {
+        console.error("[auth] falha ao incrementar tokenVersion no logout:", error);
+      }
+    },
   },
   callbacks: {
     async jwt({ token, user }) {
       if (user?.id) {
         token.id = user.id;
+        token.tokenVersion = user.tokenVersion ?? 0;
       }
       return token;
     },
     async session({ session, token }) {
       if (session.user && typeof token.id === "string") {
         session.user.id = token.id;
+      }
+      if (session.user && typeof token.tokenVersion === "number") {
+        session.user.tokenVersion = token.tokenVersion;
       }
       return session;
     },

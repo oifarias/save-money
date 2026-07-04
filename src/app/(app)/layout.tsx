@@ -14,8 +14,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const userId = session.user.id;
   const dbUser = await prisma.user.findUnique({
     where: { id: userId },
-    select: { passwordHash: true, pendingLinkNotice: true, _count: { select: { oauthAccounts: true } } },
+    select: { passwordHash: true, pendingLinkNotice: true, tokenVersion: true, _count: { select: { oauthAccounts: true } } },
   });
+
+  // Sessão JWT emitida antes do logout mais recente (tokenVersion desatualizada) — derruba aqui,
+  // já que a estratégia "jwt" não consegue revogar o token no momento do logout em si.
+  // (signOut() só pode mexer em cookies dentro de Route Handler/Server Action, daí o redirect.)
+  if (!dbUser || dbUser.tokenVersion !== (session.user.tokenVersion ?? 0)) {
+    redirect("/api/auth/force-signout");
+  }
 
   let showLinkNotice = false;
   if (dbUser?.pendingLinkNotice) {
