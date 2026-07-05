@@ -478,7 +478,10 @@ export async function dismissFixedExpenseInsightAction(groupKey: string, transac
   return { success: true, message: "Sugestão removida" };
 }
 
-export async function deleteTransactionAction(id: string): Promise<ActionResult> {
+export async function deleteTransactionAction(
+  id: string,
+  installmentScope: "single" | "all" = "all"
+): Promise<ActionResult> {
   const userId = await requireUserId();
 
   const existing = await prisma.transaction.findFirst({
@@ -490,14 +493,12 @@ export async function deleteTransactionAction(id: string): Promise<ActionResult>
   }
 
   await prisma.$transaction(async (tx) => {
-    if (existing.installmentPlanId) {
-      // Excluir qualquer parcela de um plano remove o plano inteiro e todas as suas transações —
-      // elas foram geradas juntas como uma unidade, não faz sentido deixar parcelas órfãs.
+    if (existing.installmentPlanId && installmentScope === "all") {
       await deleteInstallmentPlanCascade(tx, userId, existing.installmentPlanId);
     } else {
       await tx.transaction.delete({ where: { id } });
     }
-    if (existing.fixedExpenseTemplateId) {
+    if (existing.fixedExpenseTemplateId && installmentScope !== "single") {
       await tx.fixedExpenseTemplate.deleteMany({
         where: { id: existing.fixedExpenseTemplateId, userId },
       });
@@ -507,7 +508,12 @@ export async function deleteTransactionAction(id: string): Promise<ActionResult>
   revalidatePath("/dashboard");
   revalidatePath("/lancamentos");
   invalidateAggregateCaches(userId);
-  return { success: true, message: "Lançamento excluído com sucesso" };
+
+  const message =
+    existing.installmentPlanId && installmentScope === "all"
+      ? "Todas as parcelas foram excluídas"
+      : "Lançamento excluído com sucesso";
+  return { success: true, message };
 }
 
 export async function bulkDeleteTransactionsAction(ids: string[]): Promise<ActionResult> {

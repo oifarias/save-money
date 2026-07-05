@@ -167,10 +167,10 @@ export function TransactionsManager({
     setEditing(null);
   }
 
-  function confirmDelete() {
+  function confirmDelete(scope: "single" | "all" = "all") {
     if (!deleting) return;
     startTransition(async () => {
-      const result = await deleteTransactionAction(deleting.id);
+      const result = await deleteTransactionAction(deleting.id, scope);
       if (result.success) {
         toast.success(result.message ?? "Lançamento excluído");
       } else {
@@ -437,13 +437,57 @@ export function TransactionsManager({
       </Modal>
 
       <ConfirmDialog
-        open={Boolean(deleting)}
+        open={Boolean(deleting) && !deleting?.installment}
         title="Excluir lançamento"
         description={`Tem certeza que deseja excluir "${deleting?.description}"? Essa ação não pode ser desfeita.`}
         isLoading={isPending}
-        onConfirm={confirmDelete}
+        onConfirm={() => confirmDelete("all")}
         onCancel={() => setDeleting(null)}
       />
+
+      <Modal
+        open={Boolean(deleting) && Boolean(deleting?.installment)}
+        title="Excluir lançamento parcelado"
+        onClose={() => setDeleting(null)}
+      >
+        <div className="flex flex-col gap-5">
+          <p className="text-sm text-(--color-text)">
+            Você está excluindo a parcela{" "}
+            <strong>
+              {deleting?.installment?.number}/{deleting?.installment?.total}
+            </strong>{" "}
+            de <strong>&quot;{deleting?.description}&quot;</strong>. Como deseja prosseguir?
+          </p>
+          <div className="flex flex-col gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => confirmDelete("single")}
+              isLoading={isPending}
+            >
+              Excluir apenas esta parcela ({deleting?.installment?.number}/{deleting?.installment?.total})
+            </Button>
+            <Button
+              type="button"
+              variant="danger"
+              onClick={() => confirmDelete("all")}
+              isLoading={isPending}
+            >
+              Excluir todas as {deleting?.installment?.total} parcelas
+            </Button>
+          </div>
+          <div className="flex justify-end">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setDeleting(null)}
+              disabled={isPending}
+            >
+              Cancelar
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       <ConfirmDialog
         open={bulkDeleteOpen}
