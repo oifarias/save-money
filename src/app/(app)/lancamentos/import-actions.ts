@@ -106,11 +106,23 @@ export async function importTransactionsAction(rows: ImportRowPayload[]): Promis
 
   // Fase 0.7: última barreira de deduplicação — remove linhas que já existem na base.
   // O frontend já deve ter filtrado as duplicatas, mas esta fase cobre race conditions e bugs.
+  // existingKeys é mantido fora do bloco para ser reutilizado na Fase 5 (skip de parcelas já existentes).
   let duplicatesSkipped = 0;
+  let existingKeys = new Set<string>();
   {
     const dates = parsedRows.map((r) => r.date);
-    const dateFrom = new Date(Math.min(...dates.map((d) => d.getTime())));
-    const dateTo = new Date(Math.max(...dates.map((d) => d.getTime())));
+    let dateFrom = new Date(Math.min(...dates.map((d) => d.getTime())));
+    let dateTo = new Date(Math.max(...dates.map((d) => d.getTime())));
+
+    // Expande o range para cobrir TODAS as parcelas (passadas e futuras) de cada linha parcelada.
+    for (const row of parsedRows) {
+      if (row.installments) {
+        const planStart = addMonths(row.date, -(row.installments.current - 1));
+        const planEnd = addMonths(row.date, row.installments.total - row.installments.current);
+        if (planStart < dateFrom) dateFrom = planStart;
+        if (planEnd > dateTo) dateTo = planEnd;
+      }
+    }
     dateFrom.setDate(dateFrom.getDate() - 1);
     dateTo.setDate(dateTo.getDate() + 1);
 
@@ -119,7 +131,7 @@ export async function importTransactionsAction(rows: ImportRowPayload[]): Promis
       select: { date: true, amount: true, type: true, description: true },
     });
 
-    const existingKeys = new Set(
+    existingKeys = new Set(
       existing.map(
         (t) =>
           `${t.date.toISOString().slice(0, 10)}|${Math.round(t.amount * 100)}|${t.type}|${t.description.trim().toLowerCase()}`
@@ -250,7 +262,14 @@ export async function importTransactionsAction(rows: ImportRowPayload[]): Promis
           for (const row of groupRows) {
             const installments = row.installments!;
             const rowStartDate = addMonths(row.date, -(installments.current - 1));
-            for (let n = installments.current; n <= installments.total; n += 1) {
+            // Cria TODAS as parcelas (1 até total), incluindo as passadas.
+            // Parcelas que já existem na base são puladas para evitar duplicatas.
+            for (let n = 1; n <= installments.total; n += 1) {
+              const installDate = addMonths(rowStartDate, n - 1);
+              const installDesc = `${row.description} (${n}/${installments.total})`;
+              const dupKey = `${installDate.toISOString().slice(0, 10)}|${Math.round(row.amount * 100)}|${row.type}|${installDesc.trim().toLowerCase()}`;
+              if (existingKeys.has(dupKey)) continue;
+
               const transaction = await tx.transaction.create({
                 data: {
                   userId,
@@ -259,8 +278,8 @@ export async function importTransactionsAction(rows: ImportRowPayload[]): Promis
                   subcategoryId: row.subcategoryId,
                   type: row.type,
                   amount: row.amount,
-                  date: addMonths(rowStartDate, n - 1),
-                  description: `${row.description} (${n}/${installments.total})`,
+                  date: installDate,
+                  description: installDesc,
                   installmentPlanId: plan.id,
                   installmentNumber: n,
                   creditCardId: row.creditCardId,

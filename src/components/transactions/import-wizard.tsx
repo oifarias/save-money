@@ -29,6 +29,7 @@ import {
   ArrowLeftRight,
   ArrowRight,
   Eye,
+  History,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { Card } from "@/components/ui/card";
@@ -1169,27 +1170,33 @@ export function ImportWizard({ existingCategories, existingTagNames = [] }: Impo
                               { label: "Categoria", field: "category" as keyof MappedRow },
                               { label: "Sub-categoria", field: "subcategory" as keyof MappedRow },
                               { label: "Tags", field: "tags" as keyof MappedRow },
+                              { label: "Passadas" },
                               { label: "Parcelas", field: "installments" as keyof MappedRow },
+                              { label: "Futuras" },
                               { label: "Fixa", field: "isFixed" as keyof MappedRow },
-                            ] as { label: string; field: keyof MappedRow }[]
+                            ] as { label: string; field?: keyof MappedRow }[]
                           ).map(({ label, field }) => (
-                            <th key={field} scope="col" className="px-3 py-2">
-                              <button
-                                type="button"
-                                onClick={() => toggleSort(field)}
-                                className="inline-flex items-center gap-1 cursor-pointer hover:text-(--color-text) transition-colors"
-                              >
-                                {label}
-                                {sortField === field ? (
-                                  sortDir === "asc" ? (
-                                    <ChevronUp size={12} aria-hidden="true" />
+                            <th key={label} scope="col" className="px-3 py-2">
+                              {field ? (
+                                <button
+                                  type="button"
+                                  onClick={() => toggleSort(field)}
+                                  className="inline-flex items-center gap-1 cursor-pointer hover:text-(--color-text) transition-colors"
+                                >
+                                  {label}
+                                  {sortField === field ? (
+                                    sortDir === "asc" ? (
+                                      <ChevronUp size={12} aria-hidden="true" />
+                                    ) : (
+                                      <ChevronDown size={12} aria-hidden="true" />
+                                    )
                                   ) : (
-                                    <ChevronDown size={12} aria-hidden="true" />
-                                  )
-                                ) : (
-                                  <ChevronsUpDown size={12} className="opacity-40" aria-hidden="true" />
-                                )}
-                              </button>
+                                    <ChevronsUpDown size={12} className="opacity-40" aria-hidden="true" />
+                                  )}
+                                </button>
+                              ) : (
+                                <span>{label}</span>
+                              )}
                             </th>
                           ))}
                           <th scope="col" className="px-3 py-2">
@@ -1278,29 +1285,40 @@ export function ImportWizard({ existingCategories, existingTagNames = [] }: Impo
                               />
                             </td>
                             <td className="px-3 py-2 text-(--color-text)">
-                              <div className="flex items-center gap-1.5">
-                                <EditableCell
-                                  value={row.installments}
-                                  isEditing={editingCell?.index === row.index && editingCell?.field === "installments"}
-                                  onStartEdit={() => setEditingCell({ index: row.index, field: "installments" })}
-                                  onConfirm={(value) => {
-                                    handleEditField(row.index, "installments", value);
-                                    setEditingCell(null);
-                                  }}
-                                  onCancel={() => setEditingCell(null)}
-                                />
-                                {(() => {
-                                  const parsedInstallments = normalizeInstallments(row.installments);
-                                  if (!parsedInstallments) return null;
-                                  const future = parsedInstallments.total - parsedInstallments.current;
-                                  if (future <= 0) return null;
-                                  return (
-                                    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-(--color-primary)/10 px-2 py-0.5 text-xs font-medium text-(--color-primary)">
-                                      <Repeat size={11} aria-hidden="true" />+{future}
-                                    </span>
-                                  );
-                                })()}
-                              </div>
+                              {(() => {
+                                const p = normalizeInstallments(row.installments);
+                                if (!p || p.current <= 1) return <span className="text-xs text-(--color-text-muted)">—</span>;
+                                return (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+                                    <History size={11} aria-hidden="true" />
+                                    {p.current - 1}
+                                  </span>
+                                );
+                              })()}
+                            </td>
+                            <td className="px-3 py-2 text-(--color-text)">
+                              <EditableCell
+                                value={row.installments}
+                                isEditing={editingCell?.index === row.index && editingCell?.field === "installments"}
+                                onStartEdit={() => setEditingCell({ index: row.index, field: "installments" })}
+                                onConfirm={(value) => {
+                                  handleEditField(row.index, "installments", value);
+                                  setEditingCell(null);
+                                }}
+                                onCancel={() => setEditingCell(null)}
+                              />
+                            </td>
+                            <td className="px-3 py-2 text-(--color-text)">
+                              {(() => {
+                                const p = normalizeInstallments(row.installments);
+                                if (!p || p.current >= p.total) return <span className="text-xs text-(--color-text-muted)">—</span>;
+                                return (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-(--color-primary)/10 px-2 py-0.5 text-xs font-medium text-(--color-primary)">
+                                    <Repeat size={11} aria-hidden="true" />
+                                    {p.total - p.current}
+                                  </span>
+                                );
+                              })()}
                             </td>
                             <td className="px-3 py-2 text-(--color-text)">
                               <div className="flex items-center gap-1.5">
