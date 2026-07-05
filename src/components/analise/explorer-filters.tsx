@@ -1,0 +1,220 @@
+"use client";
+
+import type { ExplorerFilters } from "@/lib/analise-data";
+
+type Props = {
+  filters: ExplorerFilters;
+  categories: { id: string; name: string; color: string }[];
+  tags: { id: string; name: string }[];
+  onChange: (filters: ExplorerFilters) => void;
+};
+
+const PERIOD_OPTIONS: { value: ExplorerFilters["period"]; label: string }[] = [
+  { value: "30", label: "Últimos 30 dias" },
+  { value: "90", label: "Últimos 90 dias" },
+  { value: "180", label: "Últimos 6 meses" },
+  { value: "365", label: "Último ano" },
+  { value: "all", label: "Todo período" },
+];
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="text-xs font-medium uppercase tracking-wide text-(--color-text-muted)">
+      {children}
+    </p>
+  );
+}
+
+export function ExplorerFilters({ filters, categories, tags, onChange }: Props) {
+  function set<K extends keyof ExplorerFilters>(key: K, value: ExplorerFilters[K]) {
+    onChange({ ...filters, [key]: value });
+  }
+
+  function toggleCategory(id: string) {
+    const next = filters.categoryIds.includes(id)
+      ? filters.categoryIds.filter((c) => c !== id)
+      : [...filters.categoryIds, id];
+    set("categoryIds", next);
+  }
+
+  function toggleTag(id: string) {
+    const next = filters.tagIds.includes(id)
+      ? filters.tagIds.filter((t) => t !== id)
+      : [...filters.tagIds, id];
+    set("tagIds", next);
+  }
+
+  return (
+    <div className="flex flex-col gap-5">
+      {/* Tipo */}
+      <div className="flex flex-col gap-2">
+        <SectionLabel>Tipo</SectionLabel>
+        <div className="flex gap-1.5">
+          {(["EXPENSE", "INCOME", "BOTH"] as const).map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => set("type", t)}
+              className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition-all ${
+                filters.type === t
+                  ? "bg-(--color-primary) text-white"
+                  : "border border-(--color-border) text-(--color-text-muted) hover:border-(--color-primary)/40"
+              }`}
+            >
+              {t === "EXPENSE" ? "Despesa" : t === "INCOME" ? "Entrada" : "Ambos"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Período */}
+      <div className="flex flex-col gap-2">
+        <SectionLabel>Período</SectionLabel>
+        <select
+          value={filters.period}
+          onChange={(e) => {
+            onChange({
+              ...filters,
+              period: e.target.value as ExplorerFilters["period"],
+              dateFrom: null,
+              dateTo: null,
+            });
+          }}
+          className="w-full rounded-xl border border-(--color-border) bg-(--color-surface) px-3 py-2 text-sm text-(--color-text) focus:outline-none focus:ring-2 focus:ring-(--color-primary)/30"
+        >
+          {PERIOD_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Datas customizadas */}
+      <div className="flex flex-col gap-2">
+        <SectionLabel>Datas customizadas</SectionLabel>
+        <div className="flex flex-col gap-2">
+          <div>
+            <label className="mb-1 block text-xs text-(--color-text-muted)">De</label>
+            <input
+              type="date"
+              value={filters.dateFrom ?? ""}
+              onChange={(e) => set("dateFrom", e.target.value || null)}
+              className="w-full rounded-xl border border-(--color-border) bg-(--color-surface) px-3 py-2 text-sm text-(--color-text) focus:outline-none focus:ring-2 focus:ring-(--color-primary)/30"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-(--color-text-muted)">Até</label>
+            <input
+              type="date"
+              value={filters.dateTo ?? ""}
+              onChange={(e) => set("dateTo", e.target.value || null)}
+              className="w-full rounded-xl border border-(--color-border) bg-(--color-surface) px-3 py-2 text-sm text-(--color-text) focus:outline-none focus:ring-2 focus:ring-(--color-primary)/30"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Grupos */}
+      {categories.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <SectionLabel>
+              Grupos
+              {filters.categoryIds.length > 0 && (
+                <span className="ml-2 inline-flex items-center rounded-full bg-(--color-primary)/10 px-1.5 py-0.5 text-xs font-medium text-(--color-primary) normal-case tracking-normal">
+                  {filters.categoryIds.length}
+                </span>
+              )}
+            </SectionLabel>
+            {filters.categoryIds.length > 0 && (
+              <button
+                type="button"
+                onClick={() => set("categoryIds", [])}
+                className="text-xs text-(--color-text-muted) hover:text-(--color-text)"
+              >
+                Limpar
+              </button>
+            )}
+          </div>
+          <div className="flex max-h-44 flex-col gap-1.5 overflow-y-auto">
+            {categories.map((cat) => (
+              <label key={cat.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-1 py-0.5 hover:bg-(--color-bg)">
+                <input
+                  type="checkbox"
+                  checked={filters.categoryIds.includes(cat.id)}
+                  onChange={() => toggleCategory(cat.id)}
+                  className="accent-(--color-primary)"
+                />
+                <span
+                  className="inline-block h-2.5 w-2.5 shrink-0 rounded-sm"
+                  style={{ backgroundColor: cat.color }}
+                />
+                <span className="text-sm text-(--color-text)">{cat.name}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Tags */}
+      {tags.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <SectionLabel>
+              Tags
+              {filters.tagIds.length > 0 && (
+                <span className="ml-2 inline-flex items-center rounded-full bg-(--color-primary)/10 px-1.5 py-0.5 text-xs font-medium text-(--color-primary) normal-case tracking-normal">
+                  {filters.tagIds.length}
+                </span>
+              )}
+            </SectionLabel>
+            {filters.tagIds.length > 0 && (
+              <button
+                type="button"
+                onClick={() => set("tagIds", [])}
+                className="text-xs text-(--color-text-muted) hover:text-(--color-text)"
+              >
+                Limpar
+              </button>
+            )}
+          </div>
+          <div className="flex max-h-36 flex-col gap-1.5 overflow-y-auto">
+            {tags.map((tag) => (
+              <label key={tag.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-1 py-0.5 hover:bg-(--color-bg)">
+                <input
+                  type="checkbox"
+                  checked={filters.tagIds.includes(tag.id)}
+                  onChange={() => toggleTag(tag.id)}
+                  className="accent-(--color-primary)"
+                />
+                <span className="text-sm text-(--color-text)">{tag.name}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Agrupar por */}
+      <div className="flex flex-col gap-2">
+        <SectionLabel>Agrupar por</SectionLabel>
+        <div className="flex gap-1.5">
+          {(["category", "month"] as const).map((g) => (
+            <button
+              key={g}
+              type="button"
+              onClick={() => set("groupBy", g)}
+              className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition-all ${
+                filters.groupBy === g
+                  ? "bg-(--color-primary) text-white"
+                  : "border border-(--color-border) text-(--color-text-muted) hover:border-(--color-primary)/40"
+              }`}
+            >
+              {g === "category" ? "Por grupo" : "Por mês"}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}

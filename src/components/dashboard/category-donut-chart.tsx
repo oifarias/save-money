@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { Card } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/format";
@@ -82,6 +83,12 @@ export function CategoryDonutChart({ data }: { data: CategorySlice[] }) {
           Total de despesas: <span className="font-numeric font-medium text-(--color-text)"><Money value={total} /></span>
         </p>
       )}
+      <Link
+        href="/analise"
+        className="mt-2 block text-center text-xs font-medium text-(--color-primary) hover:underline"
+      >
+        Ver análise completa →
+      </Link>
     </Card>
   );
 }

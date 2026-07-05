@@ -52,7 +52,15 @@ export function DivideStep({ total, initialMode, initialParticipants, onConfirme
   }
 
   function addRow() {
-    setRows((current) => [...current, { name: "", amount: "" }]);
+    setRows((current) => {
+      const currentTotal = current.reduce(
+        (sum, row) => sum + (Number(row.amount.replace(",", ".")) || 0),
+        0
+      );
+      const remainder = Math.round((total - currentTotal) * 100) / 100;
+      const autoAmount = mode === "custom" && remainder > 0 ? String(remainder) : "";
+      return [...current, { name: "", amount: autoAmount }];
+    });
   }
 
   function removeRow(index: number) {

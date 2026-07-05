@@ -80,6 +80,7 @@ model User {
   fixedExpenseTemplates FixedExpenseTemplate[]
   wishes Wish[]
   creditCards  CreditCard[]
+  savedVisualizations SavedVisualization[]
 
   @@map("users")
 }
@@ -477,4 +478,24 @@ model CreditCard {
 
   @@index([userId])
   @@map("credit_cards")
+}
+
+model SavedVisualization {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  description String?
+  filters     Json
+  chartType   String
+  groupBy     String
+  displayOpts Json     @default("{}")
+  shareToken  String?  @unique
+  shareActive Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("saved_visualizations")
 }
