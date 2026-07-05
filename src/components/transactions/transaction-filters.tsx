@@ -9,6 +9,7 @@ import type { TransactionFormCategory } from "@/components/transactions/transact
 
 type TransactionFiltersProps = {
   categories: TransactionFormCategory[];
+  tags: { id: string; name: string }[];
 };
 
 const AMOUNT_OPERATORS = [
@@ -17,7 +18,7 @@ const AMOUNT_OPERATORS = [
   { value: "lt", label: "Menor que" },
 ] as const;
 
-export function TransactionFiltersBar({ categories }: TransactionFiltersProps) {
+export function TransactionFiltersBar({ categories, tags }: TransactionFiltersProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -40,6 +41,7 @@ export function TransactionFiltersBar({ categories }: TransactionFiltersProps) {
   const [type, setType] = useState(searchParams.get("type") ?? "");
   const [month, setMonth] = useState(searchParams.get("month") ?? "");
   const [day, setDay] = useState(searchParams.get("day") ?? "");
+  const [tagId, setTagId] = useState(searchParams.get("tagId") ?? "");
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -58,6 +60,7 @@ export function TransactionFiltersBar({ categories }: TransactionFiltersProps) {
       params.set("amountOperator", next.amountOperator);
       params.set("amountValue", next.amountValue);
     }
+    if (next.tagId) params.set("tagId", next.tagId);
     if (next.month) {
       params.set("month", next.month);
       if (next.day) params.set("day", next.day);
@@ -91,6 +94,7 @@ export function TransactionFiltersBar({ categories }: TransactionFiltersProps) {
     amountValue,
     month,
     day,
+    tagId,
   };
 
   function handleTypeChange(value: string) {
@@ -134,6 +138,11 @@ export function TransactionFiltersBar({ categories }: TransactionFiltersProps) {
     applyFilters({ ...currentValues, day: value });
   }
 
+  function handleTagChange(value: string) {
+    setTagId(value);
+    applyFilters({ ...currentValues, tagId: value });
+  }
+
   function clearFilters() {
     setType("");
     setCategoryId("");
@@ -143,6 +152,7 @@ export function TransactionFiltersBar({ categories }: TransactionFiltersProps) {
     setAmountValue("");
     setMonth("");
     setDay("");
+    setTagId("");
     router.replace(pathname, { scroll: false });
   }
 
@@ -152,7 +162,8 @@ export function TransactionFiltersBar({ categories }: TransactionFiltersProps) {
     subcategoryId ||
     description ||
     (amountOperator && amountValue) ||
-    month,
+    month ||
+    tagId,
   );
 
   return (
@@ -234,6 +245,28 @@ export function TransactionFiltersBar({ categories }: TransactionFiltersProps) {
             value={description}
             onChange={(event) => handleDescriptionChange(event.target.value)}
           />
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <label
+            htmlFor="filter-tagId"
+            className="text-xs font-medium text-(--color-text-muted)"
+          >
+            Tag
+          </label>
+          <select
+            id="filter-tagId"
+            value={tagId}
+            onChange={(event) => handleTagChange(event.target.value)}
+            className="rounded-xl border border-(--color-border) bg-(--color-bg) px-3.5 py-2.5 text-sm text-(--color-text) outline-none transition-colors focus:border-(--color-primary) focus:ring-2 focus:ring-(--color-primary)/20"
+          >
+            <option value="">Todas</option>
+            {tags.map((tag) => (
+              <option key={tag.id} value={tag.id}>
+                {tag.name}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div className="flex flex-col gap-1.5">

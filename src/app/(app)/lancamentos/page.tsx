@@ -43,7 +43,7 @@ export default async function LancamentosPage({ searchParams }: LancamentosPageP
         orderBy: { name: "asc" },
         include: { children: { orderBy: { name: "asc" }, select: { id: true, name: true } } },
       }),
-      prisma.tag.findMany({ where: { userId }, orderBy: { name: "asc" }, select: { name: true } }),
+      prisma.tag.findMany({ where: { userId }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
       prisma.transaction.aggregate({ where: { ...where, type: "INCOME" }, _sum: { amount: true } }),
       prisma.transaction.aggregate({ where: { ...where, type: "EXPENSE" }, _sum: { amount: true } }),
       prisma.transaction.groupBy({
@@ -145,6 +145,7 @@ export default async function LancamentosPage({ searchParams }: LancamentosPageP
       <TransactionsManager
         transactions={items}
         categories={formCategories}
+        tags={tags}
         tagSuggestions={tagSuggestions}
         totalCount={total}
         pageSize={TRANSACTIONS_PAGE_SIZE}

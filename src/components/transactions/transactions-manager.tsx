@@ -47,6 +47,7 @@ type TransactionsSummary = {
 type TransactionsManagerProps = {
   transactions: TransactionListItem[];
   categories: TransactionFormCategory[];
+  tags: { id: string; name: string }[];
   tagSuggestions: string[];
   totalCount: number;
   pageSize: number;
@@ -57,6 +58,7 @@ type TransactionsManagerProps = {
 export function TransactionsManager({
   transactions,
   categories,
+  tags,
   tagSuggestions,
   totalCount,
   pageSize,
@@ -282,6 +284,7 @@ export function TransactionsManager({
       </CollapsibleSection>
       <FiltersPanel
         categories={categories}
+        tags={tags}
         actions={
           <a
             href={exportHref}

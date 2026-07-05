@@ -8,14 +8,15 @@ import { TransactionFiltersBar } from "@/components/transactions/transaction-fil
 import { PeriodFilter } from "@/components/transactions/period-filter";
 import type { TransactionFormCategory } from "@/components/transactions/transaction-form";
 
-const ADVANCED_FILTER_KEYS = ["type", "categoryId", "subcategoryId", "description", "amountOperator", "month"];
+const ADVANCED_FILTER_KEYS = ["type", "categoryId", "subcategoryId", "description", "amountOperator", "month", "tagId"];
 
 type FiltersPanelProps = {
   categories: TransactionFormCategory[];
+  tags: { id: string; name: string }[];
   actions?: ReactNode;
 };
 
-export function FiltersPanel({ categories, actions }: FiltersPanelProps) {
+export function FiltersPanel({ categories, tags, actions }: FiltersPanelProps) {
   const searchParams = useSearchParams();
   const [filtersOpen, setFiltersOpen] = useState(false);
   const activeAdvancedFilterCount = ADVANCED_FILTER_KEYS.filter((key) => searchParams.get(key)).length;
@@ -45,7 +46,7 @@ export function FiltersPanel({ categories, actions }: FiltersPanelProps) {
         </div>
       </div>
 
-      {filtersOpen && <TransactionFiltersBar categories={categories} />}
+      {filtersOpen && <TransactionFiltersBar categories={categories} tags={tags} />}
     </div>
   );
 }

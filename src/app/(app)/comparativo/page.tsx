@@ -36,7 +36,7 @@ export default async function ComparativoPage({ searchParams }: ComparativoPageP
     <div className="flex flex-col gap-6">
       <PageHeader title="Comparativo mês a mês" description="Compare dois ou mais meses por grupo, com variação percentual e exportação" />
 
-      <FiltersPanel categories={formCategories} />
+      <FiltersPanel categories={formCategories} tags={[]} />
 
       <ComparativeExplorer data={data} />
     </div>
