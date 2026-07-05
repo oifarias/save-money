@@ -20,6 +20,7 @@ export type ImportActionResult = {
   message?: string;
   imported?: number;
   skipped?: number;
+  duplicatesSkipped?: number;
 };
 
 async function requireUserId() {
@@ -101,6 +102,51 @@ export async function importTransactionsAction(rows: ImportRowPayload[]): Promis
 
   if (parsedRows.length === 0) {
     return { success: true, imported: 0, skipped, message: `0 lançamento(s) importado(s) · ${skipped} ignorado(s) por erro` };
+  }
+
+  // Fase 0.7: última barreira de deduplicação — remove linhas que já existem na base.
+  // O frontend já deve ter filtrado as duplicatas, mas esta fase cobre race conditions e bugs.
+  let duplicatesSkipped = 0;
+  {
+    const dates = parsedRows.map((r) => r.date);
+    const dateFrom = new Date(Math.min(...dates.map((d) => d.getTime())));
+    const dateTo = new Date(Math.max(...dates.map((d) => d.getTime())));
+    dateFrom.setDate(dateFrom.getDate() - 1);
+    dateTo.setDate(dateTo.getDate() + 1);
+
+    const existing = await prisma.transaction.findMany({
+      where: { userId, date: { gte: dateFrom, lte: dateTo } },
+      select: { date: true, amount: true, type: true, description: true },
+    });
+
+    const existingKeys = new Set(
+      existing.map(
+        (t) =>
+          `${t.date.toISOString().slice(0, 10)}|${Math.round(t.amount * 100)}|${t.type}|${t.description.trim().toLowerCase()}`
+      )
+    );
+
+    const deduped: ParsedRow[] = [];
+    for (const row of parsedRows) {
+      const dateStr = row.date.toISOString().slice(0, 10);
+      let key: string;
+
+      if (row.installments) {
+        const descKey = `${row.description.trim().toLowerCase()} (${row.installments.current}/${row.installments.total})`;
+        key = `${dateStr}|${Math.round(row.amount * 100)}|${row.type}|${descKey}`;
+      } else {
+        key = `${dateStr}|${Math.round(row.amount * 100)}|${row.type}|${row.description.trim().toLowerCase()}`;
+      }
+
+      if (existingKeys.has(key)) {
+        duplicatesSkipped += 1;
+      } else {
+        deduped.push(row);
+      }
+    }
+
+    parsedRows.length = 0;
+    parsedRows.push(...deduped);
   }
 
   const accountId = await ensureDefaultAccountId(userId);
@@ -288,6 +334,13 @@ export async function importTransactionsAction(rows: ImportRowPayload[]): Promis
     success: true,
     imported,
     skipped,
-    message: `${imported} lançamento(s) importado(s)${skipped > 0 ? ` · ${skipped} ignorado(s) por erro` : ""}`,
+    duplicatesSkipped,
+    message: [
+      `${imported} lançamento(s) importado(s)`,
+      skipped > 0 ? `${skipped} ignorado(s) por erro` : null,
+      duplicatesSkipped > 0 ? `${duplicatesSkipped} duplicata(s) bloqueada(s)` : null,
+    ]
+      .filter(Boolean)
+      .join(" · "),
   };
 }

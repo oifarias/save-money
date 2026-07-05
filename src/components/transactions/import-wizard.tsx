@@ -28,6 +28,7 @@ import {
   BarChart2,
   ArrowLeftRight,
   ArrowRight,
+  Eye,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { Card } from "@/components/ui/card";
@@ -52,6 +53,29 @@ import { importTransactionsAction } from "@/app/(app)/lancamentos/import-actions
 import { SummaryCard, CARD_COLORS } from "@/components/dashboard/summary-cards";
 
 type Step = "upload" | "map" | "result";
+
+type ExistingTransactionDetail = {
+  id: string;
+  date: string;
+  description: string;
+  amount: number;
+  type: "EXPENSE" | "INCOME";
+  category: { name: string; color: string; icon: string } | null;
+  subcategory: { name: string } | null;
+  tags: string[];
+  installmentNumber: number | null;
+  installmentTotal: number | null;
+};
+
+type DuplicateMatch = {
+  importedRowIndex: number;
+  importedDescription: string;
+  importedDate: string;
+  importedAmount: number;
+  importedType: "EXPENSE" | "INCOME";
+  importedInstallments: string | null;
+  existing: ExistingTransactionDetail;
+};
 
 const NONE = NONE_COLUMN;
 const REQUIRED_FIELDS = IMPORT_FIELDS.filter((field) => field.required);
@@ -325,6 +349,80 @@ function BulkEditModalContent({
   );
 }
 
+function DuplicateDetailRow({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
+  return (
+    <div className="flex items-baseline gap-1.5">
+      <dt className="w-20 shrink-0 text-xs text-(--color-text-muted)">{label}</dt>
+      <dd className={`text-sm text-(--color-text) ${highlight ? "font-numeric font-semibold" : "font-medium"}`}>
+        {value}
+      </dd>
+    </div>
+  );
+}
+
+function DuplicateMatchCard({
+  match,
+  isForced,
+  onToggleForce,
+}: {
+  match: DuplicateMatch;
+  isForced: boolean;
+  onToggleForce: () => void;
+}) {
+  return (
+    <div className="overflow-hidden rounded-xl border border-(--color-border)">
+      <div className="flex items-center justify-between bg-(--color-bg) px-4 py-2.5">
+        <span className="text-xs font-semibold uppercase tracking-wide text-(--color-text-muted)">
+          Linha {match.importedRowIndex + 1} da planilha
+        </span>
+        <button
+          type="button"
+          onClick={onToggleForce}
+          className={`cursor-pointer text-xs font-medium underline hover:no-underline ${
+            isForced ? "text-(--color-text-muted)" : "text-(--color-primary)"
+          }`}
+        >
+          {isForced ? "Não importar esta linha" : "Importar mesmo assim"}
+        </button>
+      </div>
+      <div className="grid grid-cols-2 divide-x divide-(--color-border)">
+        <div className="bg-orange-50/60 p-4">
+          <p className="mb-3 text-[10px] font-bold uppercase tracking-wide text-orange-600">Da planilha</p>
+          <dl className="flex flex-col gap-2">
+            <DuplicateDetailRow label="Descrição" value={match.importedDescription || "—"} />
+            <DuplicateDetailRow label="Data" value={match.importedDate.split("-").reverse().join("/")} />
+            <DuplicateDetailRow label="Valor" value={formatCurrency(match.importedAmount)} highlight />
+            <DuplicateDetailRow label="Tipo" value={match.importedType === "EXPENSE" ? "Despesa" : "Entrada"} />
+            {match.importedInstallments && (
+              <DuplicateDetailRow label="Parcela" value={match.importedInstallments} />
+            )}
+          </dl>
+        </div>
+        <div className="p-4">
+          <p className="mb-3 text-[10px] font-bold uppercase tracking-wide text-(--color-text-muted)">Já existe na base</p>
+          <dl className="flex flex-col gap-2">
+            <DuplicateDetailRow label="Descrição" value={match.existing.description || "—"} />
+            <DuplicateDetailRow label="Data" value={match.existing.date.split("-").reverse().join("/")} />
+            <DuplicateDetailRow label="Valor" value={formatCurrency(match.existing.amount)} highlight />
+            <DuplicateDetailRow label="Grupo" value={match.existing.category?.name ?? "—"} />
+            <DuplicateDetailRow label="Subgrupo" value={match.existing.subcategory?.name ?? "—"} />
+            <DuplicateDetailRow
+              label="Tags"
+              value={match.existing.tags.length > 0 ? match.existing.tags.join(", ") : "—"}
+            />
+            {match.existing.installmentNumber !== null && (
+              <DuplicateDetailRow
+                label="Parcela"
+                value={`${match.existing.installmentNumber}/${match.existing.installmentTotal ?? "?"}`}
+              />
+            )}
+          </dl>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 type ImportWizardProps = {
   existingCategories: ExistingCategoryRef[];
   existingTagNames?: string[];
@@ -349,7 +447,14 @@ export function ImportWizard({ existingCategories, existingTagNames = [] }: Impo
   });
   const [isParsing, setIsParsing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [result, setResult] = useState<{ imported: number; skipped: number } | null>(null);
+  const [result, setResult] = useState<{ imported: number; skipped: number; duplicatesSkipped: number } | null>(null);
+  const [duplicateIndices, setDuplicateIndices] = useState<Set<number>>(new Set());
+  const [forcedIndices, setForcedIndices] = useState<Set<number>>(new Set());
+  const [duplicateMatches, setDuplicateMatches] = useState<DuplicateMatch[]>([]);
+  const [checkingDuplicates, setCheckingDuplicates] = useState(false);
+  const [showDuplicatesModal, setShowDuplicatesModal] = useState(false);
+  const [modalFilterIndex, setModalFilterIndex] = useState<number | null>(null);
+  const [duplicatesPage, setDuplicatesPage] = useState(1);
   const [isMappingExpanded, setIsMappingExpanded] = useState(false);
   const [overrides, setOverrides] = useState<Record<number, Partial<Pick<MappedRow, EditableField>>>>({});
   const [removedIndexes, setRemovedIndexes] = useState<Set<number>>(new Set());
@@ -396,6 +501,16 @@ export function ImportWizard({ existingCategories, existingTagNames = [] }: Impo
     if (rowFilter === "invalid") return mappedRows.filter((row) => row.error);
     return mappedRows;
   }, [mappedRows, rowFilter]);
+
+  const nonDuplicateValidCount = useMemo(
+    () =>
+      validRows.filter((row) => {
+        const isDuplicate = duplicateIndices.has(row.index);
+        const isForced = forcedIndices.has(row.index);
+        return !isDuplicate || isForced;
+      }).length,
+    [validRows, duplicateIndices, forcedIndices]
+  );
 
   const sortedRows = useMemo(() => {
     if (!sortField) return filteredRows;
@@ -588,6 +703,10 @@ export function ImportWizard({ existingCategories, existingTagNames = [] }: Impo
       const guessedMapping = guessColumnMapping(parsed.headers);
       const allFieldsGuessed = IMPORT_FIELDS.every((field) => guessedMapping[field.key] !== NONE);
 
+      // Pré-computar as linhas mapeadas para passar à verificação de duplicatas
+      // antes que os estados sejam atualizados no próximo ciclo de render.
+      const initialMappedRows = buildMappedRows(parsed, guessedMapping);
+
       setSheet(parsed);
       setMapping(guessedMapping);
       setFileName(file.name);
@@ -597,7 +716,15 @@ export function ImportWizard({ existingCategories, existingTagNames = [] }: Impo
       setRowFilter("all");
       setEditingCell(null);
       setPage(1);
+      setDuplicateIndices(new Set());
+      setForcedIndices(new Set());
+      setDuplicateMatches([]);
+      setShowDuplicatesModal(false);
+      setModalFilterIndex(null);
       setStep("map");
+
+      // Verificar duplicatas com as linhas iniciais
+      void checkForDuplicates(initialMappedRows);
     } catch {
       toast.error("Não foi possível ler esse arquivo. Verifique se é um .xlsx ou .xls válido");
     } finally {
@@ -607,15 +734,27 @@ export function ImportWizard({ existingCategories, existingTagNames = [] }: Impo
   }
 
   async function handleConfirmImport() {
-    if (validRows.length === 0) {
-      toast.error("Nenhuma linha válida para importar");
+    const rowsToImport = validRows.filter((row) => {
+      const isDuplicate = duplicateIndices.has(row.index);
+      const isForced = forcedIndices.has(row.index);
+      return !isDuplicate || isForced;
+    });
+
+    if (rowsToImport.length === 0) {
+      if (duplicateIndices.size > 0) {
+        toast.error("Todas as linhas foram identificadas como duplicatas. Marque as que deseja importar mesmo assim.");
+      } else {
+        toast.error("Nenhuma linha válida para importar");
+      }
       return;
     }
+
+    const userExcludedDuplicates = [...duplicateIndices].filter((idx) => !forcedIndices.has(idx)).length;
 
     setIsSubmitting(true);
     try {
       const response = await importTransactionsAction(
-        validRows.map(({ date, description, amount, type, category, subcategory, tags, installments, isFixed, creditCard }) => ({
+        rowsToImport.map(({ date, description, amount, type, category, subcategory, tags, installments, isFixed, creditCard }) => ({
           date,
           description,
           amount,
@@ -634,13 +773,68 @@ export function ImportWizard({ existingCategories, existingTagNames = [] }: Impo
         return;
       }
 
-      setResult({ imported: response.imported ?? 0, skipped: (response.skipped ?? 0) + invalidRows.length });
+      setResult({
+        imported: response.imported ?? 0,
+        skipped: (response.skipped ?? 0) + invalidRows.length,
+        duplicatesSkipped: userExcludedDuplicates + (response.duplicatesSkipped ?? 0),
+      });
       setStep("result");
       toast.success(response.message ?? "Importação concluída");
     } catch {
       toast.error("Não foi possível importar os lançamentos. Tente novamente.");
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  async function checkForDuplicates(rows: MappedRow[]) {
+    const validRowsToCheck = rows.filter((r) => !r.error);
+    if (validRowsToCheck.length === 0) {
+      setDuplicateIndices(new Set());
+      setDuplicateMatches([]);
+      return;
+    }
+
+    setCheckingDuplicates(true);
+    try {
+      const payload = validRowsToCheck.map((r) => ({
+        date: r.date ?? "",
+        amount: Number(r.amount ?? 0),
+        type: (r.type === "INCOME" ? "INCOME" : "EXPENSE") as "EXPENSE" | "INCOME",
+        description: r.description ?? "",
+        installments: r.installments || undefined,
+      }));
+
+      const res = await fetch("/api/import/check-duplicates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rows: payload }),
+      });
+
+      if (!res.ok) return;
+
+      const data = (await res.json()) as {
+        duplicateIndices: number[];
+        matches: DuplicateMatch[];
+      };
+
+      // Converter índices relativos ao array de válidas → row.index (spreadsheet index)
+      const dupSet = new Set<number>(
+        data.duplicateIndices.map((relIdx) => validRowsToCheck[relIdx]!.index)
+      );
+
+      const matchesWithRowIndex = data.matches.map((m) => ({
+        ...m,
+        importedRowIndex: validRowsToCheck[m.importedRowIndex]!.index,
+      }));
+
+      setDuplicateIndices(dupSet);
+      setDuplicateMatches(matchesWithRowIndex);
+      setForcedIndices(new Set());
+    } catch {
+      // falha silenciosa — o backend ainda filtra duplicatas na Fase 0.7
+    } finally {
+      setCheckingDuplicates(false);
     }
   }
 
@@ -667,6 +861,13 @@ export function ImportWizard({ existingCategories, existingTagNames = [] }: Impo
     setRowFilter("all");
     setPage(1);
     setEditingCell(null);
+    setDuplicateIndices(new Set());
+    setForcedIndices(new Set());
+    setDuplicateMatches([]);
+    setCheckingDuplicates(false);
+    setShowDuplicatesModal(false);
+    setModalFilterIndex(null);
+    setDuplicatesPage(1);
   }
 
   return (
@@ -873,16 +1074,51 @@ export function ImportWizard({ existingCategories, existingTagNames = [] }: Impo
                     </p>
                   )}
                 </div>
-                <Button type="button" onClick={handleConfirmImport} isLoading={isSubmitting} disabled={validRows.length === 0}>
+                <Button type="button" onClick={handleConfirmImport} isLoading={isSubmitting} disabled={nonDuplicateValidCount === 0 && !isSubmitting}>
                   <CheckCircle2 size={16} aria-hidden="true" />
-                  Importar {validRows.length} lançamento(s)
+                  Importar {nonDuplicateValidCount} lançamento(s)
                 </Button>
               </div>
 
               {isSubmitting && (
                 <div className="flex items-center gap-2 rounded-xl border border-(--color-border) bg-(--color-bg) px-3.5 py-3 text-sm text-(--color-text-muted)">
                   <Loader2 size={15} className="animate-spin shrink-0 text-(--color-primary)" aria-hidden="true" />
-                  <span>Importando {validRows.length} lançamento(s)… Isso pode levar alguns segundos para planilhas grandes.</span>
+                  <span>Importando {nonDuplicateValidCount} lançamento(s)… Isso pode levar alguns segundos para planilhas grandes.</span>
+                </div>
+              )}
+
+              {checkingDuplicates && !isSubmitting && (
+                <div className="flex items-center gap-2 rounded-xl border border-(--color-border) bg-(--color-bg) px-3.5 py-3 text-sm text-(--color-text-muted)">
+                  <Loader2 size={15} className="animate-spin shrink-0 text-(--color-primary)" aria-hidden="true" />
+                  <span>Verificando lançamentos duplicados…</span>
+                </div>
+              )}
+
+              {!checkingDuplicates && !isSubmitting && duplicateIndices.size > 0 && (
+                <div className="flex items-start gap-3 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3">
+                  <AlertTriangle size={16} className="mt-0.5 shrink-0 text-orange-500" aria-hidden="true" />
+                  <div className="flex-1 text-sm text-orange-800">
+                    <strong>
+                      {duplicateIndices.size} linha{duplicateIndices.size > 1 ? "s identificadas" : " identificada"} como possível duplicata.
+                    </strong>{" "}
+                    Por padrão não serão importadas. Revise os detalhes e marque as que deseja incluir mesmo assim.
+                  </div>
+                  <div className="flex shrink-0 items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => { setModalFilterIndex(null); setDuplicatesPage(1); setShowDuplicatesModal(true); }}
+                      className="cursor-pointer text-xs font-medium text-orange-700 underline hover:no-underline"
+                    >
+                      Ver detalhes →
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setForcedIndices(new Set(duplicateIndices))}
+                      className="cursor-pointer text-xs text-orange-600 underline hover:no-underline"
+                    >
+                      Incluir todas
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -962,14 +1198,32 @@ export function ImportWizard({ existingCategories, existingTagNames = [] }: Impo
                         </tr>
                       </thead>
                       <tbody>
-                        {paginatedRows.map((row) => (
-                          <tr key={row.index} className="border-b border-(--color-border) last:border-0">
+                        {paginatedRows.map((row) => {
+                          const isDuplicate = duplicateIndices.has(row.index);
+                          const isForced = forcedIndices.has(row.index);
+                          return (
+                          <tr key={row.index} className={`border-b border-(--color-border) last:border-0 ${isDuplicate && !isForced ? "opacity-60" : ""}`}>
                             <td className="px-3 py-2">
                               {row.error ? (
                                 <span className="inline-flex items-center gap-1.5 text-xs text-(--color-danger)">
                                   <AlertTriangle size={14} aria-hidden="true" />
                                   {row.error}
                                 </span>
+                              ) : isDuplicate ? (
+                                <div className="flex items-center gap-1.5">
+                                  <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${isForced ? "bg-amber-100 text-amber-700" : "bg-orange-100 text-orange-700"}`}>
+                                    {isForced ? "Incluir mesmo assim" : "Duplicata"}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    title="Ver lançamento existente"
+                                    aria-label="Ver lançamento existente"
+                                    onClick={() => { setModalFilterIndex(row.index); setShowDuplicatesModal(true); }}
+                                    className="inline-flex cursor-pointer items-center justify-center rounded p-0.5 text-orange-500 hover:bg-orange-100"
+                                  >
+                                    <Eye size={13} aria-hidden="true" />
+                                  </button>
+                                </div>
                               ) : (
                                 <span className="inline-flex items-center gap-1.5 text-xs text-(--color-success)">
                                   <CheckCircle2 size={14} aria-hidden="true" />
@@ -1069,18 +1323,39 @@ export function ImportWizard({ existingCategories, existingTagNames = [] }: Impo
                               </div>
                             </td>
                             <td className="px-3 py-2">
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveRow(row.index)}
-                                title="Remover linha"
-                                aria-label="Remover linha"
-                                className="inline-flex items-center justify-center rounded-lg p-1.5 text-(--color-text-muted) transition-colors hover:bg-(--color-danger)/10 hover:text-(--color-danger) cursor-pointer"
-                              >
-                                <Trash2 size={15} aria-hidden="true" />
-                              </button>
+                              <div className="flex items-center gap-1">
+                                {isDuplicate && (
+                                  <button
+                                    type="button"
+                                    title={isForced ? "Excluir da importação" : "Incluir mesmo assim"}
+                                    aria-label={isForced ? "Excluir da importação" : "Incluir mesmo assim"}
+                                    onClick={() => {
+                                      setForcedIndices((prev) => {
+                                        const next = new Set(prev);
+                                        if (next.has(row.index)) next.delete(row.index);
+                                        else next.add(row.index);
+                                        return next;
+                                      });
+                                    }}
+                                    className={`inline-flex cursor-pointer items-center justify-center rounded-lg p-1.5 transition-colors ${isForced ? "text-amber-500 hover:bg-amber-50" : "text-orange-500 hover:bg-orange-50"}`}
+                                  >
+                                    <CheckCircle2 size={15} aria-hidden="true" />
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveRow(row.index)}
+                                  title="Remover linha"
+                                  aria-label="Remover linha"
+                                  className="inline-flex items-center justify-center rounded-lg p-1.5 text-(--color-text-muted) transition-colors hover:bg-(--color-danger)/10 hover:text-(--color-danger) cursor-pointer"
+                                >
+                                  <Trash2 size={15} aria-hidden="true" />
+                                </button>
+                              </div>
                             </td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -1127,6 +1402,7 @@ export function ImportWizard({ existingCategories, existingTagNames = [] }: Impo
               <p className="mt-1 text-sm text-(--color-text-muted)">
                 {result.imported} lançamento{result.imported !== 1 ? "s" : ""} importado{result.imported !== 1 ? "s" : ""} com sucesso
                 {result.skipped > 0 && ` · ${result.skipped} ignorado${result.skipped !== 1 ? "s" : ""} por erro`}
+                {result.duplicatesSkipped > 0 && ` · ${result.duplicatesSkipped} duplicata${result.duplicatesSkipped !== 1 ? "s" : ""} ignorada${result.duplicatesSkipped !== 1 ? "s" : ""}`}
               </p>
             </div>
             <div className="flex flex-wrap justify-center gap-3">
@@ -1226,6 +1502,176 @@ export function ImportWizard({ existingCategories, existingTagNames = [] }: Impo
             onClose={() => setBulkEditModal(null)}
           />
         )}
+      </Modal>
+
+      {/* Modal geral: lista compacta de todas as duplicatas (paginada) */}
+      <Modal
+        open={showDuplicatesModal && modalFilterIndex === null}
+        title={`Duplicatas encontradas (${duplicateMatches.length})`}
+        onClose={() => setShowDuplicatesModal(false)}
+        size="lg"
+      >
+        {(() => {
+          const PAGE_SIZE = 5;
+          const totalPages = Math.max(1, Math.ceil(duplicateMatches.length / PAGE_SIZE));
+          const safePage = Math.min(duplicatesPage, totalPages);
+          const pageItems = duplicateMatches.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
+          return (
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-1">
+                {pageItems.map((match) => {
+                  const isForced = forcedIndices.has(match.importedRowIndex);
+                  return (
+                    <div
+                      key={match.existing.id}
+                      className="flex items-center gap-3 rounded-xl border border-(--color-border) px-4 py-3"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-(--color-text)">
+                          {match.importedDescription || "—"}
+                        </p>
+                        <p className="mt-0.5 text-xs text-(--color-text-muted)">
+                          {match.importedDate.split("-").reverse().join("/")}
+                          {" · "}
+                          {formatCurrency(match.importedAmount)}
+                          {" · "}
+                          <span className="text-(--color-text)">
+                            Existente: {match.existing.description}
+                            {match.existing.category ? ` · ${match.existing.category.name}` : ""}
+                          </span>
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <span
+                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                            isForced ? "bg-amber-100 text-amber-700" : "bg-orange-100 text-orange-700"
+                          }`}
+                        >
+                          {isForced ? "Incluir" : "Duplicata"}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setModalFilterIndex(match.importedRowIndex)}
+                          className="cursor-pointer text-xs font-medium text-(--color-primary) underline hover:no-underline"
+                        >
+                          Ver detalhes
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setForcedIndices((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(match.importedRowIndex)) next.delete(match.importedRowIndex);
+                              else next.add(match.importedRowIndex);
+                              return next;
+                            })
+                          }
+                          className={`cursor-pointer text-xs underline hover:no-underline ${
+                            isForced ? "text-(--color-text-muted)" : "text-orange-600"
+                          }`}
+                        >
+                          {isForced ? "Cancelar" : "Importar mesmo assim"}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+                {duplicateMatches.length === 0 && (
+                  <p className="py-6 text-center text-sm text-(--color-text-muted)">Nenhuma duplicata encontrada.</p>
+                )}
+              </div>
+
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between border-t border-(--color-border) pt-3">
+                  <p className="text-xs text-(--color-text-muted)">
+                    {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, duplicateMatches.length)} de {duplicateMatches.length}
+                  </p>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      disabled={safePage === 1}
+                      onClick={() => setDuplicatesPage((p) => Math.max(1, p - 1))}
+                      className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-(--color-border) text-xs text-(--color-text-muted) hover:bg-(--color-bg-subtle) disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      ‹
+                    </button>
+                    {(() => {
+                      const pages = new Set([1, safePage - 1, safePage, safePage + 1, totalPages]);
+                      const sorted = [...pages].filter((p) => p >= 1 && p <= totalPages).sort((a, b) => a - b);
+                      const items: React.ReactNode[] = [];
+                      sorted.forEach((p, i) => {
+                        if (i > 0 && p - sorted[i - 1] > 1) {
+                          items.push(<span key={`ellipsis-${p}`} className="px-0.5 text-xs text-(--color-text-muted)">…</span>);
+                        }
+                        items.push(
+                          <button
+                            key={p}
+                            type="button"
+                            onClick={() => setDuplicatesPage(p)}
+                            className={`flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg text-xs font-medium ${
+                              p === safePage
+                                ? "bg-(--color-primary) text-white"
+                                : "border border-(--color-border) text-(--color-text-muted) hover:bg-(--color-bg-subtle)"
+                            }`}
+                          >
+                            {p}
+                          </button>
+                        );
+                      });
+                      return items;
+                    })()}
+                    <button
+                      type="button"
+                      disabled={safePage === totalPages}
+                      onClick={() => setDuplicatesPage((p) => Math.min(totalPages, p + 1))}
+                      className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-(--color-border) text-xs text-(--color-text-muted) hover:bg-(--color-bg-subtle) disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      ›
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+      </Modal>
+
+      {/* Modal de detalhe: comparação lado a lado de uma duplicata específica */}
+      <Modal
+        open={showDuplicatesModal && modalFilterIndex !== null}
+        title="Lançamento existente"
+        onClose={() => { setShowDuplicatesModal(false); setModalFilterIndex(null); }}
+        size="lg"
+      >
+        {modalFilterIndex !== null && (() => {
+          const match = duplicateMatches.find((m) => m.importedRowIndex === modalFilterIndex);
+          if (!match) return null;
+          const isForced = forcedIndices.has(match.importedRowIndex);
+          return (
+            <div className="flex flex-col gap-4">
+              <button
+                type="button"
+                onClick={() => { setModalFilterIndex(null); setDuplicatesPage(1); }}
+                className="flex cursor-pointer items-center gap-1.5 self-start text-xs text-(--color-text-muted) hover:text-(--color-text)"
+              >
+                ← Ver todas as duplicatas
+              </button>
+              <DuplicateMatchCard
+                match={match}
+                isForced={isForced}
+                onToggleForce={() =>
+                  setForcedIndices((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(match.importedRowIndex)) next.delete(match.importedRowIndex);
+                    else next.add(match.importedRowIndex);
+                    return next;
+                  })
+                }
+              />
+            </div>
+          );
+        })()}
       </Modal>
     </div>
   );
