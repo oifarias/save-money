@@ -9,6 +9,7 @@ import {
   ClipboardList,
   Loader2,
   Pencil,
+  Trash2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
@@ -21,7 +22,7 @@ import { formatDate } from "@/lib/format";
 import { Money } from "@/components/ui/money";
 import { PayFixedExpensesForm } from "@/components/transactions/pay-fixed-expenses-form";
 import type { FixedExpenseChecklistItem } from "@/lib/fixed-expenses-data";
-import { payFixedExpensesAction } from "@/app/(app)/lancamentos/actions";
+import { payFixedExpensesAction, deleteFixedExpenseTemplateAction } from "@/app/(app)/lancamentos/actions";
 import { useSearchParams } from "next/navigation";
 
 type FixedExpensesChecklistProps = {
@@ -33,7 +34,9 @@ export function FixedExpensesChecklist({ items }: FixedExpensesChecklistProps) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [payModalOpen, setPayModalOpen] = useState(false);
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [, startTransition] = useTransition();
+  const [isDeleting, startDeleteTransition] = useTransition();
 
   function quickPay(item: FixedExpenseChecklistItem) {
     const now = new Date();
@@ -85,6 +88,20 @@ export function FixedExpensesChecklist({ items }: FixedExpensesChecklistProps) {
   function editAndPay(templateId: string) {
     setSelectedIds(new Set([templateId]));
     setPayModalOpen(true);
+  }
+
+  function handleDeleteConfirm() {
+    if (!confirmDeleteId) return;
+    startDeleteTransition(async () => {
+      const result = await deleteFixedExpenseTemplateAction(confirmDeleteId);
+      setConfirmDeleteId(null);
+      if (result.success) {
+        toast.success(result.message ?? "Despesa fixa removida");
+        router.refresh();
+      } else {
+        toast.error(result.message ?? "Não foi possível remover");
+      }
+    });
   }
 
   if (items.length === 0) {
@@ -206,6 +223,15 @@ export function FixedExpensesChecklist({ items }: FixedExpensesChecklistProps) {
                       </button>
                     </>
                   )}
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDeleteId(item.templateId)}
+                    title="Remover despesa fixa"
+                    aria-label={`Remover ${item.description} das despesas fixas`}
+                    className="inline-flex items-center justify-center rounded-lg p-1.5 text-(--color-text-muted) transition-colors hover:bg-(--color-danger)/10 hover:text-(--color-danger) cursor-pointer"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                  </button>
                   {isPaid ? (
                     <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-(--color-success)/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-(--color-success)">
                       <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
@@ -235,6 +261,43 @@ export function FixedExpensesChecklist({ items }: FixedExpensesChecklistProps) {
         onClose={closePayModal}
       >
         <PayFixedExpensesForm items={selectedItems} onDone={closePayModal} />
+      </Modal>
+
+      <Modal
+        open={confirmDeleteId !== null}
+        title="Remover despesa fixa"
+        onClose={() => setConfirmDeleteId(null)}
+      >
+        <div className="flex flex-col gap-5">
+          <p className="text-sm text-(--color-text)">
+            Tem certeza que deseja remover{" "}
+            <strong>
+              {items.find((i) => i.templateId === confirmDeleteId)?.description ?? "esta despesa"}
+            </strong>{" "}
+            das despesas fixas?
+          </p>
+          <p className="text-xs text-(--color-text-muted)">
+            Os lançamentos já registrados não serão excluídos. A despesa deixará de aparecer na lista de acompanhamento mensal.
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setConfirmDeleteId(null)}
+              disabled={isDeleting}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              variant="danger"
+              onClick={handleDeleteConfirm}
+              isLoading={isDeleting}
+            >
+              Remover
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

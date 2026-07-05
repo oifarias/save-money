@@ -7,7 +7,7 @@ import { clsx } from "clsx";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/format";
-import type { ComparativeData } from "@/lib/comparative-data";
+import type { ComparativeData, SubcategoryBreakdownItem } from "@/lib/comparative-data";
 
 type TypeFilter = "EXPENSE" | "INCOME" | "ALL";
 
@@ -26,6 +26,72 @@ function valueForFilter(entry: { expense: number; income: number } | undefined, 
   if (filter === "EXPENSE") return entry.expense;
   if (filter === "INCOME") return entry.income;
   return entry.expense + entry.income;
+}
+
+interface SubdividedBarProps {
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  fill?: string;
+  dataKey?: string;
+  payload?: Record<string, unknown>;
+}
+
+function SubdividedBar({ x = 0, y = 0, width = 0, height = 0, fill = "#ccc", dataKey = "", payload }: SubdividedBarProps) {
+  if (height <= 1 || width <= 0) return null;
+
+  const r = 5;
+  const barPath = `M${x + r},${y} h${width - 2 * r} a${r},${r} 0 0 1 ${r},${r} v${height - r} h${-width} v${-(height - r)} a${r},${r} 0 0 1 ${r},${-r}z`;
+
+  const subData = payload?.[`${dataKey}__subs`] as Record<string, { name: string; value: number }> | undefined;
+
+  if (!subData) return <path d={barPath} fill={fill} />;
+
+  const entries = Object.entries(subData)
+    .map(([id, item]) => ({ id, name: item.name, value: item.value }))
+    .filter((e) => e.value > 0)
+    .sort((a, b) => b.value - a.value);
+  const total = entries.reduce((sum, e) => sum + e.value, 0);
+
+  if (total === 0 || entries.length <= 1) return <path d={barPath} fill={fill} />;
+
+  const clipId = `bc-${Math.round(x)}-${Math.round(y)}`;
+  let runningY = y;
+  const segments = entries.map((e, i) => {
+    const segHeight = Math.max(1, (e.value / total) * height);
+    const segY = runningY;
+    runningY += segHeight;
+    const opacity = 1 - i * (0.55 / entries.length);
+    return { ...e, segY, segHeight, opacity };
+  });
+
+  return (
+    <g>
+      <defs>
+        <clipPath id={clipId}>
+          <path d={barPath} />
+        </clipPath>
+      </defs>
+      <g clipPath={`url(#${clipId})`}>
+        {segments.map(({ id, segY, segHeight, opacity }) => (
+          <rect key={id} x={x} y={segY} width={width} height={segHeight} fill={fill} fillOpacity={opacity} />
+        ))}
+      </g>
+      {segments.slice(0, -1).map(({ id, segY, segHeight }) => (
+        <line
+          key={`d-${id}`}
+          x1={x}
+          y1={segY + segHeight}
+          x2={x + width}
+          y2={segY + segHeight}
+          stroke="white"
+          strokeWidth={1.5}
+          strokeOpacity={0.65}
+        />
+      ))}
+    </g>
+  );
 }
 
 export function ComparativeExplorer({ data }: { data: ComparativeData }) {
@@ -72,13 +138,22 @@ export function ComparativeExplorer({ data }: { data: ComparativeData }) {
   const chartData = useMemo(
     () =>
       rows.map((row) => {
-        const point: Record<string, string | number> = { name: row.category.name };
+        const point: Record<string, unknown> = { name: row.category.name };
         orderedSelection.forEach((month, index) => {
           point[month.key] = row.values[index];
+          const rawSubs = data.subcategoryBreakdown?.[month.key]?.[row.category.id];
+          if (rawSubs) {
+            const filtered: Record<string, { name: string; value: number }> = {};
+            for (const [subId, item] of Object.entries(rawSubs)) {
+              const val = valueForFilter(item as SubcategoryBreakdownItem, typeFilter);
+              if (val > 0) filtered[subId] = { name: item.name, value: val };
+            }
+            point[`${month.key}__subs`] = filtered;
+          }
         });
         return point;
       }),
-    [rows, orderedSelection]
+    [rows, orderedSelection, data, typeFilter]
   );
 
   function handleExport() {
@@ -224,8 +299,10 @@ export function ComparativeExplorer({ data }: { data: ComparativeData }) {
                       dataKey={month.key}
                       name={month.key}
                       fill={SERIES_COLORS[index % SERIES_COLORS.length]}
-                      radius={[6, 6, 0, 0]}
+                      shape={SubdividedBar}
                       animationDuration={700}
+                      animationEasing="ease-out"
+                      animationBegin={index * 80}
                     />
                   ))}
                 </BarChart>

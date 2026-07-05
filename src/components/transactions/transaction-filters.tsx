@@ -37,6 +37,7 @@ export function TransactionFiltersBar({ categories }: TransactionFiltersProps) {
   const [amountValue, setAmountValue] = useState(
     searchParams.get("amountValue") ?? "",
   );
+  const [type, setType] = useState(searchParams.get("type") ?? "");
   const [month, setMonth] = useState(searchParams.get("month") ?? "");
   const [day, setDay] = useState(searchParams.get("day") ?? "");
 
@@ -49,6 +50,7 @@ export function TransactionFiltersBar({ categories }: TransactionFiltersProps) {
 
   function applyFilters(next: Record<string, string>) {
     const params = new URLSearchParams();
+    if (next.type) params.set("type", next.type);
     if (next.categoryId) params.set("categoryId", next.categoryId);
     if (next.subcategoryId) params.set("subcategoryId", next.subcategoryId);
     if (next.description) params.set("description", next.description);
@@ -81,6 +83,7 @@ export function TransactionFiltersBar({ categories }: TransactionFiltersProps) {
   }, []);
 
   const currentValues = {
+    type,
     categoryId,
     subcategoryId,
     description,
@@ -89,6 +92,11 @@ export function TransactionFiltersBar({ categories }: TransactionFiltersProps) {
     month,
     day,
   };
+
+  function handleTypeChange(value: string) {
+    setType(value);
+    applyFilters({ ...currentValues, type: value });
+  }
 
   function handleCategoryChange(value: string) {
     setCategoryId(value);
@@ -127,6 +135,7 @@ export function TransactionFiltersBar({ categories }: TransactionFiltersProps) {
   }
 
   function clearFilters() {
+    setType("");
     setCategoryId("");
     setSubcategoryId("");
     setDescription("");
@@ -138,6 +147,7 @@ export function TransactionFiltersBar({ categories }: TransactionFiltersProps) {
   }
 
   const hasActiveFilters = Boolean(
+    type ||
     categoryId ||
     subcategoryId ||
     description ||
@@ -148,6 +158,25 @@ export function TransactionFiltersBar({ categories }: TransactionFiltersProps) {
   return (
     <div className="flex flex-col gap-3 rounded-2xl border border-(--color-border) bg-(--color-surface) p-4">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="flex flex-col gap-1.5">
+          <label
+            htmlFor="filter-type"
+            className="text-xs font-medium text-(--color-text-muted)"
+          >
+            Tipo
+          </label>
+          <select
+            id="filter-type"
+            value={type}
+            onChange={(event) => handleTypeChange(event.target.value)}
+            className="rounded-xl border border-(--color-border) bg-(--color-bg) px-3.5 py-2.5 text-sm text-(--color-text) outline-none transition-colors focus:border-(--color-primary) focus:ring-2 focus:ring-(--color-primary)/20"
+          >
+            <option value="">Todos</option>
+            <option value="EXPENSE">Despesa</option>
+            <option value="INCOME">Entrada</option>
+          </select>
+        </div>
+
         <div className="flex flex-col gap-1.5">
           <label
             htmlFor="filter-categoryId"

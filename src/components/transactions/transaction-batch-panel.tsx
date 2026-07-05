@@ -71,6 +71,7 @@ export function TransactionBatchPanel({ categories, tagSuggestions, creditCards 
   const [isPending, startTransition] = useTransition();
   const [itemErrors, setItemErrors] = useState<Record<string, Record<string, string>>>({});
   const [categoryModalOpen, setCategoryModalOpen] = useState(false);
+  const [subcategoryModalForKey, setSubcategoryModalForKey] = useState<string | null>(null);
 
   function reset() {
     const initial = createItem();
@@ -106,6 +107,12 @@ export function TransactionBatchPanel({ categories, tagSuggestions, creditCards 
     setCategoryModalOpen(false);
     router.refresh();
     toast("Selecione o novo grupo na lista após a atualização", { icon: "💡" });
+  }
+
+  function handleSubcategoryCreated() {
+    setSubcategoryModalForKey(null);
+    router.refresh();
+    toast("Selecione o novo sub-grupo na lista após a atualização", { icon: "💡" });
   }
 
   function handleCancel() {
@@ -331,7 +338,19 @@ export function TransactionBatchPanel({ categories, tagSuggestions, creditCards 
                     </select>
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-sm font-medium text-(--color-text)">Sub-grupo</label>
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm font-medium text-(--color-text)">Sub-grupo</label>
+                      {item.categoryId && (
+                        <button
+                          type="button"
+                          onClick={() => setSubcategoryModalForKey(item.key)}
+                          className="flex items-center gap-1 text-xs font-medium text-(--color-primary) hover:underline"
+                        >
+                          <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                          Novo sub-grupo
+                        </button>
+                      )}
+                    </div>
                     <select
                       key={item.categoryId}
                       value={item.subcategoryId}
@@ -564,6 +583,20 @@ export function TransactionBatchPanel({ categories, tagSuggestions, creditCards 
 
       <Modal open={categoryModalOpen} title="Novo grupo" onClose={() => setCategoryModalOpen(false)}>
         <CategoryForm onDone={handleCategoryCreated} />
+      </Modal>
+
+      <Modal open={subcategoryModalForKey !== null} title="Novo sub-grupo" onClose={() => setSubcategoryModalForKey(null)}>
+        <CategoryForm
+          category={{
+            id: "",
+            name: "",
+            color: "",
+            icon: "",
+            parentId: items.find((i) => i.key === subcategoryModalForKey)?.categoryId ?? "",
+          }}
+          rootCategories={categories}
+          onDone={handleSubcategoryCreated}
+        />
       </Modal>
     </>
   );

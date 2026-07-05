@@ -31,11 +31,15 @@ export type ComparativeCategoryMeta = {
   color: string;
 };
 
+export type SubcategoryBreakdownItem = { name: string; expense: number; income: number };
+
 export type ComparativeData = {
   months: ComparativeMonth[];
   categories: ComparativeCategoryMeta[];
   /** totals[monthKey][categoryId] */
   totals: Record<string, Record<string, { expense: number; income: number }>>;
+  /** subcategoryBreakdown[monthKey][categoryId][subcategoryId | "__other__"] */
+  subcategoryBreakdown: Record<string, Record<string, Record<string, SubcategoryBreakdownItem>>>;
 };
 
 const MONTHS_WINDOW = 12;
@@ -74,6 +78,7 @@ async function getComparativeDataUncached(userId: string, filters: TransactionFi
       amount: true,
       date: true,
       category: { select: { id: true, name: true, color: true } },
+      subcategory: { select: { id: true, name: true } },
     },
   });
 
@@ -85,8 +90,10 @@ async function getComparativeDataUncached(userId: string, filters: TransactionFi
 
   const categoriesById = new Map<string, ComparativeCategoryMeta>();
   const totals: Record<string, Record<string, { expense: number; income: number }>> = {};
+  const subcategoryBreakdown: Record<string, Record<string, Record<string, SubcategoryBreakdownItem>>> = {};
   for (const month of months) {
     totals[month.key] = {};
+    subcategoryBreakdown[month.key] = {};
   }
 
   for (const tx of transactions) {
@@ -108,9 +115,21 @@ async function getComparativeDataUncached(userId: string, filters: TransactionFi
     }
     if (tx.type === "INCOME") bucket[categoryId].income += tx.amount;
     else bucket[categoryId].expense += tx.amount;
+
+    const subBucket = subcategoryBreakdown[key];
+    if (subBucket) {
+      if (!subBucket[categoryId]) subBucket[categoryId] = {};
+      const subId = tx.subcategory?.id ?? "__other__";
+      const subName = tx.subcategory?.name ?? "(sem sub-grupo)";
+      if (!subBucket[categoryId][subId]) {
+        subBucket[categoryId][subId] = { name: subName, expense: 0, income: 0 };
+      }
+      if (tx.type === "INCOME") subBucket[categoryId][subId].income += tx.amount;
+      else subBucket[categoryId][subId].expense += tx.amount;
+    }
   }
 
   const categories = Array.from(categoriesById.values()).sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
 
-  return { months, categories, totals };
+  return { months, categories, totals, subcategoryBreakdown };
 }

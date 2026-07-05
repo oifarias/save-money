@@ -156,7 +156,11 @@ export function SummaryCards({
     },
     {
       title: "Total de parcelamentos",
-      href: buildFilterHref(baseParams, { installment: "true" }),
+      // Sempre linka pelo mês calendário (não pelo período de N dias), pois getInstallmentsSummary
+      // usa o mês inteiro — garantimos que o que o card exibe bate com o que a lista mostra.
+      href: currentMonthKey
+        ? `/lancamentos?month=${currentMonthKey}&installment=true`
+        : buildFilterHref(baseParams, { installment: "true" }),
       icon: CreditCard,
       classes: CARD_COLORS.blue,
       total: installments.currentMonth,

@@ -8,7 +8,7 @@ import { TransactionFiltersBar } from "@/components/transactions/transaction-fil
 import { PeriodFilter } from "@/components/transactions/period-filter";
 import type { TransactionFormCategory } from "@/components/transactions/transaction-form";
 
-const ADVANCED_FILTER_KEYS = ["categoryId", "subcategoryId", "description", "amountOperator", "month"];
+const ADVANCED_FILTER_KEYS = ["type", "categoryId", "subcategoryId", "description", "amountOperator", "month"];
 
 type FiltersPanelProps = {
   categories: TransactionFormCategory[];

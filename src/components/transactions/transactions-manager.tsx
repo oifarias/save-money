@@ -65,6 +65,13 @@ export function TransactionsManager({
 }: TransactionsManagerProps) {
   const searchParams = useSearchParams();
 
+  // O card de parcelamentos é sempre calculado pelo mês calendário (não pelo período de 30/45/60 dias).
+  // Derivamos o mesmo mês aqui para que o link do card navegue para a mesma janela usada no cálculo.
+  const now = new Date();
+  const installmentMonthKey =
+    searchParams.get("month") ??
+    `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<TransactionListItem | null>(null);
   const [deleting, setDeleting] = useState<TransactionListItem | null>(null);
@@ -269,6 +276,7 @@ export function TransactionsManager({
             installments={summary.installments}
             periodLabel={summary.periodLabel}
             filterParams={searchParams}
+            currentMonthKey={installmentMonthKey}
           />
         </div>
       </CollapsibleSection>

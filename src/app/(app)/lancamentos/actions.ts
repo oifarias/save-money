@@ -723,6 +723,33 @@ export async function createTransactionBatchAction(items: unknown): Promise<Acti
   return { success: true, message: `${totalCreated} lançamento(s) registrado(s) com sucesso` };
 }
 
+export async function deleteFixedExpenseTemplateAction(templateId: unknown): Promise<ActionResult> {
+  const userId = await requireUserId();
+
+  if (typeof templateId !== "string" || !templateId) {
+    return { success: false, message: "ID inválido" };
+  }
+
+  const template = await prisma.fixedExpenseTemplate.findFirst({
+    where: { id: templateId, userId },
+    select: { id: true },
+  });
+
+  if (!template) {
+    return { success: false, message: "Despesa fixa não encontrada" };
+  }
+
+  await prisma.fixedExpenseTemplate.update({
+    where: { id: templateId },
+    data: { isActive: false },
+  });
+
+  revalidatePath("/dashboard");
+  revalidatePath("/lancamentos");
+  invalidateAggregateCaches(userId);
+  return { success: true, message: "Despesa fixa removida" };
+}
+
 function flattenZodErrors(error: { issues: { path: PropertyKey[]; message: string }[] }) {
   const fieldErrors: Record<string, string> = {};
   for (const issue of error.issues) {
