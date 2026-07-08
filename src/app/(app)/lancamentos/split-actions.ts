@@ -46,32 +46,75 @@ export async function createSplitAction(input: unknown): Promise<CreateSplitResu
     return { success: false, fieldErrors: flattenZodErrors(parsed.error) };
   }
 
-  const { title, mode, transactionIds, participants } = parsed.data;
+  const { title, mode, items, participants } = parsed.data;
 
   const transactions = await prisma.transaction.findMany({
-    where: { id: { in: transactionIds }, userId, type: "EXPENSE" },
-    select: { description: true, amount: true, date: true },
+    where: { id: { in: items.map((i) => i.transactionId) }, userId, type: "EXPENSE" },
+    select: { id: true, description: true, amount: true, date: true },
   });
+  const txById = new Map(transactions.map((t) => [t.id, t]));
+  const validItems = items.filter((item) => txById.has(item.transactionId));
 
-  if (transactions.length === 0) {
+  if (validItems.length === 0) {
     return { success: false, message: "Nenhuma despesa válida foi selecionada" };
   }
 
+  const total = validItems.reduce((sum, item) => sum + txById.get(item.transactionId)!.amount, 0);
+
+  // Totais por participante calculados antes do write, para não depender de update pós-create.
+  const participantTotals =
+    mode === "equal"
+      ? participants.map(() => total / participants.length)
+      : participants.map((_, index) =>
+          validItems.reduce(
+            (sum, item) =>
+              sum + item.shares.filter((s) => s.participantIndex === index).reduce((acc, s) => acc + s.amount, 0),
+            0
+          )
+        );
+
+  const splitId = randomUUID();
   const token = randomUUID();
 
-  await prisma.sharedSplit.create({
-    data: {
-      userId,
-      token,
-      title,
-      mode,
-      items: {
-        create: transactions.map((t) => ({ description: t.description, amount: t.amount, date: t.date })),
-      },
-      participants: {
-        create: participants.map((p, index) => ({ name: p.name, amount: p.amount, position: index })),
-      },
-    },
+  const participantRows = participants.map((p, index) => ({
+    id: randomUUID(),
+    sharedSplitId: splitId,
+    name: p.name,
+    amount: participantTotals[index],
+    position: index,
+  }));
+
+  const itemRows = validItems.map((item) => {
+    const t = txById.get(item.transactionId)!;
+    return {
+      id: randomUUID(),
+      sharedSplitId: splitId,
+      description: t.description,
+      amount: t.amount,
+      date: t.date,
+      note: item.note || null,
+    };
+  });
+
+  const shareRows =
+    mode === "custom"
+      ? validItems.flatMap((item, itemIndex) =>
+          item.shares.map((share) => ({
+            id: randomUUID(),
+            sharedSplitItemId: itemRows[itemIndex].id,
+            sharedSplitParticipantId: participantRows[share.participantIndex].id,
+            amount: share.amount,
+          }))
+        )
+      : [];
+
+  await prisma.$transaction(async (tx) => {
+    await tx.sharedSplit.create({ data: { id: splitId, userId, token, title, mode } });
+    await tx.sharedSplitParticipant.createMany({ data: participantRows });
+    await tx.sharedSplitItem.createMany({ data: itemRows });
+    if (shareRows.length > 0) {
+      await tx.sharedSplitItemShare.createMany({ data: shareRows });
+    }
   });
 
   revalidatePath("/lancamentos");

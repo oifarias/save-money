@@ -443,8 +443,10 @@ model SharedSplitItem {
   description   String
   amount        Float
   date          DateTime
+  note          String?
 
-  sharedSplit SharedSplit @relation(fields: [sharedSplitId], references: [id], onDelete: Cascade)
+  sharedSplit SharedSplit            @relation(fields: [sharedSplitId], references: [id], onDelete: Cascade)
+  shares      SharedSplitItemShare[]
 
   @@index([sharedSplitId])
   @@map("shared_split_items")
@@ -457,10 +459,28 @@ model SharedSplitParticipant {
   amount        Float
   position      Int
 
-  sharedSplit SharedSplit @relation(fields: [sharedSplitId], references: [id], onDelete: Cascade)
+  sharedSplit SharedSplit            @relation(fields: [sharedSplitId], references: [id], onDelete: Cascade)
+  shares      SharedSplitItemShare[]
 
   @@index([sharedSplitId])
   @@map("shared_split_participants")
+}
+
+// Valor que uma pessoa paga de um lançamento específico dentro de uma divisão em modo "custom".
+// Só existe quando mode === "custom": no modo "equal" o valor por pessoa é uniforme e calculado
+// direto a partir do total, sem necessidade de granularidade por item.
+model SharedSplitItemShare {
+  id                       String @id @default(cuid())
+  sharedSplitItemId        String
+  sharedSplitParticipantId String
+  amount                   Float
+
+  item        SharedSplitItem        @relation(fields: [sharedSplitItemId], references: [id], onDelete: Cascade)
+  participant SharedSplitParticipant @relation(fields: [sharedSplitParticipantId], references: [id], onDelete: Cascade)
+
+  @@unique([sharedSplitItemId, sharedSplitParticipantId])
+  @@index([sharedSplitParticipantId])
+  @@map("shared_split_item_shares")
 }
 
 model CreditCard {

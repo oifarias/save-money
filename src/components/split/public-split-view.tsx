@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Wallet } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { ParticipantsCard } from "@/components/split/participants-card";
 import { formatCurrency, formatDate } from "@/lib/format";
 import type { PublicSplit } from "@/lib/split-data";
 
@@ -23,35 +24,37 @@ export function PublicSplitView({ split }: { split: PublicSplit }) {
           <p className="mt-2 font-numeric text-3xl font-semibold text-(--color-text)">{formatCurrency(split.total)}</p>
         </div>
 
-        <Card>
-          <h2 className="font-display text-sm font-semibold text-(--color-text)">Quem paga quanto</h2>
-          <ul className="mt-3 flex flex-col gap-2.5">
-            {split.participants.map((participant) => (
-              <li
-                key={participant.id}
-                className="flex items-center justify-between gap-3 rounded-xl bg-(--color-bg) px-3.5 py-2.5"
-              >
-                <span className="text-sm font-medium text-(--color-text)">{participant.name}</span>
-                <span className="font-numeric text-sm font-semibold text-(--color-primary)">
-                  {formatCurrency(participant.amount)}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </Card>
+        <ParticipantsCard split={split} />
 
         <Card>
           <h2 className="font-display text-sm font-semibold text-(--color-text)">Lançamentos incluídos</h2>
           <ul className="mt-3 flex flex-col divide-y divide-(--color-border)">
             {split.items.map((item) => (
-              <li key={item.id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
-                <div className="min-w-0">
-                  <p className="truncate font-medium text-(--color-text)">{item.description}</p>
-                  <p className="text-xs text-(--color-text-muted)">{formatDate(item.date)}</p>
+              <li key={item.id} className="flex flex-col gap-1.5 py-2.5 text-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-(--color-text)">{item.description}</p>
+                    <p className="text-xs text-(--color-text-muted)">{formatDate(item.date)}</p>
+                  </div>
+                  <span className="shrink-0 font-numeric font-medium text-(--color-text)">
+                    {formatCurrency(item.amount)}
+                  </span>
                 </div>
-                <span className="shrink-0 font-numeric font-medium text-(--color-text)">
-                  {formatCurrency(item.amount)}
-                </span>
+
+                {item.note && <p className="text-xs text-(--color-text-muted)">{item.note}</p>}
+
+                {item.shares.length > 0 && (
+                  <ul className="flex flex-col gap-1 rounded-lg bg-(--color-bg) p-2">
+                    {item.shares.map((share) => (
+                      <li key={share.participantId} className="flex items-center justify-between text-xs">
+                        <span className="text-(--color-text-muted)">{share.name} paga</span>
+                        <span className="font-numeric font-medium text-(--color-text)">
+                          {formatCurrency(share.amount)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </li>
             ))}
           </ul>

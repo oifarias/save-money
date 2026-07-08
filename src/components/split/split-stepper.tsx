@@ -1,22 +1,23 @@
 import { Check } from "lucide-react";
 import { clsx } from "clsx";
 
-const STEPS = [
-  { id: "title", label: "Título" },
-  { id: "divide", label: "Divisão" },
-  { id: "summary", label: "Resumo" },
-] as const;
+type StepDef = { id: string; label: string };
 
-export function SplitStepper({ current }: { current: (typeof STEPS)[number]["id"] }) {
-  const currentIndex = STEPS.findIndex((step) => step.id === current);
+type SplitStepperProps = {
+  steps: readonly StepDef[];
+  current: string;
+};
+
+export function SplitStepper({ steps, current }: SplitStepperProps) {
+  const currentIndex = steps.findIndex((step) => step.id === current);
 
   return (
     <ol className="flex items-center" aria-label="Etapas para dividir a conta">
-      {STEPS.map((step, index) => {
+      {steps.map((step, index) => {
         const isCompleted = index < currentIndex;
         const isCurrent = index === currentIndex;
         return (
-          <li key={step.id} className={clsx("flex items-center", index < STEPS.length - 1 && "flex-1")}>
+          <li key={step.id} className={clsx("flex items-center", index < steps.length - 1 && "flex-1")}>
             <div className="flex items-center gap-2">
               <span
                 className={clsx(
@@ -39,7 +40,7 @@ export function SplitStepper({ current }: { current: (typeof STEPS)[number]["id"
                 {step.label}
               </span>
             </div>
-            {index < STEPS.length - 1 && <span className="mx-2 h-px flex-1 bg-(--color-border)" aria-hidden="true" />}
+            {index < steps.length - 1 && <span className="mx-2 h-px flex-1 bg-(--color-border)" aria-hidden="true" />}
           </li>
         );
       })}

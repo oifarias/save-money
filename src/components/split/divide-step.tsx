@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/format";
 import type { SplitMode, SplitParticipant } from "@/components/split/split-wizard";
 
-type Row = { name: string; amount: string };
+type Row = { name: string };
 
 type DivideStepProps = {
   total: number;
@@ -27,16 +27,16 @@ const MODE_OPTIONS = [
   {
     value: "custom" as const,
     label: "Valores personalizados",
-    description: "Você define quanto cada pessoa paga",
+    description: "Você define quanto cada pessoa paga em cada lançamento",
     icon: SlidersHorizontal,
   },
 ];
 
 function buildInitialRows(participants: SplitParticipant[]): Row[] {
   if (participants.length > 0) {
-    return participants.map((p) => ({ name: p.name, amount: p.amount ? String(p.amount) : "" }));
+    return participants.map((p) => ({ name: p.name }));
   }
-  return [{ name: "Você", amount: "" }, { name: "", amount: "" }];
+  return [{ name: "Você" }, { name: "" }];
 }
 
 export function DivideStep({ total, initialMode, initialParticipants, onConfirmed, onBack }: DivideStepProps) {
@@ -44,23 +44,13 @@ export function DivideStep({ total, initialMode, initialParticipants, onConfirme
   const [rows, setRows] = useState<Row[]>(() => buildInitialRows(initialParticipants));
 
   const equalShare = rows.length > 0 ? total / rows.length : 0;
-  const customTotal = rows.reduce((sum, row) => sum + (Number(row.amount.replace(",", ".")) || 0), 0);
-  const customDiff = Math.round((total - customTotal) * 100) / 100;
 
   function updateRow(index: number, patch: Partial<Row>) {
     setRows((current) => current.map((row, i) => (i === index ? { ...row, ...patch } : row)));
   }
 
   function addRow() {
-    setRows((current) => {
-      const currentTotal = current.reduce(
-        (sum, row) => sum + (Number(row.amount.replace(",", ".")) || 0),
-        0
-      );
-      const remainder = Math.round((total - currentTotal) * 100) / 100;
-      const autoAmount = mode === "custom" && remainder > 0 ? String(remainder) : "";
-      return [...current, { name: "", amount: autoAmount }];
-    });
+    setRows((current) => [...current, { name: "" }]);
   }
 
   function removeRow(index: number) {
@@ -73,7 +63,7 @@ export function DivideStep({ total, initialMode, initialParticipants, onConfirme
       .filter((row) => row.name.trim().length > 0)
       .map((row) => ({
         name: row.name.trim(),
-        amount: mode === "equal" ? equalShare : Number(row.amount.replace(",", ".")) || 0,
+        amount: mode === "equal" ? total / rows.filter((r) => r.name.trim().length > 0).length : 0,
       }));
     if (participants.length === 0) return;
     onConfirmed(mode, participants);
@@ -128,18 +118,7 @@ export function DivideStep({ total, initialMode, initialParticipants, onConfirme
 
       {mode && (
         <div className="flex flex-col gap-2.5">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-medium text-(--color-text)">Quem participa?</p>
-            {mode === "custom" && (
-              <p
-                className={
-                  customDiff !== 0 ? "text-xs font-medium text-(--color-danger)" : "text-xs text-(--color-text-muted)"
-                }
-              >
-                {formatCurrency(customTotal)} de {formatCurrency(total)}
-              </p>
-            )}
-          </div>
+          <p className="text-sm font-medium text-(--color-text)">Quem participa?</p>
 
           {rows.map((row, index) => (
             <div key={index} className="flex items-center gap-2">
@@ -150,21 +129,10 @@ export function DivideStep({ total, initialMode, initialParticipants, onConfirme
                 onChange={(event) => updateRow(index, { name: event.target.value })}
                 className="min-w-0 flex-1 rounded-xl border border-(--color-border) bg-(--color-surface) px-3.5 py-2.5 text-sm text-(--color-text) outline-none transition-colors focus:border-(--color-primary) focus:ring-2 focus:ring-(--color-primary)/20"
               />
-              {mode === "equal" ? (
+              {mode === "equal" && (
                 <span className="w-28 shrink-0 text-right font-numeric text-sm text-(--color-text-muted)">
                   {formatCurrency(equalShare)}
                 </span>
-              ) : (
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  inputMode="decimal"
-                  placeholder="0,00"
-                  value={row.amount}
-                  onChange={(event) => updateRow(index, { amount: event.target.value })}
-                  className="w-28 shrink-0 rounded-xl border border-(--color-border) bg-(--color-surface) px-3 py-2.5 text-right font-numeric text-sm text-(--color-text) outline-none transition-colors focus:border-(--color-primary) focus:ring-2 focus:ring-(--color-primary)/20"
-                />
               )}
               <button
                 type="button"
@@ -182,6 +150,12 @@ export function DivideStep({ total, initialMode, initialParticipants, onConfirme
             <Plus className="h-4 w-4" aria-hidden="true" />
             Adicionar pessoa
           </Button>
+
+          {mode === "custom" && (
+            <p className="text-xs text-(--color-text-muted)">
+              No próximo passo você define quanto cada pessoa paga em cada lançamento.
+            </p>
+          )}
         </div>
       )}
 

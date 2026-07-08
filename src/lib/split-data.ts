@@ -1,10 +1,18 @@
 import { prisma } from "@/lib/prisma";
 
+export type PublicSplitItemShare = {
+  participantId: string;
+  name: string;
+  amount: number;
+};
+
 export type PublicSplitItem = {
   id: string;
   description: string;
   amount: number;
   date: string;
+  note: string | null;
+  shares: PublicSplitItemShare[];
 };
 
 export type PublicSplitParticipant = {
@@ -27,7 +35,10 @@ export async function getSplitByToken(token: string): Promise<PublicSplit | null
   const split = await prisma.sharedSplit.findUnique({
     where: { token },
     include: {
-      items: { orderBy: { date: "desc" } },
+      items: {
+        orderBy: { date: "desc" },
+        include: { shares: { include: { participant: true } } },
+      },
       participants: { orderBy: { position: "asc" } },
     },
   });
@@ -45,6 +56,15 @@ export async function getSplitByToken(token: string): Promise<PublicSplit | null
       description: item.description,
       amount: item.amount,
       date: item.date.toISOString(),
+      note: item.note,
+      shares: item.shares
+        .slice()
+        .sort((a, b) => a.participant.position - b.participant.position)
+        .map((share) => ({
+          participantId: share.sharedSplitParticipantId,
+          name: share.participant.name,
+          amount: share.amount,
+        })),
     })),
     participants: split.participants.map((p) => ({ id: p.id, name: p.name, amount: p.amount })),
     createdAt: split.createdAt.toISOString(),
