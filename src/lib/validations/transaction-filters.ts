@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 const firstValue = (value: unknown) => (Array.isArray(value) ? value[0] : value);
+const asArray = (value: unknown) => (value === undefined ? [] : Array.isArray(value) ? value : [value]);
 
 export const transactionFiltersSchema = z.object({
   categoryId: z.preprocess(firstValue, z.string().trim().min(1).optional()),
@@ -39,7 +40,7 @@ export const transactionFiltersSchema = z.object({
   type: z.preprocess(firstValue, z.enum(["EXPENSE", "INCOME"]).optional()),
   isFixed: z.preprocess(firstValue, z.enum(["true", "false"]).optional()),
   installment: z.preprocess(firstValue, z.enum(["true"]).optional()),
-  tagId: z.preprocess(firstValue, z.string().trim().min(1).optional()),
+  tagIds: z.preprocess(asArray, z.array(z.string().trim().min(1)).optional()),
 });
 
 export type TransactionFilters = z.infer<typeof transactionFiltersSchema>;
@@ -50,4 +51,20 @@ export function parseTransactionFilters(searchParams: Record<string, string | st
     return {};
   }
   return result.data;
+}
+
+/**
+ * `Object.fromEntries(url.searchParams)` descarta valores repetidos da mesma chave (fica só o
+ * último). Usado nos consumidores que recebem a query como string crua (route handler, server
+ * action de "carregar mais") para preservar múltiplos `tagIds` do mesmo jeito que o Next.js já
+ * faz nativamente no `searchParams` de Server Component.
+ */
+export function searchParamsToRecord(params: URLSearchParams): Record<string, string | string[]> {
+  const result: Record<string, string | string[]> = {};
+  for (const key of params.keys()) {
+    if (key in result) continue;
+    const values = params.getAll(key);
+    result[key] = values.length > 1 ? values : values[0]!;
+  }
+  return result;
 }

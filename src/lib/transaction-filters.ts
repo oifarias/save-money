@@ -43,13 +43,13 @@ export async function buildTransactionWhere(
     where.installmentPlanId = { not: null };
   }
 
-  if (filters.tagId) {
-    const tag = await prisma.tag.findFirst({
-      where: { id: filters.tagId, userId },
+  if (filters.tagIds && filters.tagIds.length > 0) {
+    const validTags = await prisma.tag.findMany({
+      where: { id: { in: filters.tagIds }, userId },
       select: { id: true },
     });
-    if (tag) {
-      where.tags = { some: { tagId: tag.id } };
+    if (validTags.length > 0) {
+      where.tags = { some: { tagId: { in: validTags.map((t) => t.id) } } };
     }
   }
 

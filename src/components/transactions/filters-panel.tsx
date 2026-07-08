@@ -8,7 +8,7 @@ import { TransactionFiltersBar } from "@/components/transactions/transaction-fil
 import { PeriodFilter } from "@/components/transactions/period-filter";
 import type { TransactionFormCategory } from "@/components/transactions/transaction-form";
 
-const ADVANCED_FILTER_KEYS = ["type", "categoryId", "subcategoryId", "description", "amountOperator", "month", "tagId"];
+const ADVANCED_FILTER_KEYS = ["type", "categoryId", "subcategoryId", "description", "amountOperator", "month"];
 
 type FiltersPanelProps = {
   categories: TransactionFormCategory[];
@@ -19,7 +19,9 @@ type FiltersPanelProps = {
 export function FiltersPanel({ categories, tags, actions }: FiltersPanelProps) {
   const searchParams = useSearchParams();
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const activeAdvancedFilterCount = ADVANCED_FILTER_KEYS.filter((key) => searchParams.get(key)).length;
+  const activeAdvancedFilterCount =
+    ADVANCED_FILTER_KEYS.filter((key) => searchParams.get(key)).length +
+    (searchParams.getAll("tagIds").length > 0 ? 1 : 0);
 
   return (
     <div className="flex flex-col gap-3">

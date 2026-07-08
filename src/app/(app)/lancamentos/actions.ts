@@ -15,7 +15,7 @@ import {
 } from "@/lib/installment-resolver";
 import { resolveFixedExpenseTemplate } from "@/lib/fixed-expense-resolver";
 import { payFixedExpensesSchema } from "@/lib/validations/fixed-expense";
-import { parseTransactionFilters } from "@/lib/validations/transaction-filters";
+import { parseTransactionFilters, searchParamsToRecord } from "@/lib/validations/transaction-filters";
 import { buildTransactionWhere } from "@/lib/transaction-filters";
 import { getTransactionsPage } from "@/lib/transactions-query";
 import { dashboardCacheTag } from "@/lib/dashboard-data";
@@ -330,7 +330,7 @@ export async function bulkUpdateTransactionsAction(input: unknown): Promise<Acti
 
 export async function loadMoreTransactionsAction(searchParamsString: string, page: number): Promise<TransactionListItem[]> {
   const userId = await requireUserId();
-  const rawSearchParams = Object.fromEntries(new URLSearchParams(searchParamsString));
+  const rawSearchParams = searchParamsToRecord(new URLSearchParams(searchParamsString));
   const filters = parseTransactionFilters(rawSearchParams);
   const where = await buildTransactionWhere(userId, filters);
   return getTransactionsPage(where, page);

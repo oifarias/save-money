@@ -1,7 +1,7 @@
 import * as XLSX from "xlsx";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { parseTransactionFilters } from "@/lib/validations/transaction-filters";
+import { parseTransactionFilters, searchParamsToRecord } from "@/lib/validations/transaction-filters";
 import { buildTransactionWhere } from "@/lib/transaction-filters";
 
 // Mitigação de CSV/Formula Injection (OWASP): células que comecem com um
@@ -31,7 +31,7 @@ export async function GET(request: Request) {
   const userId = session.user.id;
 
   const url = new URL(request.url);
-  const rawSearchParams = Object.fromEntries(url.searchParams);
+  const rawSearchParams = searchParamsToRecord(url.searchParams);
   const filters = parseTransactionFilters(rawSearchParams);
   const where = await buildTransactionWhere(userId, filters);
 
