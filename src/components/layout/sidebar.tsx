@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { clsx } from "clsx";
-import { Wallet, X } from "lucide-react";
+import { X } from "lucide-react";
+import { Logo } from "@/components/branding/logo";
 import { NAV_ITEMS } from "@/components/layout/nav-items";
 
 type SidebarProps = {
@@ -19,9 +20,7 @@ export function Sidebar({ variant = "fixed", open = false, onClose }: SidebarPro
     <div className="flex h-full w-60 flex-col border-r border-(--color-border) bg-(--color-surface) px-4 py-6">
       <div className="mb-8 flex items-center justify-between px-2">
         <Link href="/dashboard" className="flex items-center gap-2 font-display text-lg font-semibold text-(--color-text)">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-(--color-primary) to-(--color-primary-dark) text-white">
-            <Wallet className="h-4.5 w-4.5" aria-hidden="true" />
-          </span>
+          <Logo size={32} />
           Save Money
         </Link>
         {variant === "drawer" && (

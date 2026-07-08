@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { getExplorerData } from "@/lib/analise-data";
 import type { ExplorerFilters } from "@/lib/analise-data";
 import { ChartDisplay } from "@/components/analise/chart-display";
+import { Logo } from "@/components/branding/logo";
 import { formatCurrency } from "@/lib/format";
 import Link from "next/link";
 
@@ -46,6 +47,11 @@ export default async function PublicVisualizationPage({
   return (
     <div className="min-h-screen bg-(--color-bg) p-4 sm:p-8">
       <div className="mx-auto max-w-4xl flex flex-col gap-6">
+        <Link href="/" className="flex items-center gap-2 font-display text-base font-semibold text-(--color-text)">
+          <Logo size={28} />
+          Save Money
+        </Link>
+
         <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="font-display text-2xl font-bold text-(--color-text)">{viz.name}</h1>

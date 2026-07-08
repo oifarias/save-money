@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Wallet } from "lucide-react";
+import { Logo } from "@/components/branding/logo";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 
 export function LandingHeader() {
@@ -7,9 +7,7 @@ export function LandingHeader() {
     <header className="sticky top-0 z-20 border-b border-(--color-border) bg-(--color-bg)/80 backdrop-blur-sm">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-6 py-4 sm:px-10">
         <Link href="/" className="flex items-center gap-2 font-display text-lg font-semibold text-(--color-text)">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-(--color-primary) to-(--color-primary-dark) text-white">
-            <Wallet className="h-4.5 w-4.5" aria-hidden="true" />
-          </span>
+          <Logo size={32} />
           Save Money
         </Link>
 
