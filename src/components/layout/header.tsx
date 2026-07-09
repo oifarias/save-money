@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Eye, EyeOff, LogOut, Menu } from "lucide-react";
 import { signOut } from "next-auth/react";
+import { Logo } from "@/components/branding/logo";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { useValuesVisibility } from "@/contexts/values-visibility";
 
@@ -33,6 +34,7 @@ export function Header({ userName, onMenuClick, linkedLoginMethods }: HeaderProp
         >
           <Menu className="h-5 w-5" aria-hidden="true" />
         </button>
+        <Logo size={26} className="lg:hidden" priority={false} />
         <p className="font-display text-lg font-semibold text-(--color-text)">Olá, {userName.split(" ")[0]}</p>
       </div>
 

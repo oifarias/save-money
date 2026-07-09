@@ -46,7 +46,7 @@ export function TransactionRow({ transaction, onEdit, onDelete, selectable, sele
   const monthColor = MONTH_COLORS[monthIndex];
 
   return (
-    <div className="grid grid-cols-[1fr_8rem_13rem] items-center gap-4 px-4 py-3.5 sm:px-5">
+    <div className="flex flex-col gap-2 px-4 py-3.5 sm:grid sm:grid-cols-[1fr_8rem_13rem] sm:items-center sm:gap-4 sm:px-5">
       {/* Esquerda: checkbox + ícone + descrição */}
       <div className="flex min-w-0 items-center gap-3">
         {selectable && (
@@ -114,7 +114,7 @@ export function TransactionRow({ transaction, onEdit, onDelete, selectable, sele
       </div>
 
       {/* Direita: valor + ações */}
-      <div className="flex items-center justify-end gap-3">
+      <div className="flex items-center justify-between gap-3 sm:justify-end">
         <p
           className={clsx(
             "whitespace-nowrap font-numeric text-sm font-semibold",
