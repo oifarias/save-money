@@ -6,11 +6,16 @@ export default async function NovaAnalisePage() {
   const session = await auth();
   const userId = session!.user.id;
 
-  const [categories, tags] = await Promise.all([
+  const [categories, subcategories, tags] = await Promise.all([
     prisma.category.findMany({
       where: { userId, parentId: null },
       orderBy: { name: "asc" },
       select: { id: true, name: true, color: true },
+    }),
+    prisma.category.findMany({
+      where: { userId, parentId: { not: null } },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, color: true, parentId: true },
     }),
     prisma.tag.findMany({
       where: { userId },
@@ -19,5 +24,11 @@ export default async function NovaAnalisePage() {
     }),
   ]);
 
-  return <Explorer categories={categories} tags={tags} />;
+  return (
+    <Explorer
+      categories={categories}
+      subcategories={subcategories.map((s) => ({ ...s, parentId: s.parentId! }))}
+      tags={tags}
+    />
+  );
 }

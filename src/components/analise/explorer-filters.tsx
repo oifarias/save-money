@@ -5,6 +5,7 @@ import type { ExplorerFilters } from "@/lib/analise-data";
 type Props = {
   filters: ExplorerFilters;
   categories: { id: string; name: string; color: string }[];
+  subcategories: { id: string; name: string; color: string; parentId: string }[];
   tags: { id: string; name: string }[];
   onChange: (filters: ExplorerFilters) => void;
 };
@@ -25,7 +26,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function ExplorerFilters({ filters, categories, tags, onChange }: Props) {
+export function ExplorerFilters({ filters, categories, subcategories, tags, onChange }: Props) {
   function set<K extends keyof ExplorerFilters>(key: K, value: ExplorerFilters[K]) {
     onChange({ ...filters, [key]: value });
   }
@@ -36,6 +37,20 @@ export function ExplorerFilters({ filters, categories, tags, onChange }: Props) 
       : [...filters.categoryIds, id];
     set("categoryIds", next);
   }
+
+  function toggleSubcategory(id: string) {
+    const next = filters.subcategoryIds.includes(id)
+      ? filters.subcategoryIds.filter((c) => c !== id)
+      : [...filters.subcategoryIds, id];
+    set("subcategoryIds", next);
+  }
+
+  const visibleSubcategories =
+    filters.categoryIds.length > 0
+      ? subcategories.filter((s) => filters.categoryIds.includes(s.parentId))
+      : subcategories;
+
+  const parentCategoryName = new Map(categories.map((c) => [c.id, c.name]));
 
   function toggleTag(id: string) {
     const next = filters.tagIds.includes(id)
@@ -153,6 +168,66 @@ export function ExplorerFilters({ filters, categories, tags, onChange }: Props) 
                 <span className="text-sm text-(--color-text)">{cat.name}</span>
               </label>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Subgrupos */}
+      {subcategories.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <SectionLabel>
+              Subgrupos
+              {filters.subcategoryIds.length > 0 && (
+                <span className="ml-2 inline-flex items-center rounded-full bg-(--color-primary)/10 px-1.5 py-0.5 text-xs font-medium text-(--color-primary) normal-case tracking-normal">
+                  {filters.subcategoryIds.length}
+                </span>
+              )}
+            </SectionLabel>
+            {filters.subcategoryIds.length > 0 && (
+              <button
+                type="button"
+                onClick={() => set("subcategoryIds", [])}
+                className="text-xs text-(--color-text-muted) hover:text-(--color-text)"
+              >
+                Limpar
+              </button>
+            )}
+          </div>
+          <div className="flex max-h-44 flex-col gap-1.5 overflow-y-auto">
+            {(() => {
+              const groups = new Map<string, typeof visibleSubcategories>();
+              for (const sub of visibleSubcategories) {
+                const list = groups.get(sub.parentId) ?? [];
+                list.push(sub);
+                groups.set(sub.parentId, list);
+              }
+              const showGroupHeaders = groups.size > 1;
+              return [...groups.entries()].map(([parentId, subs]) => (
+                <div key={parentId} className="flex flex-col gap-1.5">
+                  {showGroupHeaders && (
+                    <p className="mt-1 text-[11px] font-medium text-(--color-text-muted) first:mt-0">
+                      {parentCategoryName.get(parentId) ?? "Outro grupo"}
+                    </p>
+                  )}
+                  {subs.map((sub) => (
+                    <label key={sub.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-1 py-0.5 hover:bg-(--color-bg)">
+                      <input
+                        type="checkbox"
+                        checked={filters.subcategoryIds.includes(sub.id)}
+                        onChange={() => toggleSubcategory(sub.id)}
+                        className="accent-(--color-primary)"
+                      />
+                      <span
+                        className="inline-block h-2.5 w-2.5 shrink-0 rounded-sm"
+                        style={{ backgroundColor: sub.color }}
+                      />
+                      <span className="text-sm text-(--color-text)">{sub.name}</span>
+                    </label>
+                  ))}
+                </div>
+              ));
+            })()}
           </div>
         </div>
       )}

@@ -4,6 +4,7 @@ import type { Prisma } from "@/generated/prisma/client";
 
 export type ExplorerFilters = {
   categoryIds: string[];
+  subcategoryIds: string[];
   tagIds: string[];
   type: "EXPENSE" | "INCOME" | "BOTH";
   dateFrom: string | null;
@@ -48,6 +49,14 @@ export async function getExplorerData(
     where.categoryId = { in: filters.categoryIds };
   }
 
+  // Defesa: os pontos de entrada públicos (visualização compartilhada) reconstroem
+  // ExplorerFilters a partir de JSON salvo no banco sem passar pelo Zod schema —
+  // visualizações salvas antes deste campo existir não terão subcategoryIds.
+  const subcategoryIds = filters.subcategoryIds ?? [];
+  if (subcategoryIds.length > 0) {
+    where.subcategoryId = { in: subcategoryIds };
+  }
+
   if (filters.tagIds.length > 0) {
     where.tags = { some: { tagId: { in: filters.tagIds } } };
   }
@@ -76,6 +85,8 @@ export async function getExplorerData(
       date: true,
       categoryId: true,
       category: { select: { id: true, name: true, color: true } },
+      subcategoryId: true,
+      subcategory: { select: { id: true, name: true, color: true } },
     },
     orderBy: { date: "asc" },
   });
@@ -101,27 +112,36 @@ export async function getExplorerData(
   ];
 
   if (filters.groupBy === "category") {
-    // Agrupa por categoria — série única com o valor total por categoria
-    const byCategory = new Map<
+    // Agrupa por grupo (categoria raiz) — série única com o valor total por bucket.
+    // Auto drill-down: quando exatamente um grupo está selecionado, todas as
+    // transações compartilham o mesmo categoryId, então agrupar por categoryId
+    // resultaria numa única barra — agrupamos por subgrupo (subcategoryId) nesse caso.
+    const drillDownToSubcategory = filters.categoryIds.length === 1;
+
+    const buckets = new Map<
       string,
       { name: string; color: string; total: number }
     >();
 
     for (const t of transactions) {
-      const id = t.categoryId ?? "sem-grupo";
-      const name = t.category?.name ?? "Sem grupo";
+      const id = drillDownToSubcategory
+        ? (t.subcategoryId ?? "sem-subgrupo")
+        : (t.categoryId ?? "sem-grupo");
+      const name = drillDownToSubcategory
+        ? (t.subcategory?.name ?? "Sem subgrupo")
+        : (t.category?.name ?? "Sem grupo");
       const color =
-        t.category?.color ??
-        DEFAULT_COLORS[byCategory.size % DEFAULT_COLORS.length]!;
-      const existing = byCategory.get(id);
+        (drillDownToSubcategory ? t.subcategory?.color : t.category?.color) ??
+        DEFAULT_COLORS[buckets.size % DEFAULT_COLORS.length]!;
+      const existing = buckets.get(id);
       if (existing) {
         existing.total += t.amount;
       } else {
-        byCategory.set(id, { name, color, total: t.amount });
+        buckets.set(id, { name, color, total: t.amount });
       }
     }
 
-    const entries = [...byCategory.entries()].sort(
+    const entries = [...buckets.entries()].sort(
       (a, b) => b[1].total - a[1].total
     );
     const data: ExplorerDataPoint[] = entries.map(([, v]) => ({

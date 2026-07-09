@@ -21,6 +21,7 @@ async function requireUserId(): Promise<string> {
 // ---------------------------------------------------------------------------
 const explorerFiltersSchema = z.object({
   categoryIds: z.array(z.string()),
+  subcategoryIds: z.array(z.string()).default([]),
   tagIds: z.array(z.string()),
   type: z.enum(["EXPENSE", "INCOME", "BOTH"]),
   dateFrom: z.string().nullable(),

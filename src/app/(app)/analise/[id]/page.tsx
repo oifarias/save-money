@@ -9,7 +9,7 @@ export default async function AnaliseSalvaPage({ params }: { params: Promise<{ i
   const session = await auth();
   const userId = session!.user.id;
 
-  const [viz, categories, tags] = await Promise.all([
+  const [viz, categories, subcategories, tags] = await Promise.all([
     prisma.savedVisualization.findFirst({
       where: { id, userId },
       select: {
@@ -28,6 +28,11 @@ export default async function AnaliseSalvaPage({ params }: { params: Promise<{ i
       orderBy: { name: "asc" },
       select: { id: true, name: true, color: true },
     }),
+    prisma.category.findMany({
+      where: { userId, parentId: { not: null } },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, color: true, parentId: true },
+    }),
     prisma.tag.findMany({
       where: { userId },
       orderBy: { name: "asc" },
@@ -42,6 +47,10 @@ export default async function AnaliseSalvaPage({ params }: { params: Promise<{ i
 
   const initialFilters: ExplorerFilters = {
     ...filtersFromDb,
+    // Visualizações salvas antes deste campo existir não têm subcategoryIds no JSON —
+    // sem esse fallback, o spread deixaria isso undefined em runtime (mesmo o TS achando
+    // que é string[]), quebrando explorer-filters.tsx na primeira renderização.
+    subcategoryIds: filtersFromDb.subcategoryIds ?? [],
     chartType: viz.chartType as ExplorerFilters["chartType"],
     groupBy: viz.groupBy as ExplorerFilters["groupBy"],
     showValues: displayOpts.showValues ?? true,
@@ -51,6 +60,7 @@ export default async function AnaliseSalvaPage({ params }: { params: Promise<{ i
   return (
     <Explorer
       categories={categories}
+      subcategories={subcategories.map((s) => ({ ...s, parentId: s.parentId! }))}
       tags={tags}
       initialFilters={initialFilters}
       savedViz={{

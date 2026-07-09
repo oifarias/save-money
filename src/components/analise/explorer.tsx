@@ -16,6 +16,7 @@ import type { ExplorerFilters as ExplorerFiltersType, ExplorerResult } from "@/l
 
 const DEFAULT_FILTERS: ExplorerFiltersType = {
   categoryIds: [],
+  subcategoryIds: [],
   tagIds: [],
   type: "EXPENSE",
   dateFrom: null,
@@ -37,12 +38,13 @@ type SavedViz = {
 
 type Props = {
   categories: { id: string; name: string; color: string }[];
+  subcategories: { id: string; name: string; color: string; parentId: string }[];
   tags: { id: string; name: string }[];
   initialFilters?: ExplorerFiltersType;
   savedViz?: SavedViz;
 };
 
-export function Explorer({ categories, tags, initialFilters, savedViz }: Props) {
+export function Explorer({ categories, subcategories, tags, initialFilters, savedViz }: Props) {
   const router = useRouter();
 
   const [filters, setFilters] = useState<ExplorerFiltersType>(initialFilters ?? DEFAULT_FILTERS);
@@ -183,6 +185,7 @@ export function Explorer({ categories, tags, initialFilters, savedViz }: Props) 
               <ExplorerFilters
                 filters={filters}
                 categories={categories}
+                subcategories={subcategories}
                 tags={tags}
                 onChange={setFilters}
               />
@@ -242,6 +245,14 @@ export function Explorer({ categories, tags, initialFilters, savedViz }: Props) 
                 </label>
               </div>
             </div>
+
+            {filters.groupBy === "category" && filters.categoryIds.length === 1 && (
+              <p className="mb-2 text-xs text-(--color-text-muted)">
+                Mostrando subgrupos de &ldquo;
+                {categories.find((c) => c.id === filters.categoryIds[0])?.name ?? ""}
+                &rdquo;
+              </p>
+            )}
 
             {/* Chart or loading */}
             {isPending ? (
