@@ -37,7 +37,8 @@ function round2(value: number): number {
 // aqui pois o escopo é diferente (categoria + subcategoria, sem agrupar por categoria).
 // Recebe year/month já parseados do monthKey (o chamador já os tem) em vez de reparsear
 // a string a cada chamada — evita um split+map redundante por plano dentro do loop.
-function diffInMonths(year: number, month: number, startDate: Date) {
+// Exportada (só) para ser testada isoladamente — é o núcleo do tapering de parcelas.
+export function diffInMonths(year: number, month: number, startDate: Date) {
   return (year - startDate.getFullYear()) * 12 + (month - 1 - startDate.getMonth());
 }
 

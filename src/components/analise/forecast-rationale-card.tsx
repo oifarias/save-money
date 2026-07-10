@@ -19,7 +19,8 @@ function pluralize(count: number, singular: string, plural: string): string {
   return `${count} ${count === 1 ? singular : plural}`;
 }
 
-function countLabel(line: ForecastRationaleLine): string {
+// Exportada (só) para ser testada isoladamente — é o texto que o cliente lê no card de racional.
+export function countLabel(line: ForecastRationaleLine): string {
   switch (line.key) {
     case "fixed":
       return pluralize(line.count, "despesa fixa", "despesas fixas");
