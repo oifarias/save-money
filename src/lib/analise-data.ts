@@ -1,9 +1,11 @@
 "use server";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@/generated/prisma/client";
+import { toMonthKey, toMonthLabel } from "@/lib/date-month";
 
 export type ExplorerFilters = {
   categoryIds: string[];
+  subcategoryIds: string[];
   tagIds: string[];
   type: "EXPENSE" | "INCOME" | "BOTH";
   dateFrom: string | null;
@@ -22,7 +24,12 @@ export type ExplorerFilters = {
   showLegend: boolean;
 };
 
-export type ExplorerSeries = { key: string; name: string; color: string };
+export type ExplorerSeries = {
+  key: string;
+  name: string;
+  color: string;
+  dashed?: boolean;
+};
 
 export type ExplorerDataPoint = Record<string, string | number>;
 
@@ -33,19 +40,46 @@ export type ExplorerResult = {
   isEmpty: boolean;
 };
 
+/**
+ * Escopo de grupo/subgrupo compartilhado entre `getExplorerData` e `getExplorerForecast`
+ * (análise histórica e previsão usam a mesma noção de "quais categorias/subcategorias
+ * estão filtradas na tela"). Defesa `?? []` em `subcategoryIds`: pontos de entrada públicos
+ * (visualização compartilhada) reconstroem `ExplorerFilters` a partir de JSON salvo no banco
+ * sem passar pelo Zod schema — visualizações salvas antes deste campo existir não o terão.
+ */
+export function buildCategoryScope(filters: Pick<ExplorerFilters, "categoryIds" | "subcategoryIds">): {
+  categoryId?: { in: string[] };
+  subcategoryId?: { in: string[] };
+} {
+  const scope: { categoryId?: { in: string[] }; subcategoryId?: { in: string[] } } = {};
+  if (filters.categoryIds.length > 0) {
+    scope.categoryId = { in: filters.categoryIds };
+  }
+  const subcategoryIds = filters.subcategoryIds ?? [];
+  if (subcategoryIds.length > 0) {
+    scope.subcategoryId = { in: subcategoryIds };
+  }
+  return scope;
+}
+
+/**
+ * Quando exatamente um grupo está selecionado e o agrupamento é "por grupo", tanto o cálculo
+ * (servidor) quanto a legenda "Mostrando subgrupos de..." (cliente) precisam concordar sobre
+ * quando o drill-down automático por subgrupo está ativo — daí a regra viver num só lugar.
+ */
+export function isSubgroupDrilldown(filters: Pick<ExplorerFilters, "groupBy" | "categoryIds">): boolean {
+  return filters.groupBy === "category" && filters.categoryIds.length === 1;
+}
+
 export async function getExplorerData(
   userId: string,
   filters: ExplorerFilters
 ): Promise<ExplorerResult> {
   // Build where clause — userId sempre obrigatório
-  const where: Prisma.TransactionWhereInput = { userId };
+  const where: Prisma.TransactionWhereInput = { userId, ...buildCategoryScope(filters) };
 
   if (filters.type !== "BOTH") {
     where.type = filters.type;
-  }
-
-  if (filters.categoryIds.length > 0) {
-    where.categoryId = { in: filters.categoryIds };
   }
 
   if (filters.tagIds.length > 0) {
@@ -76,6 +110,8 @@ export async function getExplorerData(
       date: true,
       categoryId: true,
       category: { select: { id: true, name: true, color: true } },
+      subcategoryId: true,
+      subcategory: { select: { id: true, name: true, color: true } },
     },
     orderBy: { date: "asc" },
   });
@@ -101,27 +137,36 @@ export async function getExplorerData(
   ];
 
   if (filters.groupBy === "category") {
-    // Agrupa por categoria — série única com o valor total por categoria
-    const byCategory = new Map<
+    // Agrupa por grupo (categoria raiz) — série única com o valor total por bucket.
+    // Auto drill-down: quando exatamente um grupo está selecionado, todas as
+    // transações compartilham o mesmo categoryId, então agrupar por categoryId
+    // resultaria numa única barra — agrupamos por subgrupo (subcategoryId) nesse caso.
+    const drillDownToSubcategory = isSubgroupDrilldown(filters);
+
+    const buckets = new Map<
       string,
       { name: string; color: string; total: number }
     >();
 
     for (const t of transactions) {
-      const id = t.categoryId ?? "sem-grupo";
-      const name = t.category?.name ?? "Sem grupo";
+      const id = drillDownToSubcategory
+        ? (t.subcategoryId ?? "sem-subgrupo")
+        : (t.categoryId ?? "sem-grupo");
+      const name = drillDownToSubcategory
+        ? (t.subcategory?.name ?? "Sem subgrupo")
+        : (t.category?.name ?? "Sem grupo");
       const color =
-        t.category?.color ??
-        DEFAULT_COLORS[byCategory.size % DEFAULT_COLORS.length]!;
-      const existing = byCategory.get(id);
+        (drillDownToSubcategory ? t.subcategory?.color : t.category?.color) ??
+        DEFAULT_COLORS[buckets.size % DEFAULT_COLORS.length]!;
+      const existing = buckets.get(id);
       if (existing) {
         existing.total += t.amount;
       } else {
-        byCategory.set(id, { name, color, total: t.amount });
+        buckets.set(id, { name, color, total: t.amount });
       }
     }
 
-    const entries = [...byCategory.entries()].sort(
+    const entries = [...buckets.entries()].sort(
       (a, b) => b[1].total - a[1].total
     );
     const data: ExplorerDataPoint[] = entries.map(([, v]) => ({
@@ -146,31 +191,6 @@ export async function getExplorerData(
   // Sem filtro: série única (total por mês)
 
   const monthKeys = new Map<string, string>(); // "2026-01" → "jan/26"
-
-  function toMonthKey(date: Date): string {
-    const year = date.getFullYear();
-    const month = date.getMonth() + 1;
-    return `${year}-${String(month).padStart(2, "0")}`;
-  }
-
-  function toMonthLabel(key: string): string {
-    const [y, m] = key.split("-");
-    const months = [
-      "jan",
-      "fev",
-      "mar",
-      "abr",
-      "mai",
-      "jun",
-      "jul",
-      "ago",
-      "set",
-      "out",
-      "nov",
-      "dez",
-    ];
-    return `${months[Number(m) - 1]}/${String(y).slice(2)}`;
-  }
 
   if (filters.categoryIds.length > 0) {
     // Multi-série: categoria × mês

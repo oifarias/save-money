@@ -7,15 +7,39 @@ import toast from "react-hot-toast";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Modal } from "@/components/ui/modal";
+import { Switch } from "@/components/ui/switch";
 import { ChartDisplay } from "@/components/analise/chart-display";
 import { ChartTypeSelector } from "@/components/analise/chart-type-selector";
 import { ExplorerFilters } from "@/components/analise/explorer-filters";
-import { fetchExplorerDataAction, saveVisualizationAction, toggleShareVisualizationAction } from "@/app/(app)/analise/actions";
+import { ForecastRationaleCard } from "@/components/analise/forecast-rationale-card";
+import { useExplorerForecast } from "@/components/analise/use-explorer-forecast";
+import {
+  fetchExplorerDataAction,
+  saveVisualizationAction,
+  toggleShareVisualizationAction,
+} from "@/app/(app)/analise/actions";
 import { formatCurrency } from "@/lib/format";
+import { isSubgroupDrilldown } from "@/lib/analise-data";
 import type { ExplorerFilters as ExplorerFiltersType, ExplorerResult } from "@/lib/analise-data";
+import type { ForecastHorizon } from "@/lib/analise-forecast";
+
+const HORIZON_OPTIONS: { value: ForecastHorizon; label: string }[] = [
+  { value: 1, label: "1 mês" },
+  { value: 3, label: "3 meses" },
+  { value: 6, label: "6 meses" },
+];
+
+function pillButtonClass(active: boolean): string {
+  return `rounded-lg px-2.5 py-1 text-xs font-medium transition-all ${
+    active
+      ? "bg-(--color-primary) text-white"
+      : "border border-(--color-border) text-(--color-text-muted) hover:border-(--color-primary)/40"
+  }`;
+}
 
 const DEFAULT_FILTERS: ExplorerFiltersType = {
   categoryIds: [],
+  subcategoryIds: [],
   tagIds: [],
   type: "EXPENSE",
   dateFrom: null,
@@ -37,12 +61,13 @@ type SavedViz = {
 
 type Props = {
   categories: { id: string; name: string; color: string }[];
+  subcategories: { id: string; name: string; color: string; parentId: string }[];
   tags: { id: string; name: string }[];
   initialFilters?: ExplorerFiltersType;
   savedViz?: SavedViz;
 };
 
-export function Explorer({ categories, tags, initialFilters, savedViz }: Props) {
+export function Explorer({ categories, subcategories, tags, initialFilters, savedViz }: Props) {
   const router = useRouter();
 
   const [filters, setFilters] = useState<ExplorerFiltersType>(initialFilters ?? DEFAULT_FILTERS);
@@ -76,6 +101,8 @@ export function Explorer({ categories, tags, initialFilters, savedViz }: Props) 
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters]);
+
+  const forecast = useExplorerForecast(filters, result);
 
   async function handleSave(useExistingId: boolean) {
     if (!saveName.trim()) {
@@ -183,6 +210,7 @@ export function Explorer({ categories, tags, initialFilters, savedViz }: Props) 
               <ExplorerFilters
                 filters={filters}
                 categories={categories}
+                subcategories={subcategories}
                 tags={tags}
                 onChange={setFilters}
               />
@@ -211,15 +239,34 @@ export function Explorer({ categories, tags, initialFilters, savedViz }: Props) 
                     key={g}
                     type="button"
                     onClick={() => setFilters((f) => ({ ...f, groupBy: g }))}
-                    className={`rounded-lg px-2.5 py-1 text-xs font-medium transition-all ${
-                      filters.groupBy === g
-                        ? "bg-(--color-primary) text-white"
-                        : "border border-(--color-border) text-(--color-text-muted) hover:border-(--color-primary)/40"
-                    }`}
+                    className={pillButtonClass(filters.groupBy === g)}
                   >
                     {g === "category" ? "Por grupo" : "Por mês"}
                   </button>
                 ))}
+              </div>
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={forecast.enabled}
+                  onChange={forecast.setEnabled}
+                  disabled={filters.groupBy !== "month"}
+                  title={filters.groupBy !== "month" ? "Disponível apenas ao agrupar por mês" : undefined}
+                  label="Mostrar previsão"
+                />
+                {forecast.enabled && filters.groupBy === "month" && (
+                  <div className="flex items-center gap-1.5">
+                    {HORIZON_OPTIONS.map((opt) => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => forecast.setHorizon(opt.value)}
+                        className={pillButtonClass(forecast.horizon === opt.value)}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
               <div className="ml-auto flex items-center gap-3">
                 <label className="flex cursor-pointer items-center gap-1.5 text-xs text-(--color-text-muted)">
@@ -243,6 +290,14 @@ export function Explorer({ categories, tags, initialFilters, savedViz }: Props) 
               </div>
             </div>
 
+            {isSubgroupDrilldown(filters) && (
+              <p className="mb-2 text-xs text-(--color-text-muted)">
+                Mostrando subgrupos de &ldquo;
+                {categories.find((c) => c.id === filters.categoryIds[0])?.name ?? ""}
+                &rdquo;
+              </p>
+            )}
+
             {/* Chart or loading */}
             {isPending ? (
               <div className="flex h-72 items-center justify-center">
@@ -250,8 +305,8 @@ export function Explorer({ categories, tags, initialFilters, savedViz }: Props) 
               </div>
             ) : (
               <ChartDisplay
-                data={result?.data ?? []}
-                series={result?.series ?? []}
+                data={forecast.chartData}
+                series={forecast.chartSeries}
                 chartType={filters.chartType}
                 showValues={filters.showValues}
                 showLegend={filters.showLegend}
@@ -268,6 +323,16 @@ export function Explorer({ categories, tags, initialFilters, savedViz }: Props) 
               </p>
             )}
           </Card>
+
+          {forecast.showForecast && forecast.result && (
+            <ForecastRationaleCard
+              rationale={forecast.result.rationale}
+              overrides={forecast.overrides}
+              onOverrideChange={forecast.handleOverrideChange}
+              warnings={forecast.result.warnings}
+              monthsAhead={forecast.horizon}
+            />
+          )}
         </div>
       </div>
 
@@ -356,20 +421,7 @@ export function Explorer({ categories, tags, initialFilters, savedViz }: Props) 
                   {shareActive ? "Link ativo — qualquer pessoa pode visualizar" : "Link desativado"}
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={handleToggleShare}
-                disabled={isToggling}
-                className={`relative h-6 w-11 shrink-0 rounded-full transition-colors duration-200 focus:outline-none disabled:opacity-60 ${
-                  shareActive ? "bg-(--color-primary)" : "bg-(--color-border)"
-                }`}
-              >
-                <span
-                  className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 ${
-                    shareActive ? "translate-x-5" : "translate-x-0.5"
-                  }`}
-                />
-              </button>
+              <Switch checked={shareActive} onChange={handleToggleShare} disabled={isToggling} />
             </div>
 
             {/* Link */}
