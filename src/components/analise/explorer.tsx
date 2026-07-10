@@ -19,7 +19,7 @@ import {
   toggleShareVisualizationAction,
 } from "@/app/(app)/analise/actions";
 import { formatCurrency } from "@/lib/format";
-import { isSubgroupDrilldown } from "@/lib/analise-data";
+import { isSubgroupDrilldown } from "@/lib/analise-filters";
 import type { ExplorerFilters as ExplorerFiltersType, ExplorerResult } from "@/lib/analise-data";
 import type { ForecastHorizon } from "@/lib/analise-forecast";
 
