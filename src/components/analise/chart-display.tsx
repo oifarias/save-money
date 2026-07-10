@@ -266,6 +266,7 @@ export function ChartDisplay({ data, series, chartType, showValues, showLegend }
                 dataKey={s.key}
                 name={s.name}
                 fill={s.color}
+                fillOpacity={s.dashed ? 0.5 : 1}
                 stackId="stack"
                 radius={i === series.length - 1 ? [6, 6, 0, 0] : [0, 0, 0, 0]}
               />

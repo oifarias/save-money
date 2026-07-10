@@ -12,15 +12,30 @@ import { ChartDisplay } from "@/components/analise/chart-display";
 import { ChartTypeSelector } from "@/components/analise/chart-type-selector";
 import { ExplorerFilters } from "@/components/analise/explorer-filters";
 import { ForecastRationaleCard } from "@/components/analise/forecast-rationale-card";
+import { useExplorerForecast } from "@/components/analise/use-explorer-forecast";
 import {
   fetchExplorerDataAction,
-  fetchExplorerForecastAction,
   saveVisualizationAction,
   toggleShareVisualizationAction,
 } from "@/app/(app)/analise/actions";
 import { formatCurrency } from "@/lib/format";
+import { isSubgroupDrilldown } from "@/lib/analise-data";
 import type { ExplorerFilters as ExplorerFiltersType, ExplorerResult } from "@/lib/analise-data";
-import type { ForecastHorizon, ForecastOverrides, ForecastResult } from "@/lib/analise-forecast";
+import type { ForecastHorizon } from "@/lib/analise-forecast";
+
+const HORIZON_OPTIONS: { value: ForecastHorizon; label: string }[] = [
+  { value: 1, label: "1 mês" },
+  { value: 3, label: "3 meses" },
+  { value: 6, label: "6 meses" },
+];
+
+function pillButtonClass(active: boolean): string {
+  return `rounded-lg px-2.5 py-1 text-xs font-medium transition-all ${
+    active
+      ? "bg-(--color-primary) text-white"
+      : "border border-(--color-border) text-(--color-text-muted) hover:border-(--color-primary)/40"
+  }`;
+}
 
 const DEFAULT_FILTERS: ExplorerFiltersType = {
   categoryIds: [],
@@ -74,12 +89,6 @@ export function Explorer({ categories, subcategories, tags, initialFilters, save
   const [isToggling, setIsToggling] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  // Forecast (previsão)
-  const [forecastEnabled, setForecastEnabled] = useState(false);
-  const [forecastHorizon, setForecastHorizon] = useState<ForecastHorizon>(3);
-  const [forecastOverrides, setForecastOverrides] = useState<ForecastOverrides>({});
-  const [forecastResult, setForecastResult] = useState<ForecastResult | null>(null);
-
   // Fetch data when filters change
   useEffect(() => {
     startTransition(async () => {
@@ -93,44 +102,7 @@ export function Explorer({ categories, subcategories, tags, initialFilters, save
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters]);
 
-  // Previsão só faz sentido agrupando por mês — desliga automaticamente ao sair desse modo,
-  // seja pelo controle deste arquivo ou pelo de explorer-filters.tsx
-  useEffect(() => {
-    if (filters.groupBy !== "month") setForecastEnabled(false);
-  }, [filters.groupBy]);
-
-  // Fetch forecast when enabled/horizon/overrides/filters change
-  useEffect(() => {
-    if (!forecastEnabled || filters.groupBy !== "month") {
-      setForecastResult(null);
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      try {
-        const data = await fetchExplorerForecastAction(filters, forecastHorizon, forecastOverrides);
-        if (!cancelled) setForecastResult(data);
-      } catch {
-        if (!cancelled) toast.error("Erro ao buscar previsão");
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [forecastEnabled, forecastHorizon, forecastOverrides, filters]);
-
-  function handleForecastOverrideChange(kind: "expense" | "income", key: string, value: number | null) {
-    setForecastOverrides((prev) => {
-      const next = { ...prev, [kind]: { ...prev[kind] } };
-      if (value === null) {
-        delete next[kind]![key];
-      } else {
-        next[kind]![key] = value;
-      }
-      return next;
-    });
-  }
+  const forecast = useExplorerForecast(filters, result);
 
   async function handleSave(useExistingId: boolean) {
     if (!saveName.trim()) {
@@ -181,28 +153,6 @@ export function Explorer({ categories, subcategories, tags, initialFilters, save
   }
 
   const shareUrl = shareToken ? `${typeof window !== "undefined" ? window.location.origin : ""}/analise/publica/${shareToken}` : null;
-
-  // Combina o histórico real com os pontos futuros da previsão numa única série "previsto"
-  // pontilhada. Assume que o último ponto histórico tem uma chave "value" (série única) — só
-  // é verdade quando groupBy = "month" sem categoryIds selecionadas (o caso comum de previsão).
-  // Com categorias selecionadas a série vira multi-categoria e não há "value": o ponto de
-  // transição fica sem "previsto" definido, o que só gera um pequeno gap visual na linha —
-  // limitação conhecida, não trave o build por causa disso.
-  const showForecast = forecastEnabled && Boolean(forecastResult);
-
-  const chartData = (() => {
-    if (!showForecast || !forecastResult) return result?.data ?? [];
-    const base = [...(result?.data ?? [])];
-    if (base.length > 0) {
-      const last = base[base.length - 1]!;
-      base[base.length - 1] = { ...last, previsto: Number(last.value ?? 0) };
-    }
-    return [...base, ...forecastResult.points];
-  })();
-
-  const chartSeries = showForecast
-    ? [...(result?.series ?? []), { key: "previsto", name: "Previsto", color: "#94a3b8", dashed: true }]
-    : (result?.series ?? []);
 
   return (
     <div className="flex flex-col gap-5">
@@ -289,11 +239,7 @@ export function Explorer({ categories, subcategories, tags, initialFilters, save
                     key={g}
                     type="button"
                     onClick={() => setFilters((f) => ({ ...f, groupBy: g }))}
-                    className={`rounded-lg px-2.5 py-1 text-xs font-medium transition-all ${
-                      filters.groupBy === g
-                        ? "bg-(--color-primary) text-white"
-                        : "border border-(--color-border) text-(--color-text-muted) hover:border-(--color-primary)/40"
-                    }`}
+                    className={pillButtonClass(filters.groupBy === g)}
                   >
                     {g === "category" ? "Por grupo" : "Por mês"}
                   </button>
@@ -301,26 +247,22 @@ export function Explorer({ categories, subcategories, tags, initialFilters, save
               </div>
               <div className="flex items-center gap-2">
                 <Switch
-                  checked={forecastEnabled}
-                  onChange={setForecastEnabled}
+                  checked={forecast.enabled}
+                  onChange={forecast.setEnabled}
                   disabled={filters.groupBy !== "month"}
                   title={filters.groupBy !== "month" ? "Disponível apenas ao agrupar por mês" : undefined}
                   label="Mostrar previsão"
                 />
-                {forecastEnabled && filters.groupBy === "month" && (
+                {forecast.enabled && filters.groupBy === "month" && (
                   <div className="flex items-center gap-1.5">
-                    {([1, 3, 6] as const).map((h) => (
+                    {HORIZON_OPTIONS.map((opt) => (
                       <button
-                        key={h}
+                        key={opt.value}
                         type="button"
-                        onClick={() => setForecastHorizon(h)}
-                        className={`rounded-lg px-2.5 py-1 text-xs font-medium transition-all ${
-                          forecastHorizon === h
-                            ? "bg-(--color-primary) text-white"
-                            : "border border-(--color-border) text-(--color-text-muted) hover:border-(--color-primary)/40"
-                        }`}
+                        onClick={() => forecast.setHorizon(opt.value)}
+                        className={pillButtonClass(forecast.horizon === opt.value)}
                       >
-                        {h === 1 ? "1 mês" : `${h} meses`}
+                        {opt.label}
                       </button>
                     ))}
                   </div>
@@ -348,7 +290,7 @@ export function Explorer({ categories, subcategories, tags, initialFilters, save
               </div>
             </div>
 
-            {filters.groupBy === "category" && filters.categoryIds.length === 1 && (
+            {isSubgroupDrilldown(filters) && (
               <p className="mb-2 text-xs text-(--color-text-muted)">
                 Mostrando subgrupos de &ldquo;
                 {categories.find((c) => c.id === filters.categoryIds[0])?.name ?? ""}
@@ -363,8 +305,8 @@ export function Explorer({ categories, subcategories, tags, initialFilters, save
               </div>
             ) : (
               <ChartDisplay
-                data={chartData}
-                series={chartSeries}
+                data={forecast.chartData}
+                series={forecast.chartSeries}
                 chartType={filters.chartType}
                 showValues={filters.showValues}
                 showLegend={filters.showLegend}
@@ -382,13 +324,13 @@ export function Explorer({ categories, subcategories, tags, initialFilters, save
             )}
           </Card>
 
-          {showForecast && forecastResult && (
+          {forecast.showForecast && forecast.result && (
             <ForecastRationaleCard
-              rationale={forecastResult.rationale}
-              overrides={forecastOverrides}
-              onOverrideChange={handleForecastOverrideChange}
-              warnings={forecastResult.warnings}
-              monthsAhead={forecastHorizon}
+              rationale={forecast.result.rationale}
+              overrides={forecast.overrides}
+              onOverrideChange={forecast.handleOverrideChange}
+              warnings={forecast.result.warnings}
+              monthsAhead={forecast.horizon}
             />
           )}
         </div>

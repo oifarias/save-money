@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { RotateCcw, TriangleAlert } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Alert } from "@/components/ui/alert";
@@ -14,18 +15,26 @@ type Props = {
   monthsAhead: ForecastHorizon;
 };
 
+function pluralize(count: number, singular: string, plural: string): string {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
 function countLabel(line: ForecastRationaleLine): string {
   switch (line.key) {
     case "fixed":
-      return `${line.count} despesa${line.count === 1 ? "" : "s"} fixa${line.count === 1 ? "" : "s"}`;
+      return pluralize(line.count, "despesa fixa", "despesas fixas");
     case "installments":
-      return `${line.count} parcelamento${line.count === 1 ? "" : "s"} ativo${line.count === 1 ? "" : "s"}`;
+      return pluralize(line.count, "parcelamento ativo", "parcelamentos ativos");
     case "variable":
     case "income_avg":
-      return `${line.count} mês${line.count === 1 ? "" : "es"} considerado${line.count === 1 ? "" : "s"}`;
+      return pluralize(line.count, "mês considerado", "meses considerados");
     default:
-      return `${line.count} lançamento${line.count === 1 ? "" : "s"}`;
+      return pluralize(line.count, "lançamento", "lançamentos");
   }
+}
+
+function round2(value: number): number {
+  return Math.round(value * 100) / 100;
 }
 
 function RationaleRow({
@@ -42,6 +51,27 @@ function RationaleRow({
   const overrideValue = overrides[kind]?.[line.key];
   const hasOverride = overrideValue !== undefined;
   const displayValue = overrideValue ?? line.amount;
+
+  // Edição em rascunho local: só propaga pro pai (e dispara uma nova busca de previsão no
+  // servidor) no blur/Enter, não a cada tecla — digitar "1234" não deve gerar 4 requisições.
+  // Ressincroniza o rascunho durante o render (comparando com o valor anterior) em vez de usar
+  // useEffect: é o padrão do React para "ajustar state quando um valor muda" e evita a violação
+  // da regra de lint react-hooks/set-state-in-effect. https://react.dev/learn/you-might-not-need-an-effect
+  const [draft, setDraft] = useState(String(round2(displayValue)));
+  const [prevDisplayValue, setPrevDisplayValue] = useState(displayValue);
+  if (displayValue !== prevDisplayValue) {
+    setPrevDisplayValue(displayValue);
+    setDraft(String(round2(displayValue)));
+  }
+
+  function commitDraft() {
+    const parsed = Number(draft);
+    if (draft !== "" && !Number.isNaN(parsed) && parsed !== displayValue) {
+      onOverrideChange(kind, line.key, parsed);
+    } else {
+      setDraft(String(round2(displayValue)));
+    }
+  }
 
   return (
     <div className="flex items-center justify-between gap-3 py-2">
@@ -60,13 +90,11 @@ function RationaleRow({
         <Input
           type="number"
           step="0.01"
-          value={Math.round(displayValue * 100) / 100}
-          onChange={(e) => {
-            const raw = e.target.value;
-            if (raw === "") return;
-            const parsed = Number(raw);
-            if (Number.isNaN(parsed)) return;
-            onOverrideChange(kind, line.key, parsed);
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commitDraft}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") e.currentTarget.blur();
           }}
           className="w-28 py-1.5 text-right"
         />

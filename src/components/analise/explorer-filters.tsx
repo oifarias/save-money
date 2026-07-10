@@ -26,6 +26,55 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
+/** Cabeçalho comum às seções de filtro com múltipla seleção (Grupos, Subgrupos, Tags). */
+function FilterSectionHeader({ label, count, onClear }: { label: string; count: number; onClear: () => void }) {
+  return (
+    <div className="flex items-center justify-between">
+      <SectionLabel>
+        {label}
+        {count > 0 && (
+          <span className="ml-2 inline-flex items-center rounded-full bg-(--color-primary)/10 px-1.5 py-0.5 text-xs font-medium text-(--color-primary) normal-case tracking-normal">
+            {count}
+          </span>
+        )}
+      </SectionLabel>
+      {count > 0 && (
+        <button type="button" onClick={onClear} className="text-xs text-(--color-text-muted) hover:text-(--color-text)">
+          Limpar
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Linha de checkbox comum às seções de filtro — `color` é opcional (Tags não tem cor). */
+function FilterCheckboxRow({
+  id,
+  name,
+  color,
+  checked,
+  onToggle,
+}: {
+  id: string;
+  name: string;
+  color?: string;
+  checked: boolean;
+  onToggle: (id: string) => void;
+}) {
+  return (
+    <label className="flex cursor-pointer items-center gap-2 rounded-lg px-1 py-0.5 hover:bg-(--color-bg)">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={() => onToggle(id)}
+        className="accent-(--color-primary)"
+      />
+      {color && <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: color }} />}
+      <span className="text-sm text-(--color-text)">{name}</span>
+    </label>
+  );
+}
+
 export function ExplorerFilters({ filters, categories, subcategories, tags, onChange }: Props) {
   function set<K extends keyof ExplorerFilters>(key: K, value: ExplorerFilters[K]) {
     onChange({ ...filters, [key]: value });
@@ -133,40 +182,17 @@ export function ExplorerFilters({ filters, categories, subcategories, tags, onCh
       {/* Grupos */}
       {categories.length > 0 && (
         <div className="flex flex-col gap-2">
-          <div className="flex items-center justify-between">
-            <SectionLabel>
-              Grupos
-              {filters.categoryIds.length > 0 && (
-                <span className="ml-2 inline-flex items-center rounded-full bg-(--color-primary)/10 px-1.5 py-0.5 text-xs font-medium text-(--color-primary) normal-case tracking-normal">
-                  {filters.categoryIds.length}
-                </span>
-              )}
-            </SectionLabel>
-            {filters.categoryIds.length > 0 && (
-              <button
-                type="button"
-                onClick={() => set("categoryIds", [])}
-                className="text-xs text-(--color-text-muted) hover:text-(--color-text)"
-              >
-                Limpar
-              </button>
-            )}
-          </div>
+          <FilterSectionHeader label="Grupos" count={filters.categoryIds.length} onClear={() => set("categoryIds", [])} />
           <div className="flex max-h-44 flex-col gap-1.5 overflow-y-auto">
             {categories.map((cat) => (
-              <label key={cat.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-1 py-0.5 hover:bg-(--color-bg)">
-                <input
-                  type="checkbox"
-                  checked={filters.categoryIds.includes(cat.id)}
-                  onChange={() => toggleCategory(cat.id)}
-                  className="accent-(--color-primary)"
-                />
-                <span
-                  className="inline-block h-2.5 w-2.5 shrink-0 rounded-sm"
-                  style={{ backgroundColor: cat.color }}
-                />
-                <span className="text-sm text-(--color-text)">{cat.name}</span>
-              </label>
+              <FilterCheckboxRow
+                key={cat.id}
+                id={cat.id}
+                name={cat.name}
+                color={cat.color}
+                checked={filters.categoryIds.includes(cat.id)}
+                onToggle={toggleCategory}
+              />
             ))}
           </div>
         </div>
@@ -175,25 +201,11 @@ export function ExplorerFilters({ filters, categories, subcategories, tags, onCh
       {/* Subgrupos */}
       {subcategories.length > 0 && (
         <div className="flex flex-col gap-2">
-          <div className="flex items-center justify-between">
-            <SectionLabel>
-              Subgrupos
-              {filters.subcategoryIds.length > 0 && (
-                <span className="ml-2 inline-flex items-center rounded-full bg-(--color-primary)/10 px-1.5 py-0.5 text-xs font-medium text-(--color-primary) normal-case tracking-normal">
-                  {filters.subcategoryIds.length}
-                </span>
-              )}
-            </SectionLabel>
-            {filters.subcategoryIds.length > 0 && (
-              <button
-                type="button"
-                onClick={() => set("subcategoryIds", [])}
-                className="text-xs text-(--color-text-muted) hover:text-(--color-text)"
-              >
-                Limpar
-              </button>
-            )}
-          </div>
+          <FilterSectionHeader
+            label="Subgrupos"
+            count={filters.subcategoryIds.length}
+            onClear={() => set("subcategoryIds", [])}
+          />
           <div className="flex max-h-44 flex-col gap-1.5 overflow-y-auto">
             {(() => {
               const groups = new Map<string, typeof visibleSubcategories>();
@@ -211,19 +223,14 @@ export function ExplorerFilters({ filters, categories, subcategories, tags, onCh
                     </p>
                   )}
                   {subs.map((sub) => (
-                    <label key={sub.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-1 py-0.5 hover:bg-(--color-bg)">
-                      <input
-                        type="checkbox"
-                        checked={filters.subcategoryIds.includes(sub.id)}
-                        onChange={() => toggleSubcategory(sub.id)}
-                        className="accent-(--color-primary)"
-                      />
-                      <span
-                        className="inline-block h-2.5 w-2.5 shrink-0 rounded-sm"
-                        style={{ backgroundColor: sub.color }}
-                      />
-                      <span className="text-sm text-(--color-text)">{sub.name}</span>
-                    </label>
+                    <FilterCheckboxRow
+                      key={sub.id}
+                      id={sub.id}
+                      name={sub.name}
+                      color={sub.color}
+                      checked={filters.subcategoryIds.includes(sub.id)}
+                      onToggle={toggleSubcategory}
+                    />
                   ))}
                 </div>
               ));
@@ -235,36 +242,16 @@ export function ExplorerFilters({ filters, categories, subcategories, tags, onCh
       {/* Tags */}
       {tags.length > 0 && (
         <div className="flex flex-col gap-2">
-          <div className="flex items-center justify-between">
-            <SectionLabel>
-              Tags
-              {filters.tagIds.length > 0 && (
-                <span className="ml-2 inline-flex items-center rounded-full bg-(--color-primary)/10 px-1.5 py-0.5 text-xs font-medium text-(--color-primary) normal-case tracking-normal">
-                  {filters.tagIds.length}
-                </span>
-              )}
-            </SectionLabel>
-            {filters.tagIds.length > 0 && (
-              <button
-                type="button"
-                onClick={() => set("tagIds", [])}
-                className="text-xs text-(--color-text-muted) hover:text-(--color-text)"
-              >
-                Limpar
-              </button>
-            )}
-          </div>
-          <div className="flex max-h-36 flex-col gap-1.5 overflow-y-auto">
+          <FilterSectionHeader label="Tags" count={filters.tagIds.length} onClear={() => set("tagIds", [])} />
+          <div className="flex max-h-44 flex-col gap-1.5 overflow-y-auto">
             {tags.map((tag) => (
-              <label key={tag.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-1 py-0.5 hover:bg-(--color-bg)">
-                <input
-                  type="checkbox"
-                  checked={filters.tagIds.includes(tag.id)}
-                  onChange={() => toggleTag(tag.id)}
-                  className="accent-(--color-primary)"
-                />
-                <span className="text-sm text-(--color-text)">{tag.name}</span>
-              </label>
+              <FilterCheckboxRow
+                key={tag.id}
+                id={tag.id}
+                name={tag.name}
+                checked={filters.tagIds.includes(tag.id)}
+                onToggle={toggleTag}
+              />
             ))}
           </div>
         </div>

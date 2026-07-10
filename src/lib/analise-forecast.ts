@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@/generated/prisma/client";
-import { toMonthKey, toMonthLabel, addMonthsToKey } from "@/lib/date-month";
+import { toMonthKey, toMonthLabel, addMonthsToKey, startOfMonth, addMonthsToDate } from "@/lib/date-month";
+import { buildCategoryScope } from "@/lib/analise-data";
 import type { ExplorerDataPoint, ExplorerFilters } from "@/lib/analise-data";
 
 export type ForecastHorizon = 1 | 3 | 6;
@@ -28,44 +29,16 @@ export type ForecastResult = {
   warnings: string[];
 };
 
-// ---------------------------------------------------------------------------
-// Helpers de data — mesmo padrão usado em budget-data.ts (getIncomeBaseline)
-// ---------------------------------------------------------------------------
-function startOfMonth(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth(), 1);
-}
-
-function addMonths(date: Date, amount: number) {
-  return new Date(date.getFullYear(), date.getMonth() + amount, 1);
-}
-
 function round2(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
 // Mesmo padrão de getInstallmentCommitmentsByCategoryBatch (budget-data.ts), reproduzido
 // aqui pois o escopo é diferente (categoria + subcategoria, sem agrupar por categoria).
-function diffInMonths(monthKey: string, startDate: Date) {
-  const [year, month] = monthKey.split("-").map(Number);
+// Recebe year/month já parseados do monthKey (o chamador já os tem) em vez de reparsear
+// a string a cada chamada — evita um split+map redundante por plano dentro do loop.
+function diffInMonths(year: number, month: number, startDate: Date) {
   return (year - startDate.getFullYear()) * 12 + (month - 1 - startDate.getMonth());
-}
-
-// ---------------------------------------------------------------------------
-// Escopo de filtro compartilhado (categoria/subcategoria) — aplicável a
-// Transaction, FixedExpenseTemplate e InstallmentPlan. tagIds só se aplica a
-// Transaction (aplicado separadamente onde necessário) pois os outros dois
-// modelos não têm relação com tags no schema.
-// ---------------------------------------------------------------------------
-function buildCategoryScope(filters: ExplorerFilters) {
-  const scope: { categoryId?: { in: string[] }; subcategoryId?: { in: string[] } } = {};
-  if (filters.categoryIds.length > 0) {
-    scope.categoryId = { in: filters.categoryIds };
-  }
-  const subcategoryIds = filters.subcategoryIds ?? [];
-  if (subcategoryIds.length > 0) {
-    scope.subcategoryId = { in: subcategoryIds };
-  }
-  return scope;
 }
 
 /**
@@ -80,7 +53,7 @@ async function getHistoricalMonthlyAverage(
   extraWhere: Prisma.TransactionWhereInput
 ): Promise<{ amount: number; count: number }> {
   const monthStart = startOfMonth(new Date());
-  const pastMonths = [3, 2, 1].map((i) => addMonths(monthStart, -i));
+  const pastMonths = [3, 2, 1].map((i) => addMonthsToDate(monthStart, -i));
   const earliestStart = pastMonths[0]!;
 
   const where: Prisma.TransactionWhereInput = {
@@ -155,7 +128,7 @@ async function getInstallmentForecastByMonth(
     let total = 0;
     let count = 0;
     for (const plan of plans) {
-      const projectedInstallmentNumber = diffInMonths(monthKey, plan.startDate) + 1;
+      const projectedInstallmentNumber = diffInMonths(year!, month!, plan.startDate) + 1;
       if (projectedInstallmentNumber < 1 || projectedInstallmentNumber > plan.totalInstallments) continue;
 
       const alreadyLaunchedThisMonth = plan.transactions.some(
@@ -173,6 +146,70 @@ async function getInstallmentForecastByMonth(
   return { byMonth, firstMonthCount };
 }
 
+type ExpenseForecastPart = {
+  fixedAmount: number;
+  variableAmount: number;
+  installmentsByMonth: Map<string, number>;
+  rationale: ForecastRationaleLine[];
+  warnings: string[];
+};
+
+async function computeExpenseForecast(
+  userId: string,
+  filters: ExplorerFilters,
+  futureMonthKeys: string[]
+): Promise<ExpenseForecastPart> {
+  const [fixedTemplates, variableStats, installmentForecast] = await Promise.all([
+    prisma.fixedExpenseTemplate.findMany({
+      where: { userId, isActive: true, ...buildCategoryScope(filters) },
+      select: { expectedAmount: true },
+    }),
+    getHistoricalMonthlyAverage(userId, filters, "EXPENSE", {
+      isFixed: false,
+      installmentPlanId: null,
+    }),
+    getInstallmentForecastByMonth(userId, filters, futureMonthKeys),
+  ]);
+
+  const fixedAmount = fixedTemplates.reduce((sum, t) => sum + t.expectedAmount, 0);
+  const firstMonthInstallmentsAmount = installmentForecast.byMonth.get(futureMonthKeys[0]!) ?? 0;
+
+  return {
+    fixedAmount,
+    variableAmount: variableStats.amount,
+    installmentsByMonth: installmentForecast.byMonth,
+    rationale: [
+      { key: "fixed", label: "Despesas fixas", amount: round2(fixedAmount), count: fixedTemplates.length },
+      {
+        key: "installments",
+        label: "Parcelamentos previstos (próximo mês)",
+        amount: round2(firstMonthInstallmentsAmount),
+        count: installmentForecast.firstMonthCount,
+      },
+      { key: "variable", label: "Gastos variáveis (média histórica)", amount: round2(variableStats.amount), count: variableStats.count },
+    ],
+    warnings:
+      variableStats.count < 3 ? ["Histórico de despesas variáveis insuficiente (menos de 3 meses fechados)"] : [],
+  };
+}
+
+type IncomeForecastPart = {
+  incomeAvgAmount: number;
+  rationale: ForecastRationaleLine[];
+  warnings: string[];
+};
+
+async function computeIncomeForecast(userId: string, filters: ExplorerFilters): Promise<IncomeForecastPart> {
+  const incomeStats = await getHistoricalMonthlyAverage(userId, filters, "INCOME", {});
+  return {
+    incomeAvgAmount: incomeStats.amount,
+    rationale: [
+      { key: "income_avg", label: "Média de entradas (histórico)", amount: round2(incomeStats.amount), count: incomeStats.count },
+    ],
+    warnings: incomeStats.count < 3 ? ["Histórico de entradas insuficiente (menos de 3 meses fechados)"] : [],
+  };
+}
+
 export async function getExplorerForecast(
   userId: string,
   filters: ExplorerFilters,
@@ -187,81 +224,24 @@ export async function getExplorerForecast(
   const includeExpense = filters.type === "EXPENSE" || filters.type === "BOTH";
   const includeIncome = filters.type === "INCOME" || filters.type === "BOTH";
 
-  const warnings: string[] = [];
-  const rationale: ForecastRationale = { expense: [], income: [] };
+  // Despesas e entradas são independentes uma da outra — computadas em paralelo (em vez de
+  // sequencialmente) quando o tipo filtrado é "BOTH", pra não pagar a latência das duas somadas.
+  const [expensePart, incomePart] = await Promise.all([
+    includeExpense ? computeExpenseForecast(userId, filters, futureMonthKeys) : null,
+    includeIncome ? computeIncomeForecast(userId, filters) : null,
+  ]);
 
-  let fixedAmount = 0;
-  let variableAmount = 0;
-  let installmentsByMonth = new Map<string, number>();
+  const warnings = [...(expensePart?.warnings ?? []), ...(incomePart?.warnings ?? [])];
+  const rationale: ForecastRationale = {
+    expense: expensePart?.rationale ?? [],
+    income: incomePart?.rationale ?? [],
+  };
 
-  if (includeExpense) {
-    const [fixedTemplates, variableStats, installmentForecast] = await Promise.all([
-      prisma.fixedExpenseTemplate.findMany({
-        where: { userId, isActive: true, ...buildCategoryScope(filters) },
-        select: { expectedAmount: true },
-      }),
-      getHistoricalMonthlyAverage(userId, filters, "EXPENSE", {
-        isFixed: false,
-        installmentPlanId: null,
-      }),
-      getInstallmentForecastByMonth(userId, filters, futureMonthKeys),
-    ]);
-
-    fixedAmount = fixedTemplates.reduce((sum, t) => sum + t.expectedAmount, 0);
-    variableAmount = variableStats.amount;
-    installmentsByMonth = installmentForecast.byMonth;
-
-    const firstMonthInstallmentsAmount = installmentForecast.byMonth.get(futureMonthKeys[0]!) ?? 0;
-
-    rationale.expense = [
-      {
-        key: "fixed",
-        label: "Despesas fixas",
-        amount: round2(fixedAmount),
-        count: fixedTemplates.length,
-      },
-      {
-        key: "installments",
-        label: "Parcelamentos previstos (próximo mês)",
-        amount: round2(firstMonthInstallmentsAmount),
-        count: installmentForecast.firstMonthCount,
-      },
-      {
-        key: "variable",
-        label: "Gastos variáveis (média histórica)",
-        amount: round2(variableAmount),
-        count: variableStats.count,
-      },
-    ];
-
-    if (variableStats.count < 3) {
-      warnings.push("Histórico de despesas variáveis insuficiente (menos de 3 meses fechados)");
-    }
-  }
-
-  let incomeAvgAmount = 0;
-  if (includeIncome) {
-    const incomeStats = await getHistoricalMonthlyAverage(userId, filters, "INCOME", {});
-    incomeAvgAmount = incomeStats.amount;
-
-    rationale.income = [
-      {
-        key: "income_avg",
-        label: "Média de entradas (histórico)",
-        amount: round2(incomeAvgAmount),
-        count: incomeStats.count,
-      },
-    ];
-
-    if (incomeStats.count < 3) {
-      warnings.push("Histórico de entradas insuficiente (menos de 3 meses fechados)");
-    }
-  }
-
-  const effectiveFixed = overrides?.expense?.fixed ?? fixedAmount;
-  const effectiveVariable = overrides?.expense?.variable ?? variableAmount;
-  const effectiveIncome = overrides?.income?.income_avg ?? incomeAvgAmount;
+  const effectiveFixed = overrides?.expense?.fixed ?? expensePart?.fixedAmount ?? 0;
+  const effectiveVariable = overrides?.expense?.variable ?? expensePart?.variableAmount ?? 0;
+  const effectiveIncome = overrides?.income?.income_avg ?? incomePart?.incomeAvgAmount ?? 0;
   const installmentsOverride = overrides?.expense?.installments;
+  const installmentsByMonth = expensePart?.installmentsByMonth ?? new Map<string, number>();
 
   const points: ExplorerDataPoint[] = futureMonthKeys.map((monthKey) => {
     const effectiveInstallmentsForThisMonth =

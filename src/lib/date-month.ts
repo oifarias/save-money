@@ -32,3 +32,11 @@ export function addMonthsToKey(monthKey: string, delta: number): string {
   const [y, m] = monthKey.split("-").map(Number);
   return toMonthKey(new Date(y, m - 1 + delta, 1));
 }
+
+export function startOfMonth(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+export function addMonthsToDate(date: Date, delta: number): Date {
+  return new Date(date.getFullYear(), date.getMonth() + delta, 1);
+}
