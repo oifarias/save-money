@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@/generated/prisma/client";
 import { toMonthKey, toMonthLabel, addMonthsToKey, startOfMonth, addMonthsToDate } from "@/lib/date-month";
-import { buildCategoryScope } from "@/lib/analise-data";
+import { buildCategoryScope } from "@/lib/analise-filters";
 import type { ExplorerDataPoint, ExplorerFilters } from "@/lib/analise-data";
 
 export type ForecastHorizon = 1 | 3 | 6;

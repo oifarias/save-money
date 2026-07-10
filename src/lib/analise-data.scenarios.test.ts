@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCategoryScope, isSubgroupDrilldown } from "./analise-data";
+import { buildCategoryScope, isSubgroupDrilldown } from "./analise-filters";
 import type { ExplorerFilters } from "./analise-data";
 
 function baseFilters(overrides: Partial<ExplorerFilters> = {}): ExplorerFilters {
