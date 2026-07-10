@@ -6,6 +6,12 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import type { ExplorerFilters, ExplorerResult } from "@/lib/analise-data";
 import { getExplorerData } from "@/lib/analise-data";
+import type {
+  ForecastHorizon,
+  ForecastOverrides,
+  ForecastResult,
+} from "@/lib/analise-forecast";
+import { getExplorerForecast } from "@/lib/analise-forecast";
 
 // ---------------------------------------------------------------------------
 // Auth helper — nunca confia em userId vindo do client
@@ -73,6 +79,48 @@ export async function fetchExplorerDataAction(
   }
 
   return getExplorerData(userId, parsed.data);
+}
+
+/**
+ * Busca a previsão (próximos N meses) para o Explorer, a partir dos mesmos filtros de
+ * escopo (categoria/subgrupo/tag/tipo), com ajustes manuais opcionais do usuário.
+ */
+export async function fetchExplorerForecastAction(
+  filters: ExplorerFilters,
+  monthsAhead: ForecastHorizon,
+  overrides?: ForecastOverrides
+): Promise<ForecastResult> {
+  const userId = await requireUserId();
+
+  const parsedFilters = explorerFiltersSchema.safeParse(filters);
+  if (!parsedFilters.success) {
+    throw new Error("Filtros inválidos: " + parsedFilters.error.message);
+  }
+
+  const parsedHorizon = z
+    .union([z.literal(1), z.literal(3), z.literal(6)])
+    .safeParse(monthsAhead);
+  if (!parsedHorizon.success) {
+    throw new Error("Horizonte de previsão inválido");
+  }
+
+  const overridesSchema = z
+    .object({
+      expense: z.record(z.string(), z.number()).optional(),
+      income: z.record(z.string(), z.number()).optional(),
+    })
+    .optional();
+  const parsedOverrides = overridesSchema.safeParse(overrides);
+  if (!parsedOverrides.success) {
+    throw new Error("Ajustes de previsão inválidos");
+  }
+
+  return getExplorerForecast(
+    userId,
+    parsedFilters.data,
+    parsedHorizon.data,
+    parsedOverrides.data
+  );
 }
 
 /**

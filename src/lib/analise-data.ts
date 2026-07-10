@@ -1,6 +1,7 @@
 "use server";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@/generated/prisma/client";
+import { toMonthKey, toMonthLabel } from "@/lib/date-month";
 
 export type ExplorerFilters = {
   categoryIds: string[];
@@ -23,7 +24,12 @@ export type ExplorerFilters = {
   showLegend: boolean;
 };
 
-export type ExplorerSeries = { key: string; name: string; color: string };
+export type ExplorerSeries = {
+  key: string;
+  name: string;
+  color: string;
+  dashed?: boolean;
+};
 
 export type ExplorerDataPoint = Record<string, string | number>;
 
@@ -166,31 +172,6 @@ export async function getExplorerData(
   // Sem filtro: série única (total por mês)
 
   const monthKeys = new Map<string, string>(); // "2026-01" → "jan/26"
-
-  function toMonthKey(date: Date): string {
-    const year = date.getFullYear();
-    const month = date.getMonth() + 1;
-    return `${year}-${String(month).padStart(2, "0")}`;
-  }
-
-  function toMonthLabel(key: string): string {
-    const [y, m] = key.split("-");
-    const months = [
-      "jan",
-      "fev",
-      "mar",
-      "abr",
-      "mai",
-      "jun",
-      "jul",
-      "ago",
-      "set",
-      "out",
-      "nov",
-      "dez",
-    ];
-    return `${months[Number(m) - 1]}/${String(y).slice(2)}`;
-  }
 
   if (filters.categoryIds.length > 0) {
     // Multi-série: categoria × mês

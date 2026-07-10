@@ -7,12 +7,20 @@ import toast from "react-hot-toast";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Modal } from "@/components/ui/modal";
+import { Switch } from "@/components/ui/switch";
 import { ChartDisplay } from "@/components/analise/chart-display";
 import { ChartTypeSelector } from "@/components/analise/chart-type-selector";
 import { ExplorerFilters } from "@/components/analise/explorer-filters";
-import { fetchExplorerDataAction, saveVisualizationAction, toggleShareVisualizationAction } from "@/app/(app)/analise/actions";
+import { ForecastRationaleCard } from "@/components/analise/forecast-rationale-card";
+import {
+  fetchExplorerDataAction,
+  fetchExplorerForecastAction,
+  saveVisualizationAction,
+  toggleShareVisualizationAction,
+} from "@/app/(app)/analise/actions";
 import { formatCurrency } from "@/lib/format";
 import type { ExplorerFilters as ExplorerFiltersType, ExplorerResult } from "@/lib/analise-data";
+import type { ForecastHorizon, ForecastOverrides, ForecastResult } from "@/lib/analise-forecast";
 
 const DEFAULT_FILTERS: ExplorerFiltersType = {
   categoryIds: [],
@@ -66,6 +74,12 @@ export function Explorer({ categories, subcategories, tags, initialFilters, save
   const [isToggling, setIsToggling] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  // Forecast (previsão)
+  const [forecastEnabled, setForecastEnabled] = useState(false);
+  const [forecastHorizon, setForecastHorizon] = useState<ForecastHorizon>(3);
+  const [forecastOverrides, setForecastOverrides] = useState<ForecastOverrides>({});
+  const [forecastResult, setForecastResult] = useState<ForecastResult | null>(null);
+
   // Fetch data when filters change
   useEffect(() => {
     startTransition(async () => {
@@ -78,6 +92,45 @@ export function Explorer({ categories, subcategories, tags, initialFilters, save
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters]);
+
+  // Previsão só faz sentido agrupando por mês — desliga automaticamente ao sair desse modo,
+  // seja pelo controle deste arquivo ou pelo de explorer-filters.tsx
+  useEffect(() => {
+    if (filters.groupBy !== "month") setForecastEnabled(false);
+  }, [filters.groupBy]);
+
+  // Fetch forecast when enabled/horizon/overrides/filters change
+  useEffect(() => {
+    if (!forecastEnabled || filters.groupBy !== "month") {
+      setForecastResult(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await fetchExplorerForecastAction(filters, forecastHorizon, forecastOverrides);
+        if (!cancelled) setForecastResult(data);
+      } catch {
+        if (!cancelled) toast.error("Erro ao buscar previsão");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [forecastEnabled, forecastHorizon, forecastOverrides, filters]);
+
+  function handleForecastOverrideChange(kind: "expense" | "income", key: string, value: number | null) {
+    setForecastOverrides((prev) => {
+      const next = { ...prev, [kind]: { ...prev[kind] } };
+      if (value === null) {
+        delete next[kind]![key];
+      } else {
+        next[kind]![key] = value;
+      }
+      return next;
+    });
+  }
 
   async function handleSave(useExistingId: boolean) {
     if (!saveName.trim()) {
@@ -128,6 +181,28 @@ export function Explorer({ categories, subcategories, tags, initialFilters, save
   }
 
   const shareUrl = shareToken ? `${typeof window !== "undefined" ? window.location.origin : ""}/analise/publica/${shareToken}` : null;
+
+  // Combina o histórico real com os pontos futuros da previsão numa única série "previsto"
+  // pontilhada. Assume que o último ponto histórico tem uma chave "value" (série única) — só
+  // é verdade quando groupBy = "month" sem categoryIds selecionadas (o caso comum de previsão).
+  // Com categorias selecionadas a série vira multi-categoria e não há "value": o ponto de
+  // transição fica sem "previsto" definido, o que só gera um pequeno gap visual na linha —
+  // limitação conhecida, não trave o build por causa disso.
+  const showForecast = forecastEnabled && Boolean(forecastResult);
+
+  const chartData = (() => {
+    if (!showForecast || !forecastResult) return result?.data ?? [];
+    const base = [...(result?.data ?? [])];
+    if (base.length > 0) {
+      const last = base[base.length - 1]!;
+      base[base.length - 1] = { ...last, previsto: Number(last.value ?? 0) };
+    }
+    return [...base, ...forecastResult.points];
+  })();
+
+  const chartSeries = showForecast
+    ? [...(result?.series ?? []), { key: "previsto", name: "Previsto", color: "#94a3b8", dashed: true }]
+    : (result?.series ?? []);
 
   return (
     <div className="flex flex-col gap-5">
@@ -224,6 +299,33 @@ export function Explorer({ categories, subcategories, tags, initialFilters, save
                   </button>
                 ))}
               </div>
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={forecastEnabled}
+                  onChange={setForecastEnabled}
+                  disabled={filters.groupBy !== "month"}
+                  title={filters.groupBy !== "month" ? "Disponível apenas ao agrupar por mês" : undefined}
+                  label="Mostrar previsão"
+                />
+                {forecastEnabled && filters.groupBy === "month" && (
+                  <div className="flex items-center gap-1.5">
+                    {([1, 3, 6] as const).map((h) => (
+                      <button
+                        key={h}
+                        type="button"
+                        onClick={() => setForecastHorizon(h)}
+                        className={`rounded-lg px-2.5 py-1 text-xs font-medium transition-all ${
+                          forecastHorizon === h
+                            ? "bg-(--color-primary) text-white"
+                            : "border border-(--color-border) text-(--color-text-muted) hover:border-(--color-primary)/40"
+                        }`}
+                      >
+                        {h === 1 ? "1 mês" : `${h} meses`}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
               <div className="ml-auto flex items-center gap-3">
                 <label className="flex cursor-pointer items-center gap-1.5 text-xs text-(--color-text-muted)">
                   <input
@@ -261,8 +363,8 @@ export function Explorer({ categories, subcategories, tags, initialFilters, save
               </div>
             ) : (
               <ChartDisplay
-                data={result?.data ?? []}
-                series={result?.series ?? []}
+                data={chartData}
+                series={chartSeries}
                 chartType={filters.chartType}
                 showValues={filters.showValues}
                 showLegend={filters.showLegend}
@@ -279,6 +381,16 @@ export function Explorer({ categories, subcategories, tags, initialFilters, save
               </p>
             )}
           </Card>
+
+          {showForecast && forecastResult && (
+            <ForecastRationaleCard
+              rationale={forecastResult.rationale}
+              overrides={forecastOverrides}
+              onOverrideChange={handleForecastOverrideChange}
+              warnings={forecastResult.warnings}
+              monthsAhead={forecastHorizon}
+            />
+          )}
         </div>
       </div>
 
@@ -367,20 +479,7 @@ export function Explorer({ categories, subcategories, tags, initialFilters, save
                   {shareActive ? "Link ativo — qualquer pessoa pode visualizar" : "Link desativado"}
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={handleToggleShare}
-                disabled={isToggling}
-                className={`relative h-6 w-11 shrink-0 rounded-full transition-colors duration-200 focus:outline-none disabled:opacity-60 ${
-                  shareActive ? "bg-(--color-primary)" : "bg-(--color-border)"
-                }`}
-              >
-                <span
-                  className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 ${
-                    shareActive ? "translate-x-5" : "translate-x-0.5"
-                  }`}
-                />
-              </button>
+              <Switch checked={shareActive} onChange={handleToggleShare} disabled={isToggling} />
             </div>
 
             {/* Link */}

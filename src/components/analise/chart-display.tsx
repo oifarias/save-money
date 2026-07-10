@@ -71,7 +71,7 @@ export function ChartDisplay({ data, series, chartType, showValues, showLegend }
               <Legend wrapperStyle={{ fontSize: 12, color: "var(--color-text-muted)" }} />
             )}
             {series.map((s) => (
-              <Bar key={s.key} dataKey={s.key} name={s.name} fill={s.color} radius={[6, 6, 0, 0]}>
+              <Bar key={s.key} dataKey={s.key} name={s.name} fill={s.color} fillOpacity={s.dashed ? 0.5 : 1} radius={[6, 6, 0, 0]}>
                 {hasCellColors &&
                   data.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={String(entry.color ?? s.color)} />
@@ -101,7 +101,7 @@ export function ChartDisplay({ data, series, chartType, showValues, showLegend }
               <Legend wrapperStyle={{ fontSize: 12, color: "var(--color-text-muted)" }} />
             )}
             {series.map((s) => (
-              <Bar key={s.key} dataKey={s.key} name={s.name} fill={s.color} radius={[0, 6, 6, 0]}>
+              <Bar key={s.key} dataKey={s.key} name={s.name} fill={s.color} fillOpacity={s.dashed ? 0.5 : 1} radius={[0, 6, 6, 0]}>
                 {hasCellColors &&
                   data.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={String(entry.color ?? s.color)} />
@@ -139,6 +139,7 @@ export function ChartDisplay({ data, series, chartType, showValues, showLegend }
                 stroke={s.color}
                 dot={false}
                 strokeWidth={2}
+                strokeDasharray={s.dashed ? "6 4" : undefined}
               >
                 {showValues && <LabelList dataKey={s.key} position="top" style={{ fontSize: 10, fill: "var(--color-text-muted)" }} formatter={(v: unknown) => compact(Number(v))} />}
               </Line>
@@ -174,6 +175,7 @@ export function ChartDisplay({ data, series, chartType, showValues, showLegend }
                 fill={s.color}
                 fillOpacity={0.15}
                 strokeWidth={2}
+                strokeDasharray={s.dashed ? "6 4" : undefined}
                 dot={false}
               />
             ))}
