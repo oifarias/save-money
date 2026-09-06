@@ -5,6 +5,7 @@ import toast from "react-hot-toast";
 import { ArrowLeft, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { createSplitAction } from "@/app/(app)/lancamentos/split-actions";
 import type { TransactionListItem } from "@/components/transactions/transaction-list";
@@ -17,6 +18,8 @@ type SummaryStepProps = {
   total: number;
   participants: SplitParticipant[];
   itemDrafts: SplitItemDraft[];
+  showCategories: boolean;
+  onShowCategoriesChange: (show: boolean) => void;
   onUpdateItemNote: (transactionId: string, note: string) => void;
   onBack: () => void;
   onCreated: (token: string) => void;
@@ -29,6 +32,8 @@ export function SummaryStep({
   total,
   participants,
   itemDrafts,
+  showCategories,
+  onShowCategoriesChange,
   onUpdateItemNote,
   onBack,
   onCreated,
@@ -45,6 +50,17 @@ export function SummaryStep({
     );
   }, [mode, participants, itemDrafts]);
 
+  const categoryTotals = useMemo(() => {
+    const byName = new Map<string, number>();
+    for (const tx of eligible) {
+      const name = tx.category?.name ?? "Sem categoria";
+      byName.set(name, (byName.get(name) ?? 0) + tx.amount);
+    }
+    return Array.from(byName.entries())
+      .map(([name, amount]) => ({ name, amount }))
+      .sort((a, b) => b.amount - a.amount);
+  }, [eligible]);
+
   function handleConfirm() {
     startTransition(async () => {
       const items = eligible.map((tx) => {
@@ -58,6 +74,7 @@ export function SummaryStep({
       const payload = {
         title,
         mode,
+        showCategories,
         items,
         participants: participants.map((p, index) => ({ name: p.name, amount: participantTotals[index] })),
       };
@@ -88,6 +105,17 @@ export function SummaryStep({
                 <span className="shrink-0 text-xs text-(--color-text-muted)">{formatDate(tx.date)}</span>
                 <span className="shrink-0 font-numeric font-medium text-(--color-text)">{formatCurrency(tx.amount)}</span>
               </div>
+
+              {showCategories && (
+                <span className="flex items-center gap-1.5 text-xs text-(--color-text-muted)">
+                  <span
+                    className="h-2 w-2 shrink-0 rounded-full"
+                    style={{ backgroundColor: tx.category?.color ?? "var(--color-border)" }}
+                    aria-hidden="true"
+                  />
+                  {tx.category?.name ?? "Sem categoria"}
+                </span>
+              )}
 
               {mode === "equal" ? (
                 <Input
@@ -126,6 +154,29 @@ export function SummaryStep({
           <span>Total</span>
           <span className="font-numeric">{formatCurrency(total)}</span>
         </div>
+      </div>
+
+      <div className="flex flex-col gap-3 rounded-xl border border-(--color-border) p-3.5">
+        <Switch
+          checked={showCategories}
+          onChange={onShowCategoriesChange}
+          label="Exibir categorias e resumo por categoria no link"
+        />
+        {showCategories && (
+          <div className="flex flex-col gap-1.5 border-t border-(--color-border) pt-2.5">
+            <p className="text-xs font-medium uppercase tracking-wide text-(--color-text-muted)">
+              Resumo por categoria
+            </p>
+            {categoryTotals.map((category) => (
+              <div key={category.name} className="flex items-center justify-between text-sm">
+                <span className="min-w-0 truncate text-(--color-text)">{category.name}</span>
+                <span className="shrink-0 font-numeric font-medium text-(--color-text)">
+                  {formatCurrency(category.amount)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="flex flex-col gap-2 rounded-xl border border-(--color-border) p-3.5">

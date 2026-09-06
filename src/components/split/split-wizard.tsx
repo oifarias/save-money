@@ -30,6 +30,7 @@ export function SplitWizard({ transactions, onDone }: SplitWizardProps) {
   const [title, setTitle] = useState("");
   const [mode, setMode] = useState<SplitMode | null>(null);
   const [participants, setParticipants] = useState<SplitParticipant[]>([]);
+  const [showCategories, setShowCategories] = useState(false);
   const [token, setToken] = useState<string | null>(null);
 
   const eligible = useMemo(() => transactions.filter((t) => t.type === "EXPENSE"), [transactions]);
@@ -125,6 +126,8 @@ export function SplitWizard({ transactions, onDone }: SplitWizardProps) {
           total={total}
           participants={participants}
           itemDrafts={itemDrafts}
+          showCategories={showCategories}
+          onShowCategoriesChange={setShowCategories}
           onUpdateItemNote={(transactionId, note) => updateItemDraft(transactionId, { note })}
           onBack={() => setStep(mode === "custom" ? "items" : "divide")}
           onCreated={(createdToken) => {
