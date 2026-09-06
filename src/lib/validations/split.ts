@@ -15,6 +15,7 @@ export const createSplitSchema = z
   .object({
     title: z.string().trim().min(1, "Informe um título").max(80, "Título muito longo"),
     mode: z.enum(["equal", "custom"]),
+    showCategories: z.boolean().optional().default(false),
     items: z.array(itemSchema).min(1, "Selecione ao menos um lançamento"),
     participants: z
       .array(

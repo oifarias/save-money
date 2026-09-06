@@ -422,12 +422,14 @@ model FixedExpenseTemplate {
 }
 
 model SharedSplit {
-  id        String   @id @default(cuid())
-  userId    String
-  token     String   @unique
-  title     String
-  mode      String   // "equal" | "custom"
-  createdAt DateTime @default(now())
+  id             String   @id @default(cuid())
+  userId         String
+  token          String   @unique
+  title          String
+  mode           String   // "equal" | "custom"
+  // Quando true, o link público exibe a categoria de cada lançamento e o resumo por categoria.
+  showCategories Boolean  @default(false)
+  createdAt      DateTime @default(now())
 
   user         User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
   items        SharedSplitItem[]
@@ -444,6 +446,10 @@ model SharedSplitItem {
   amount        Float
   date          DateTime
   note          String?
+  // Snapshot da categoria no momento da criação do link (mesma filosofia de descrição/valor):
+  // editar ou excluir a categoria depois não pode mudar o que a outra pessoa já viu.
+  categoryName  String?
+  categoryColor String?
 
   sharedSplit SharedSplit            @relation(fields: [sharedSplitId], references: [id], onDelete: Cascade)
   shares      SharedSplitItemShare[]

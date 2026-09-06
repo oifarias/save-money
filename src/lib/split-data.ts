@@ -12,6 +12,8 @@ export type PublicSplitItem = {
   amount: number;
   date: string;
   note: string | null;
+  categoryName: string | null;
+  categoryColor: string | null;
   shares: PublicSplitItemShare[];
 };
 
@@ -24,6 +26,7 @@ export type PublicSplitParticipant = {
 export type PublicSplit = {
   title: string;
   mode: "equal" | "custom";
+  showCategories: boolean;
   total: number;
   items: PublicSplitItem[];
   participants: PublicSplitParticipant[];
@@ -50,6 +53,7 @@ export async function getSplitByToken(token: string): Promise<PublicSplit | null
   return {
     title: split.title,
     mode: split.mode as "equal" | "custom",
+    showCategories: split.showCategories,
     total,
     items: split.items.map((item) => ({
       id: item.id,
@@ -57,6 +61,8 @@ export async function getSplitByToken(token: string): Promise<PublicSplit | null
       amount: item.amount,
       date: item.date.toISOString(),
       note: item.note,
+      categoryName: item.categoryName,
+      categoryColor: item.categoryColor,
       shares: item.shares
         .slice()
         .sort((a, b) => a.participant.position - b.participant.position)

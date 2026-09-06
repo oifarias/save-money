@@ -3,6 +3,7 @@ import { Wallet } from "lucide-react";
 import { Logo } from "@/components/branding/logo";
 import { Card } from "@/components/ui/card";
 import { ParticipantsCard } from "@/components/split/participants-card";
+import { CategorySummaryCard } from "@/components/split/category-summary-card";
 import { formatCurrency, formatDate } from "@/lib/format";
 import type { PublicSplit } from "@/lib/split-data";
 
@@ -25,6 +26,8 @@ export function PublicSplitView({ split }: { split: PublicSplit }) {
 
         <ParticipantsCard split={split} />
 
+        {split.showCategories && <CategorySummaryCard split={split} />}
+
         <Card>
           <h2 className="font-display text-sm font-semibold text-(--color-text)">Lançamentos incluídos</h2>
           <ul className="mt-3 flex flex-col divide-y divide-(--color-border)">
@@ -33,7 +36,12 @@ export function PublicSplitView({ split }: { split: PublicSplit }) {
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <p className="truncate font-medium text-(--color-text)">{item.description}</p>
-                    <p className="text-xs text-(--color-text-muted)">{formatDate(item.date)}</p>
+                    <p className="text-xs text-(--color-text-muted)">
+                      {formatDate(item.date)}
+                      {split.showCategories && item.categoryName && (
+                        <span> · {item.categoryName}</span>
+                      )}
+                    </p>
                   </div>
                   <span className="shrink-0 font-numeric font-medium text-(--color-text)">
                     {formatCurrency(item.amount)}

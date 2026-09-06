@@ -46,11 +46,17 @@ export async function createSplitAction(input: unknown): Promise<CreateSplitResu
     return { success: false, fieldErrors: flattenZodErrors(parsed.error) };
   }
 
-  const { title, mode, items, participants } = parsed.data;
+  const { title, mode, showCategories, items, participants } = parsed.data;
 
   const transactions = await prisma.transaction.findMany({
     where: { id: { in: items.map((i) => i.transactionId) }, userId, type: "EXPENSE" },
-    select: { id: true, description: true, amount: true, date: true },
+    select: {
+      id: true,
+      description: true,
+      amount: true,
+      date: true,
+      category: { select: { name: true, color: true } },
+    },
   });
   const txById = new Map(transactions.map((t) => [t.id, t]));
   const validItems = items.filter((item) => txById.has(item.transactionId));
@@ -93,6 +99,8 @@ export async function createSplitAction(input: unknown): Promise<CreateSplitResu
       amount: t.amount,
       date: t.date,
       note: item.note || null,
+      categoryName: t.category?.name ?? null,
+      categoryColor: t.category?.color ?? null,
     };
   });
 
@@ -109,7 +117,7 @@ export async function createSplitAction(input: unknown): Promise<CreateSplitResu
       : [];
 
   await prisma.$transaction(async (tx) => {
-    await tx.sharedSplit.create({ data: { id: splitId, userId, token, title, mode } });
+    await tx.sharedSplit.create({ data: { id: splitId, userId, token, title, mode, showCategories } });
     await tx.sharedSplitParticipant.createMany({ data: participantRows });
     await tx.sharedSplitItem.createMany({ data: itemRows });
     if (shareRows.length > 0) {
